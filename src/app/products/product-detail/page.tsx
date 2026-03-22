@@ -8,7 +8,6 @@ import Navbar from "../../components/Navbar";
 import Footer from "../../components/Footer";
 import { toast } from "react-toastify";
 import { productsAPI, getProductImageUrl, cartAPI } from "../../../utils/api";
-import { isAuthenticated } from "../../../utils/roles";
 
 interface ProductProperty {
   key: string;
@@ -242,19 +241,8 @@ function ProductDetailContent() {
   const tax = subtotal * 0.08; // 8% tax
   const total = subtotal + shippingCost + tax;
 
-  // Handle Add to Cart
+  // Handle Add to Cart (logged-in or guest via X-Guest-Session-Id from api.ts)
   const handleAddToCart = async () => {
-    // Require login before allowing add to cart
-    if (!isAuthenticated()) {
-      toast.error("Please register yourself to add items to cart.");
-      setMessage(" Please register yourself to add items to cart.");
-      setTimeout(() => {
-        setMessage("");
-        router.push("/");
-      }, 2500);
-      return;
-    }
-
     // Validation
     if (!jobName.trim()) {
       setMessage("❌ Error: Please enter Job Name/PO#");

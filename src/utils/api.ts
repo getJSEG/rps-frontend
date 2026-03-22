@@ -6,6 +6,29 @@ function getApiBaseUrl(): string {
 }
 const API_BASE_URL = getApiBaseUrl();
 
+const GUEST_SESSION_STORAGE_KEY = 'rps_guest_session_id';
+
+export function getOrCreateGuestSessionId(): string {
+  if (typeof window === 'undefined') return '';
+  try {
+    let id = localStorage.getItem(GUEST_SESSION_STORAGE_KEY)?.trim() || '';
+    if (id.length >= 8 && id.length <= 128) return id;
+    id =
+      typeof crypto !== 'undefined' && crypto.randomUUID
+        ? crypto.randomUUID()
+        : `${Date.now()}-${Math.random().toString(36).slice(2, 12)}`;
+    if (id.length > 128) id = id.slice(0, 128);
+    localStorage.setItem(GUEST_SESSION_STORAGE_KEY, id);
+    return id;
+  } catch {
+    return `${Date.now()}-${Math.random().toString(36).slice(2, 12)}`;
+  }
+}
+
+function isCartApiEndpoint(endpoint: string): boolean {
+  return endpoint === '/cart' || endpoint.startsWith('/cart/');
+}
+
 /** Get backend base URL (no /api) for image URLs - works in browser */
 function getBackendBaseUrl(): string {
   const apiUrl = getApiBaseUrl();
@@ -36,13 +59,21 @@ async function apiCall(endpoint: string, options: RequestInit = {}) {
     ...options,
   };
 
-  // Add auth token if available
+  // Add auth token if available; guest cart uses X-Guest-Session-Id when not logged in
   const token = typeof window !== 'undefined' ? localStorage.getItem('token') : null;
   if (token) {
     config.headers = {
       ...config.headers,
       Authorization: `Bearer ${token}`,
     };
+  } else if (typeof window !== 'undefined' && isCartApiEndpoint(endpoint)) {
+    const sid = getOrCreateGuestSessionId();
+    if (sid) {
+      config.headers = {
+        ...config.headers,
+        'X-Guest-Session-Id': sid,
+      };
+    }
   }
 
   try {
@@ -311,10 +342,17 @@ export const ordersAPI = {
   },
 
   /** Create order + Stripe PaymentIntent from cart; returns { orderId, orderNumber, clientSecret } */
-  createPaymentIntent: async (cartItems: Record<string, unknown>[]) => {
+  createPaymentIntent: async (
+    cartItems: Record<string, unknown>[],
+    guestCheckout?: Record<string, unknown>
+  ) => {
+    const body: Record<string, unknown> = { cartItems };
+    if (guestCheckout && typeof guestCheckout === 'object') {
+      body.guestCheckout = guestCheckout;
+    }
     return apiCall('/orders/create-payment-intent', {
       method: 'POST',
-      body: JSON.stringify({ cartItems }),
+      body: JSON.stringify(body),
     });
   },
 };

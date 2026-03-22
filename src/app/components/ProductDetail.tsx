@@ -4,7 +4,6 @@ import { useState, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "react-toastify";
 import { cartAPI } from "../../utils/api";
-import { isAuthenticated } from "../../utils/roles";
 
 export default function CanvasRoll() {
   const router = useRouter();
@@ -57,20 +56,8 @@ export default function CanvasRoll() {
     };
   }, [width, height, quantity, turnaround, fullWall, halfWall, totalJobs]);
 
-  // Handle Add to Cart
+  // Handle Add to Cart (logged-in or guest via X-Guest-Session-Id)
   const handleAddToCart = async () => {
-    // Require login before allowing add to cart
-    if (!isAuthenticated()) {
-      const errorMsg = "Please register yourself to add items to cart.";
-      toast.error(errorMsg);
-      setMessage("❌ " + errorMsg);
-      setTimeout(() => {
-        setMessage("");
-        router.push("/");
-      }, 2500);
-      return;
-    }
-
     // Collect all product information
     const widthVal = parseFloat(width) || 0;
     const heightVal = parseFloat(height) || 0;

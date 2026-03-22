@@ -14,6 +14,12 @@ function shouldDisableScrollNavbar(pathname: string): boolean {
   return false;
 }
 
+type NavItem = {
+  label: string;
+  hasDropdown?: boolean;
+  hasNew?: boolean;
+};
+
 export default function Navbar() {
   const router = useRouter();
   const pathname = usePathname();
@@ -45,31 +51,16 @@ export default function Navbar() {
   const userDropdownRef = useRef<HTMLDivElement>(null);
   const searchRef = useRef<HTMLDivElement>(null);
 
-  // Function to update cart count (API for logged-in, localStorage for guests)
+  // Cart count from API (JWT or guest X-Guest-Session-Id)
   const updateCartCount = async () => {
     if (typeof window !== "undefined") {
-      const loggedIn = localStorage.getItem("isLoggedIn") === "true";
-      if (loggedIn) {
-        try {
-          const { cartAPI } = await import("../../utils/api");
-          const res = await cartAPI.get();
-          const items = Array.isArray(res?.cartItems) ? res.cartItems : [];
-          setCartCount(items.length);
-        } catch {
-          setCartCount(0);
-        }
-      } else {
-        const cart = localStorage.getItem("cart");
-        if (cart) {
-          try {
-            const cartItems = JSON.parse(cart);
-            setCartCount(Array.isArray(cartItems) ? cartItems.length : 0);
-          } catch {
-            setCartCount(0);
-          }
-        } else {
-          setCartCount(0);
-        }
+      try {
+        const { cartAPI } = await import("../../utils/api");
+        const res = await cartAPI.get();
+        const items = Array.isArray(res?.cartItems) ? res.cartItems : [];
+        setCartCount(items.length);
+      } catch {
+        setCartCount(0);
       }
     }
   };
@@ -231,7 +222,7 @@ export default function Navbar() {
     };
   }, [isDropdownOpen, isUserDropdownOpen, isSearchOpen]);
 
-  const navItems = [
+  const navItems: NavItem[] = [
     { label: "All Products", hasDropdown: true },
     { label: "DTF and UV DTF", hasNew: true },
     { label: "Banners" },
@@ -245,7 +236,7 @@ export default function Navbar() {
     { label: "Wall Art" },
   ];
 
-  const loggedInNavItems = [
+  const loggedInNavItems: NavItem[] = [
     { label: "All Products", hasDropdown: true },
     // { label: "DTF and UV DTF", hasNew: true },
     { label: "Banners" },

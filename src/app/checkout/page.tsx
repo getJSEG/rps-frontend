@@ -96,6 +96,8 @@ export default function CheckoutPage() {
     postcode: "",
     country: "United States",
   });
+  const [guestEmail, setGuestEmail] = useState("");
+  const [guestFullName, setGuestFullName] = useState("");
   const [savingAddress, setSavingAddress] = useState(false);
 
   const billingAddress = addresses.find((a) => a.address_type === "billing" && a.is_default)
@@ -109,19 +111,9 @@ export default function CheckoutPage() {
     let cancelled = false;
     (async () => {
       try {
-        if (isAuthenticated()) {
-          const res = await cartAPI.get();
-          const items = Array.isArray(res?.cartItems) ? res.cartItems : [];
-          if (!cancelled) setCartItems(items);
-        } else {
-          const cart = localStorage.getItem("cart");
-          if (cart) {
-            const items = JSON.parse(cart);
-            setCartItems(Array.isArray(items) ? items : []);
-          } else {
-            setCartItems([]);
-          }
-        }
+        const res = await cartAPI.get();
+        const items = Array.isArray(res?.cartItems) ? res.cartItems : [];
+        if (!cancelled) setCartItems(items);
       } catch {
         if (!cancelled) setCartItems([]);
       } finally {
@@ -247,7 +239,15 @@ export default function CheckoutPage() {
   const tax = cartItems.reduce((sum, i) => sum + (i.tax || 0), 0);
   const total = subtotal + shipping + tax;
 
-  const canProceedToPayment = !isAuthenticated() || !!billingAddress;
+  const loggedInCheckout = isAuthenticated();
+  const guestEmailOk = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(guestEmail.trim());
+  const guestAddressOk =
+    !!billingForm.streetAddress.trim() &&
+    !!billingForm.city.trim() &&
+    !!billingForm.state.trim() &&
+    !!billingForm.postcode.trim();
+  const guestCheckoutReady = guestEmailOk && guestAddressOk;
+  const canProceedToPayment = loggedInCheckout ? !!billingAddress : guestCheckoutReady;
 
   const handlePlaceOrder = async () => {
     if (!canProceedToPayment) return;
@@ -262,7 +262,21 @@ export default function CheckoutPage() {
     setCreating(true);
     setError(null);
     try {
-      const res = await ordersAPI.createPaymentIntent(cartItems as unknown as Record<string, unknown>[]);
+      const items = cartItems as unknown as Record<string, unknown>[];
+      const res = loggedInCheckout
+        ? await ordersAPI.createPaymentIntent(items)
+        : await ordersAPI.createPaymentIntent(items, {
+            email: guestEmail.trim(),
+            fullName: guestFullName.trim() || undefined,
+            shippingAddress: {
+              streetAddress: billingForm.streetAddress.trim(),
+              addressLine2: billingForm.addressLine2.trim() || undefined,
+              city: billingForm.city.trim(),
+              state: billingForm.state.trim(),
+              postcode: billingForm.postcode.trim(),
+              country: billingForm.country || "United States",
+            },
+          });
       setClientSecret(res.clientSecret);
       setOrderId(res.orderId);
     } catch (e: unknown) {
@@ -296,9 +310,9 @@ export default function CheckoutPage() {
       });
       if (err) setError(err.message || "Payment failed");
       else {
-        if (isAuthenticated()) {
-          try { await cartAPI.clear(); } catch (_) {}
-        }
+        try {
+          await cartAPI.clear();
+        } catch (_) {}
         localStorage.removeItem("cart");
         window.dispatchEvent(new Event("cartUpdated"));
       }
@@ -411,7 +425,79 @@ export default function CheckoutPage() {
                   {addressLoading ? (
                     <p className="text-gray-500 text-sm">Loading addresses...</p>
                   ) : !isAuthenticated() ? (
-                    <p className="text-gray-500 text-sm">Sign in to use saved addresses.</p>
+                    <div className="p-4 bg-gray-50 rounded-lg border border-gray-200 space-y-3">
+                      <p className="text-sm text-gray-600">Checkout as guest — enter email and shipping address.</p>
+                      <input
+                        type="email"
+                        placeholder="Email *"
+                        value={guestEmail}
+                        onChange={(e) => setGuestEmail(e.target.value)}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm"
+                        autoComplete="email"
+                      />
+                      <input
+                        type="text"
+                        placeholder="Full name (optional)"
+                        value={guestFullName}
+                        onChange={(e) => setGuestFullName(e.target.value)}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm"
+                        autoComplete="name"
+                      />
+                      <input
+                        type="text"
+                        placeholder="Street address *"
+                        value={billingForm.streetAddress}
+                        onChange={(e) => setBillingForm((p) => ({ ...p, streetAddress: e.target.value }))}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm"
+                        autoComplete="street-address"
+                      />
+                      <input
+                        type="text"
+                        placeholder="Apartment, suite, etc. (optional)"
+                        value={billingForm.addressLine2}
+                        onChange={(e) => setBillingForm((p) => ({ ...p, addressLine2: e.target.value }))}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm"
+                      />
+                      <div className="grid grid-cols-2 gap-2">
+                        <input
+                          type="text"
+                          placeholder="City *"
+                          value={billingForm.city}
+                          onChange={(e) => setBillingForm((p) => ({ ...p, city: e.target.value }))}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm"
+                          autoComplete="address-level2"
+                        />
+                        <select
+                          value={billingForm.state}
+                          onChange={(e) => setBillingForm((p) => ({ ...p, state: e.target.value }))}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm"
+                          autoComplete="address-level1"
+                        >
+                          <option value="">State *</option>
+                          {STATES.map((s) => (
+                            <option key={s} value={s}>
+                              {s}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                      <input
+                        type="text"
+                        placeholder="ZIP / Postcode *"
+                        value={billingForm.postcode}
+                        onChange={(e) => setBillingForm((p) => ({ ...p, postcode: e.target.value }))}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm"
+                        autoComplete="postal-code"
+                      />
+                      <input
+                        type="text"
+                        placeholder="Country"
+                        value={billingForm.country}
+                        onChange={(e) => setBillingForm((p) => ({ ...p, country: e.target.value }))}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm"
+                        autoComplete="country-name"
+                      />
+                    </div>
                   ) : billingAddress && !showAddBilling ? (
                     <div className="p-4 bg-gray-50 rounded-lg border border-gray-200 text-gray-800 text-sm space-y-1">
                       {profile?.fullName && <p className="font-medium">{profile.fullName}</p>}
@@ -451,7 +537,7 @@ export default function CheckoutPage() {
                   {addressLoading ? (
                     <p className="text-gray-500 text-sm">Loading...</p>
                   ) : !isAuthenticated() ? (
-                    <p className="text-gray-500 text-sm">Sign in to use saved addresses.</p>
+                    <p className="text-gray-500 text-sm">We ship to the address you entered under Billing.</p>
                   ) : shippingAddress ? (
                     <div className="p-4 bg-gray-50 rounded-lg border border-gray-200 text-gray-800 text-sm space-y-1">
                       {shippingAddress.id === billingAddress?.id && <p className="text-gray-500 italic mb-1">Same as billing</p>}
@@ -514,6 +600,11 @@ export default function CheckoutPage() {
                     {!canProceedToPayment && isAuthenticated() && (
                       <p className="text-amber-700 text-sm mb-3 bg-amber-50 border border-amber-200 rounded-md px-3 py-2">
                         Please add a billing address above before placing your order.
+                      </p>
+                    )}
+                    {!canProceedToPayment && !isAuthenticated() && (
+                      <p className="text-amber-700 text-sm mb-3 bg-amber-50 border border-amber-200 rounded-md px-3 py-2">
+                        Enter a valid email and full shipping address to continue.
                       </p>
                     )}
                     {error && <p className="text-sm text-red-600 mb-3">{error}</p>}

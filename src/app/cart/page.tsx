@@ -7,7 +7,6 @@ import Image from "next/image";
 import Navbar from "../components/Navbar";
 import Footer from "../components/Footer";
 import { getProductImageUrl, cartAPI } from "../../utils/api";
-import { isAuthenticated } from "../../utils/roles";
 
 interface CartItem {
   id: string;
@@ -39,20 +38,9 @@ export default function CartPage() {
   const loadCart = async (silent = false) => {
     if (!silent) setLoading(true);
     try {
-      if (isAuthenticated()) {
-        const res = await cartAPI.get();
-        setCartItems(Array.isArray(res?.cartItems) ? res.cartItems : []);
-        setIsAdminView(!!res?.isAdminView);
-      } else {
-        const cart = localStorage.getItem("cart");
-        if (cart) {
-          const items = JSON.parse(cart);
-          setCartItems(Array.isArray(items) ? items : []);
-        } else {
-          setCartItems([]);
-        }
-        setIsAdminView(false);
-      }
+      const res = await cartAPI.get();
+      setCartItems(Array.isArray(res?.cartItems) ? res.cartItems : []);
+      setIsAdminView(!!res?.isAdminView);
     } catch (error) {
       console.error("Error loading cart:", error);
       setCartItems([]);
@@ -74,16 +62,9 @@ export default function CartPage() {
 
   const removeFromCart = async (itemId: string) => {
     try {
-      if (isAuthenticated()) {
-        await cartAPI.remove(itemId);
-        setCartItems((prev) => prev.filter((item) => item.id !== itemId));
-        window.dispatchEvent(new Event("cartUpdated"));
-      } else {
-        const updatedCart = cartItems.filter((item) => item.id !== itemId);
-        localStorage.setItem("cart", JSON.stringify(updatedCart));
-        setCartItems(updatedCart);
-        window.dispatchEvent(new Event("cartUpdated"));
-      }
+      await cartAPI.remove(itemId);
+      setCartItems((prev) => prev.filter((item) => item.id !== itemId));
+      window.dispatchEvent(new Event("cartUpdated"));
     } catch (error) {
       console.error("Error removing from cart:", error);
     }
@@ -100,16 +81,9 @@ export default function CartPage() {
         updatedItem.tax = (updatedItem.subtotal || 0) * 0.08;
         updatedItem.total = (updatedItem.subtotal || 0) + (updatedItem.shippingCost || 0) + (updatedItem.tax || 0);
       }
-      if (isAuthenticated()) {
-        await cartAPI.update(itemId, updatedItem);
-        setCartItems((prev) => prev.map((i) => (i.id === itemId ? updatedItem : i)));
-        window.dispatchEvent(new Event("cartUpdated"));
-      } else {
-        const updatedCart = cartItems.map((i) => (i.id === itemId ? updatedItem : i));
-        localStorage.setItem("cart", JSON.stringify(updatedCart));
-        setCartItems(updatedCart);
-        window.dispatchEvent(new Event("cartUpdated"));
-      }
+      await cartAPI.update(itemId, updatedItem);
+      setCartItems((prev) => prev.map((i) => (i.id === itemId ? updatedItem : i)));
+      window.dispatchEvent(new Event("cartUpdated"));
     } catch (error) {
       console.error("Error updating quantity:", error);
     }
@@ -172,11 +146,7 @@ export default function CartPage() {
                       onClick={async () => {
                         if (!cartItems.length || !window.confirm("Empty cart?")) return;
                         try {
-                          if (isAuthenticated()) {
-                            await cartAPI.clear();
-                          } else {
-                            localStorage.setItem("cart", "[]");
-                          }
+                          await cartAPI.clear();
                           setCartItems([]);
                           window.dispatchEvent(new Event("cartUpdated"));
                         } catch (e) {
