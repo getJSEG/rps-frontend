@@ -12,13 +12,31 @@ interface Product {
   name: string;
   category?: string;
   subcategory?: string;
-  price?: string;
+  price?: string | number | null;
+  price_per_sqft?: number | string | null;
   image?: string;
   image_url?: string;
   isNew?: boolean;
   is_new?: boolean;
   category_slug?: string;
   category_name?: string;
+}
+
+/** Parse numeric money from API (pg often returns DECIMAL as string). */
+function parseProductMoney(value: string | number | null | undefined): number | null {
+  if (value == null || value === "") return null;
+  if (typeof value === "number" && !Number.isNaN(value)) return value;
+  const n = parseFloat(String(value).trim().replace(/[$,\s]/g, ""));
+  return Number.isNaN(n) ? null : n;
+}
+
+/** Catalog line: main `price` from DB first, else `price_per_sqft`. */
+function getCatalogPriceDisplay(product: Product): string {
+  const unit = parseProductMoney(product.price);
+  if (unit != null) return `$${unit.toFixed(2)}`;
+  const ppsf = parseProductMoney(product.price_per_sqft ?? undefined);
+  if (ppsf != null) return `$${ppsf.toFixed(2)}/sf`;
+  return "";
 }
 
 export default function Products() {
@@ -63,40 +81,45 @@ export default function Products() {
     router.push(`/products?category=${categorySlug}`);
   };
 
-  // Product Card Component - use native img for backend /uploads/ URLs so images always load
+  // Product card — catalog style: sharp corners, light image well, title + grey price line (ref. signage grid)
   const ProductCard = ({ product }: { product: Product }) => {
     const rawUrl = product.image_url || product.image;
     const imageSrc = getProductImageUrl(rawUrl);
     const isNew = product.is_new || product.isNew;
     const isBackendUpload = rawUrl && String(rawUrl).trim().startsWith("/uploads/");
-    
+
+    const priceFromApi = getCatalogPriceDisplay(product);
+    const metaParts: string[] = [];
+    if (isNew) metaParts.push("New low price");
+    if (priceFromApi) metaParts.push(priceFromApi);
+    const metaLine = metaParts.join(" ");
+
     return (
-      <Link href={`/products/product/${product.id}`}>
-        <div className="group h-full cursor-pointer">
-          {/* Product Image */}
-          <div className="w-full h-48 border border-gray-200 bg-gray-200 relative overflow-hidden">
+      <Link href={`/products/product/${product.id}`} className="block h-full">
+        <div className="group flex h-full cursor-pointer flex-col">
+          {/* Bordered box = image only; title + price sit below, outside */}
+          <div className="relative aspect-square w-full overflow-hidden rounded-sm border border-gray-200 bg-[#f5f5f5] transition-colors group-hover:border-gray-300">
             {imageSrc ? (
               isBackendUpload ? (
-                // Native img so backend URL loads without Next.js Image restrictions
                 <img
                   src={imageSrc}
                   alt={product.name}
-                  className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                  className="h-full w-full object-cover object-center"
                 />
               ) : (
                 <Image
                   src={imageSrc}
                   alt={product.name}
                   fill
-                  className="object-cover group-hover:scale-105 transition-transform duration-300"
-                  sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, (max-width: 1280px) 33vw, 25vw"
+                  className="object-cover object-center"
+                  sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, (max-width: 1280px) 25vw, 20vw"
                   unoptimized
                 />
               )
             ) : (
-              <div className="w-full h-full flex items-center justify-center bg-gray-200">
+              <div className="flex h-full w-full items-center justify-center bg-[#f5f5f5]">
                 <svg
-                  className="w-16 h-16 text-gray-400"
+                  className="h-14 w-14 text-gray-300"
                   fill="none"
                   stroke="currentColor"
                   viewBox="0 0 24 24"
@@ -104,7 +127,7 @@ export default function Products() {
                   <path
                     strokeLinecap="round"
                     strokeLinejoin="round"
-                    strokeWidth={2}
+                    strokeWidth={1.5}
                     d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"
                   />
                 </svg>
@@ -112,18 +135,13 @@ export default function Products() {
             )}
           </div>
 
-          {/* Product Info */}
-          <div className="p-4">
-            <div className="flex items-start justify-between mb-2">
-              <h3 className="text-lg font-semibold text-gray-900 group-hover:text-blue-600 transition-colors">
-                {product.name}
-              </h3>
-              {isNew && (
-                <span className="bg-green-500 text-white text-xs px-2 py-1 rounded-full whitespace-nowrap">
-                  New
-                </span>
-              )}
-            </div>
+          <div className="flex flex-1 flex-col pt-3">
+            <h3 className="text-left text-[15px] font-bold leading-snug tracking-tight text-gray-900">
+              {product.name}
+            </h3>
+            {metaLine ? (
+              <p className="mt-1.5 text-left text-sm font-normal leading-snug text-gray-500">{metaLine}</p>
+            ) : null}
           </div>
         </div>
       </Link>
@@ -133,7 +151,7 @@ export default function Products() {
   return (
     <section className="py-8 px-4 bg-white min-h-screen pt-24">
       <div className="max-w-7xl mx-auto">
-        <div className="flex gap-8">
+        <div className="flex flex-col lg:flex-row gap-6 lg:gap-8">
           {/* Sidebar - Left */}
           <Sidebar onCategoryClick={handleCategoryClick} />
 
