@@ -1,13 +1,14 @@
 "use client";
 
-import { useState, useEffect, Suspense } from "react";
+import { useState, useEffect, useCallback, Suspense } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import Image from "next/image";
 import Link from "next/link";
 import Navbar from "../../components/Navbar";
 import Footer from "../../components/Footer";
 import { toast } from "react-toastify";
-import { productsAPI, getProductImageUrl, cartAPI } from "../../../utils/api";
+import { productsAPI, getProductImageUrl, cartAPI, addressesAPI } from "../../../utils/api";
+import { isAuthenticated } from "../../../utils/roles";
 
 interface ProductProperty {
   key: string;
@@ -33,6 +34,78 @@ interface Product {
   price_per_sqft?: number;
   min_charge?: number;
   properties?: ProductProperty[];
+}
+
+interface SavedAddress {
+  id: number;
+  street_address: string;
+  address_line2: string | null;
+  city: string;
+  state: string;
+  postcode: string;
+  country: string;
+  is_default: boolean;
+  address_type: string;
+  updated_at?: string | null;
+}
+
+function parseSavedAddressBool(v: unknown): boolean {
+  if (v === true || v === 1) return true;
+  if (v === false || v === 0) return false;
+  if (typeof v === "string") {
+    const s = v.toLowerCase();
+    return s === "true" || s === "1" || s === "t";
+  }
+  return false;
+}
+
+function normalizeSavedAddress(raw: Record<string, unknown>): SavedAddress {
+  return {
+    id: Number(raw.id),
+    street_address: String(raw.street_address ?? raw.streetAddress ?? ""),
+    address_line2: raw.address_line2 != null || raw.addressLine2 != null ? String(raw.address_line2 ?? raw.addressLine2) : null,
+    city: String(raw.city ?? ""),
+    state: String(raw.state ?? ""),
+    postcode: String(raw.postcode ?? ""),
+    country: String(raw.country ?? "United States"),
+    is_default: parseSavedAddressBool(raw.is_default ?? raw.isDefault),
+    address_type: String(raw.address_type ?? raw.addressType ?? "billing"),
+    updated_at:
+      raw.updated_at != null
+        ? String(raw.updated_at)
+        : raw.updatedAt != null
+          ? String(raw.updatedAt)
+          : null,
+  };
+}
+
+/** Collapse legacy duplicate defaults to the most recently updated row */
+function ensureSingleDefaultAddress(addresses: SavedAddress[]): SavedAddress[] {
+  const d = addresses.filter((a) => a.is_default);
+  if (d.length <= 1) return addresses;
+  const ts = (a: SavedAddress) => {
+    const t = a.updated_at ? Date.parse(a.updated_at) : NaN;
+    return Number.isNaN(t) ? 0 : t;
+  };
+  const keep = d.reduce((best, a) => {
+    const bt = ts(best);
+    const at = ts(a);
+    if (at > bt) return a;
+    if (at < bt) return best;
+    return a.id > best.id ? a : best;
+  });
+  return addresses.map((a) => ({ ...a, is_default: a.id === keep.id }));
+}
+
+/** Single account default (any type), else first shipping, else first billing, else first row */
+function pickDisplayShippingAddress(addresses: SavedAddress[]): SavedAddress | null {
+  const normalized = ensureSingleDefaultAddress(addresses);
+  if (!normalized.length) return null;
+  const globalDefault = normalized.find((a) => a.is_default);
+  if (globalDefault) return globalDefault;
+  const shipping = normalized.filter((a) => a.address_type === "shipping");
+  const billing = normalized.filter((a) => a.address_type === "billing");
+  return shipping[0] || billing[0] || normalized[0];
 }
 
 function ProductDetailContent() {
@@ -70,23 +143,10 @@ function ProductDetailContent() {
   const [loadingSubcategoryProducts, setLoadingSubcategoryProducts] = useState(false);
   const [imageZoom, setImageZoom] = useState({ x: 50, y: 50, scale: 1 });
   const [message, setMessage] = useState("");
-  
-  // Ship from/to addresses
-  const [shipFrom, setShipFrom] = useState({
-    name: "Resourcefuldigital / Elmer gonzalez",
-    address: "2503 castille Dr",
-    city: "Grand Prairie",
-    state: "TX",
-    zip: "75051"
-  });
-  
-  const [shipTo, setShipTo] = useState({
-    name: "Resourcefuldigital / Elmer gonzalez",
-    address: "2503 castille Dr",
-    city: "Grand Prairie",
-    state: "TX",
-    zip: "75051"
-  });
+  const [shippingAuthReady, setShippingAuthReady] = useState(false);
+  const [shippingUserLoggedIn, setShippingUserLoggedIn] = useState(false);
+  const [savedAddresses, setSavedAddresses] = useState<SavedAddress[]>([]);
+  const [addressesLoading, setAddressesLoading] = useState(false);
 
   // Default pricing values (can be overridden by product data)
   const pricePerSqFt = product?.price_per_sqft || 3.63;
@@ -314,11 +374,58 @@ function ProductDetailContent() {
       setAddingToCart(false);
     }
   };
-  
-  // Production facility based on ship-to address
-  const productionFacility = shipTo.state === "TX" ? "TX Print Facility" : 
-                            shipTo.state === "CA" ? "CA Headquarters" : 
-                            shipTo.state === "PA" ? "PA Print Facility" : "CA Headquarters";
+
+  const loadSavedAddresses = useCallback(async () => {
+    if (!isAuthenticated()) {
+      setSavedAddresses([]);
+      return;
+    }
+    try {
+      setAddressesLoading(true);
+      const res = (await addressesAPI.getAll()) as { addresses?: unknown[] } | unknown[];
+      const rawList = Array.isArray((res as { addresses?: unknown[] }).addresses)
+        ? (res as { addresses: unknown[] }).addresses
+        : Array.isArray(res)
+          ? (res as unknown[])
+          : [];
+      setSavedAddresses(
+        ensureSingleDefaultAddress(
+          rawList.map((item) => normalizeSavedAddress((item as Record<string, unknown>) || {}))
+        )
+      );
+    } catch {
+      setSavedAddresses([]);
+    } finally {
+      setAddressesLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    setShippingAuthReady(true);
+    setShippingUserLoggedIn(isAuthenticated());
+  }, []);
+
+  useEffect(() => {
+    if (!shippingAuthReady || !shippingUserLoggedIn) return;
+    loadSavedAddresses();
+  }, [shippingAuthReady, shippingUserLoggedIn, loadSavedAddresses]);
+
+  useEffect(() => {
+    const onAuthChange = () => {
+      const loggedIn = isAuthenticated();
+      setShippingUserLoggedIn(loggedIn);
+      if (loggedIn) void loadSavedAddresses();
+      else setSavedAddresses([]);
+    };
+    window.addEventListener("loginStatusChanged", onAuthChange);
+    window.addEventListener("storage", onAuthChange);
+    return () => {
+      window.removeEventListener("loginStatusChanged", onAuthChange);
+      window.removeEventListener("storage", onAuthChange);
+    };
+  }, [loadSavedAddresses]);
+
+  const displayShipTo = pickDisplayShippingAddress(savedAddresses);
 
   const productImageRaw = product?.image_url || product?.image;
   const imageSrc = getProductImageUrl(productImageRaw) || '';
@@ -405,9 +512,9 @@ function ProductDetailContent() {
             </Link>
           </div>
 
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-12">
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-12 min-w-0">
           {/* Left Panel - Product Image and Details */}
-          <div>
+          <div className="min-w-0 max-w-full">
             <h1 className="text-3xl font-bold text-gray-900 mb-6">{productName}</h1>
             
 
@@ -523,24 +630,26 @@ function ProductDetailContent() {
             </div>
 
               {/* Product Features / Description */}
-            <div className="mb-6">
+            <div className="mb-6 min-w-0 max-w-full">
                 {productDescription ? (
-                  <div className="space-y-2 text-gray-700">
+                  <div className="space-y-2 text-gray-700 min-w-0">
                     {productDescription.split('\n').map((line, idx) => (
-                      <p key={idx} className="flex items-start">
-                        <span className="mr-2">•</span>
-                        <span>{line}</span>
+                      <p key={idx} className="flex items-start gap-2 min-w-0">
+                        <span className="shrink-0" aria-hidden>•</span>
+                        <span className="min-w-0 flex-1 break-words [overflow-wrap:anywhere]">{line}</span>
                       </p>
                     ))}
                   </div>
                 ) : hasProductProperties ? (
-                  <ul className="space-y-2 text-gray-700">
+                  <ul className="space-y-2 text-gray-700 min-w-0">
                     {productProperties
                       .filter((p) => (p?.key && String(p.key).trim()) || (p?.value && String(p.value).trim()))
                       .map((p, idx) => (
-                        <li key={idx} className="flex items-start">
-                          <span className="mr-2">•</span>
-                          <span>{p?.key && String(p.key).trim() ? `${p.key}: ${p.value || ""}` : p?.value || ""}</span>
+                        <li key={idx} className="flex items-start gap-2 min-w-0">
+                          <span className="shrink-0" aria-hidden>•</span>
+                          <span className="min-w-0 flex-1 break-words [overflow-wrap:anywhere]">
+                            {p?.key && String(p.key).trim() ? `${p.key}: ${p.value || ""}` : p?.value || ""}
+                          </span>
                         </li>
                       ))}
                   </ul>
@@ -587,7 +696,7 @@ function ProductDetailContent() {
           </div>
 
           {/* Right Panel - Configuration and Order */}
-          <div>
+          <div className="min-w-0 max-w-full">
             {/* Product Type Selection */}
             <div className="mb-6">
               {/* <div className="grid grid-cols-2 gap-3">
@@ -856,63 +965,55 @@ function ProductDetailContent() {
               </div>
             </div>
 
-            {/* Shipping Section */}
-            <div className="mb-6 p-4 border border-gray-200 rounded-lg">
+            {/* Shipping: logged-in only (guests enter address at checkout) */}
+            {shippingAuthReady && shippingUserLoggedIn && (
+            <div className="mb-6 p-4 border border-gray-200 rounded-lg min-w-0">
               <div className="mb-4">
                 <h2 className="text-lg font-semibold text-gray-900 mb-4">Shipping</h2>
-                {/* <div className="flex gap-2 mb-4">
-                  <button
-                    onClick={() => setShipping("blind-drop")}
-                    className={`px-4 py-2 rounded-lg text-sm font-medium ${
-                      shipping === "blind-drop"
-                        ? "bg-blue-600 text-white"
-                        : "bg-gray-200 text-gray-700 hover:bg-gray-300"
-                    }`}
-                  >
-                    Shipping
-                  </button>
-                </div> */}
-                <div className="space-y-3">
-                  {/* <label className="flex items-center cursor-pointer">
-                    <input
-                      type="radio"
-                      name="shipping"
-                      value="blind-drop"
-                      checked={shipping === "blind-drop"}
-                      onChange={(e) => setShipping(e.target.value)}
-                      className="mr-3"
-                    />
-                    <span className="text-gray-900">Blind Drop Ship</span>
-                  </label> */}
-                  {/* <label className="flex items-center cursor-pointer">
-                    <input
-                      type="radio"
-                      name="shipping"
-                      value="store-pickup"
-                      checked={shipping === "store-pickup"}
-                      onChange={(e) => setShipping(e.target.value)}
-                      className="mr-3"
-                    />
-                    <span className="text-gray-900">
-                      Store Pickup <span className="text-gray-600 text-sm">(Available in CA, TX and PA Facility)</span>
-                    </span>
-                  </label> */}
-                </div>
+                <div className="space-y-3" />
               </div>
 
-              {/* Ship To Address */}
-              <div className="mb-4 p-3 bg-gray-50 rounded-lg relative">
-                <div className="flex justify-between items-start mb-2">
-                  <h3 className="text-sm font-medium text-gray-700">Ship to</h3>
-                  <button className="text-gray-500 hover:text-gray-700">
-                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
-                    </svg>
-                  </button>
+              {/* Ship to — from address book */}
+              <div className="mb-4 p-3 bg-gray-50 rounded-lg relative min-w-0 max-w-full">
+                <div className="flex justify-between items-start gap-2 mb-2">
+                  <h3 className="text-sm font-medium text-gray-700 shrink-0">Ship to</h3>
+                  {addressesLoading ? null : displayShipTo ? (
+                    <Link
+                      href={`/address-book?edit=${displayShipTo.id}`}
+                      className="text-sm text-blue-600 hover:text-blue-800 font-medium shrink-0"
+                    >
+                      Edit
+                    </Link>
+                  ) : (
+                    <Link
+                      href="/address-book?add=1"
+                      className="text-sm text-blue-600 hover:text-blue-800 font-medium shrink-0"
+                    >
+                      Add address
+                    </Link>
+                  )}
                 </div>
-                <p className="text-sm text-gray-900">{shipTo.name}</p>
-                <p className="text-sm text-gray-900">{shipTo.address}</p>
-                <p className="text-sm text-gray-900">{shipTo.city}, {shipTo.state} {shipTo.zip}</p>
+                {addressesLoading ? (
+                  <p className="text-sm text-gray-500">Loading your address…</p>
+                ) : displayShipTo ? (
+                  <div className="text-sm text-gray-900 space-y-0.5 min-w-0 break-words [overflow-wrap:anywhere]">
+                    <p className="text-xs text-gray-500 capitalize">{displayShipTo.address_type}</p>
+                    <p>{displayShipTo.street_address}</p>
+                    {displayShipTo.address_line2 ? <p>{displayShipTo.address_line2}</p> : null}
+                    <p>{displayShipTo.city}, {displayShipTo.state} {displayShipTo.postcode}</p>
+                    <p>{displayShipTo.country}</p>
+                  </div>
+                ) : (
+                  <div className="text-sm text-gray-600 space-y-2">
+                    <p>No saved address yet. Add one in settings to see it here.</p>
+                    <Link
+                      href="/address-book?add=1"
+                      className="inline-flex text-blue-600 hover:text-blue-800 font-medium"
+                    >
+                      Add address
+                    </Link>
+                  </div>
+                )}
               </div>
 
               {/* Shipping Service */}
@@ -935,34 +1036,11 @@ function ProductDetailContent() {
               {/* Estimated Delivery */}
               <div className="mb-4">
                 <p className="text-sm text-gray-700">
-                  <span className="font-medium">Estimated Delivery:</span> Tomorrow, Feb 6
+                  <span className="font-medium">Estimated Delivery:</span> See checkout for delivery options.
                 </p>
               </div>
-
-              {/* Production Facility */}
-              {/* <div className="mb-4">
-                <p className="text-sm text-gray-700">
-                  <span className="font-medium">Production Facility:</span> {productionFacility}
-                </p>
-              </div> */}
-
-              {/* <a href="#" className="text-blue-600 hover:text-blue-800 text-sm flex items-center gap-1">
-                + Ship to Different Location
-                <svg
-                  className="w-4 h-4 text-gray-500"
-                  fill="none"
-                  stroke="currentColor"
-                  viewBox="0 0 24 24"
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={2}
-                    d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
-                  />
-                </svg>
-              </a> */}
             </div>
+            )}
 
             {/* Order Summary */}
             <div className="mb-6 p-4 border border-gray-200 rounded-lg bg-gray-50">
@@ -1047,7 +1125,7 @@ function ProductDetailContent() {
         </div>
 
         {/* Bottom Tabs Section */}
-        <div className="border-t border-gray-200 pt-8">
+        <div className="border-t border-gray-200 pt-8 min-w-0 max-w-full">
           {/* Tabs */}
           <div className="flex gap-6 mb-6 border-b border-gray-200">
             <button
@@ -1104,17 +1182,19 @@ function ProductDetailContent() {
 
           {/* Tab Content */}
           {activeTab === "description" && (
-            <div className="space-y-6 text-gray-700">
+            <div className="space-y-6 text-gray-700 min-w-0 max-w-full">
               {productDescription && (
-                <div>
+                <div className="min-w-0 max-w-full">
                   <h3 className="font-semibold text-gray-900 mb-2">Description</h3>
                   {/^[\s]*</.test(productDescription) ? (
                     <div
-                      className="product-description-html prose prose-sm max-w-none"
+                      className="product-description-html prose prose-sm max-w-full min-w-0 break-words [overflow-wrap:anywhere] [&_*]:max-w-full [&_img]:max-w-full [&_img]:h-auto"
                       dangerouslySetInnerHTML={{ __html: productDescription }}
                     />
                   ) : (
-                    <p className="whitespace-pre-wrap">{productDescription}</p>
+                    <p className="whitespace-pre-wrap break-words [overflow-wrap:anywhere] max-w-full min-w-0">
+                      {productDescription}
+                    </p>
                   )}
                 </div>
               )}
@@ -1402,7 +1482,7 @@ function ProductDetailContent() {
                         </h3>
                       </div>
                       {relatedProduct.description && (
-                        <p className="text-sm text-gray-600 mb-3 line-clamp-2">
+                        <p className="text-sm text-gray-600 mb-3 line-clamp-2 min-w-0 break-words [overflow-wrap:anywhere]">
                           {relatedProduct.description}
                         </p>
                       )}

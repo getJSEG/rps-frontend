@@ -131,10 +131,10 @@ export default function CanvasRoll() {
 
   return (
     <div className="min-h-screen bg-white pt-24 pb-16">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-12">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 min-w-0">
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-12 min-w-0">
           {/* Left Panel - Product Image and Details */}
-          <div>
+          <div className="min-w-0 max-w-full">
             <h1 className="text-3xl font-bold text-gray-900 mb-6">Canvas Roll</h1>
 
             {/* Main Product Image */}
@@ -167,30 +167,30 @@ export default function CanvasRoll() {
             </div>
 
             {/* Product Features */}
-            <div className="mb-6">
-              <ul className="space-y-2 text-gray-700">
-                <li className="flex items-start">
-                  <span className="mr-2">•</span>
-                  <span>Photo quality printed artist canvas material</span>
+            <div className="mb-6 min-w-0 max-w-full">
+              <ul className="space-y-2 text-gray-700 min-w-0">
+                <li className="flex items-start gap-2 min-w-0">
+                  <span className="shrink-0" aria-hidden>•</span>
+                  <span className="min-w-0 flex-1 break-words [overflow-wrap:anywhere]">Photo quality printed artist canvas material</span>
                 </li>
-                <li className="flex items-start">
-                  <span className="mr-2">•</span>
-                  <span>Unstretched - arrives rolled</span>
+                <li className="flex items-start gap-2 min-w-0">
+                  <span className="shrink-0" aria-hidden>•</span>
+                  <span className="min-w-0 flex-1 break-words [overflow-wrap:anywhere]">Unstretched - arrives rolled</span>
                 </li>
-                <li className="flex items-start">
-                  <span className="mr-2">•</span>
-                  <span>Great for posters, or to stretch on canvas bars</span>
+                <li className="flex items-start gap-2 min-w-0">
+                  <span className="shrink-0" aria-hidden>•</span>
+                  <span className="min-w-0 flex-1 break-words [overflow-wrap:anywhere]">Great for posters, or to stretch on canvas bars</span>
                 </li>
-                <li className="flex items-start">
-                  <span className="mr-2">•</span>
-                  <span>Custom sizes</span>
+                <li className="flex items-start gap-2 min-w-0">
+                  <span className="shrink-0" aria-hidden>•</span>
+                  <span className="min-w-0 flex-1 break-words [overflow-wrap:anywhere]">Custom sizes</span>
                 </li>
               </ul>
             </div>
           </div>
 
           {/* Right Panel - Configuration and Order */}
-          <div>
+          <div className="min-w-0 max-w-full">
             {/* Size Section */}
             <div className="mb-6 p-4 border border-gray-200 rounded-lg">
               <h2 className="text-lg font-semibold text-gray-900 mb-4">Size</h2>
@@ -527,7 +527,7 @@ export default function CanvasRoll() {
         </div>
 
         {/* Bottom Tabs Section */}
-        <div className="border-t border-gray-200 pt-8">
+        <div className="border-t border-gray-200 pt-8 min-w-0 max-w-full">
           {/* Tabs */}
           <div className="flex gap-6 mb-6 border-b border-gray-200">
             <button
@@ -564,22 +564,22 @@ export default function CanvasRoll() {
 
           {/* Tab Content */}
           {activeTab === "description" && (
-            <div className="space-y-6 text-gray-700">
-              <div>
+            <div className="space-y-6 text-gray-700 min-w-0 max-w-full">
+              <div className="min-w-0 max-w-full">
                 <h3 className="font-semibold text-gray-900 mb-2">
                   Next Day Turnaround and Cut-off Time:
                 </h3>
-                <p className="mb-2">
+                <p className="mb-2 break-words [overflow-wrap:anywhere]">
                   Order and submit artwork before 4pm PST ships next business day. Order after 4pm add 1 business day.
                 </p>
-                <p>Orders over 100 qty require 2 extra business days.</p>
+                <p className="break-words [overflow-wrap:anywhere]">Orders over 100 qty require 2 extra business days.</p>
               </div>
-              <div>
+              <div className="min-w-0 max-w-full">
                 <h3 className="font-semibold text-gray-900 mb-2">Same Day Turnaround:</h3>
-                <p>Order and submit artwork before 12pm PST ships same day.</p>
+                <p className="break-words [overflow-wrap:anywhere]">Order and submit artwork before 12pm PST ships same day.</p>
               </div>
-              <div>
-                <p>
+              <div className="min-w-0 max-w-full">
+                <p className="break-words [overflow-wrap:anywhere]">
                   Unstretched artist canvas in custom height and width so customers can order and frame photos and art at any size. Our canvas has semi-gloss finish, designed for long-term and fade-resistant fine art reproduction. The polyester/cotton blend canvas is great for superior color quality.
                 </p>
               </div>

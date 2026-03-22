@@ -440,7 +440,33 @@ export const addressesAPI = {
       body: JSON.stringify(addressData),
     });
   },
-  
+
+  setDefault: async (
+    id: string,
+    addressSnapshot: {
+      streetAddress: string;
+      addressLine2?: string | null;
+      city: string;
+      state: string;
+      postcode: string;
+      country: string;
+      addressType: string;
+    }
+  ) => {
+    try {
+      return await apiCall(`/addresses/${id}/set-default`, { method: 'POST' });
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : String(e);
+      if (/route not found/i.test(msg)) {
+        return apiCall(`/addresses/${id}`, {
+          method: 'PUT',
+          body: JSON.stringify({ ...addressSnapshot, isDefault: true }),
+        });
+      }
+      throw e;
+    }
+  },
+
   delete: async (id: string) => {
     return apiCall(`/addresses/${id}`, {
       method: 'DELETE',

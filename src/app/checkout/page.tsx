@@ -100,12 +100,15 @@ export default function CheckoutPage() {
   const [guestFullName, setGuestFullName] = useState("");
   const [savingAddress, setSavingAddress] = useState(false);
 
-  const billingAddress = addresses.find((a) => a.address_type === "billing" && a.is_default)
-    || addresses.find((a) => a.address_type === "billing")
-    || null;
-  const shippingAddress = addresses.find((a) => a.address_type === "shipping" && a.is_default)
-    || addresses.find((a) => a.address_type === "shipping")
-    || billingAddress;
+  const globalDefault = addresses.find((a) => a.is_default) ?? null;
+  const billingAddress =
+    globalDefault?.address_type === "billing"
+      ? globalDefault
+      : addresses.find((a) => a.address_type === "billing") ?? globalDefault ?? null;
+  const shippingAddress =
+    globalDefault?.address_type === "shipping"
+      ? globalDefault
+      : addresses.find((a) => a.address_type === "shipping") ?? globalDefault ?? billingAddress;
 
   useEffect(() => {
     let cancelled = false;

@@ -1,8 +1,8 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { addressesAPI } from "../../utils/api";
 import { toast } from "react-toastify";
 
@@ -16,6 +16,17 @@ interface Address {
   country: string;
   is_default: boolean;
   address_type: string;
+  updated_at?: string | null;
+}
+
+function parseAddressBool(v: unknown): boolean {
+  if (v === true || v === 1) return true;
+  if (v === false || v === 0) return false;
+  if (typeof v === "string") {
+    const s = v.toLowerCase();
+    return s === "true" || s === "1" || s === "t";
+  }
+  return false;
 }
 
 function normalizeAddress(raw: Record<string, unknown>): Address {
@@ -27,9 +38,33 @@ function normalizeAddress(raw: Record<string, unknown>): Address {
     state: String(raw.state ?? ""),
     postcode: String(raw.postcode ?? ""),
     country: String(raw.country ?? "United States"),
-    is_default: Boolean(raw.is_default ?? raw.isDefault),
+    is_default: parseAddressBool(raw.is_default ?? raw.isDefault),
     address_type: String(raw.address_type ?? raw.addressType ?? "billing"),
+    updated_at:
+      raw.updated_at != null
+        ? String(raw.updated_at)
+        : raw.updatedAt != null
+          ? String(raw.updatedAt)
+          : null,
   };
+}
+
+/** If API still returns multiple defaults, show the most recently updated one (matches set-default / sort order). */
+function ensureSingleDefaultForDisplay(addresses: Address[]): Address[] {
+  const defaultRows = addresses.filter((a) => a.is_default);
+  if (defaultRows.length <= 1) return addresses;
+  const ts = (a: Address) => {
+    const t = a.updated_at ? Date.parse(a.updated_at) : NaN;
+    return Number.isNaN(t) ? 0 : t;
+  };
+  const keep = defaultRows.reduce((best, a) => {
+    const bt = ts(best);
+    const at = ts(a);
+    if (at > bt) return a;
+    if (at < bt) return best;
+    return a.id > best.id ? a : best;
+  });
+  return addresses.map((a) => ({ ...a, is_default: a.id === keep.id }));
 }
 
 const defaultForm = {
@@ -45,28 +80,28 @@ const defaultForm = {
 
 export default function AddressBook() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const deepLinkDone = useRef(false);
   const [addresses, setAddresses] = useState<Address[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [editingId, setEditingId] = useState<number | null>(null);
   const [formData, setFormData] = useState(defaultForm);
 
-  useEffect(() => {
-    const token = typeof window !== "undefined" ? localStorage.getItem("token") : null;
-    if (!token) {
-      router.push("/login");
-      return;
-    }
-    const fetchAddresses = async () => {
+  const fetchAddressList = useCallback(
+    async (options?: { showFullPageSpinner?: boolean }) => {
+      const showSpinner = options?.showFullPageSpinner !== false;
       try {
-        setLoading(true);
+        if (showSpinner) setLoading(true);
         const res = (await addressesAPI.getAll()) as { addresses?: unknown[] } | unknown[];
         const rawList = Array.isArray((res as { addresses?: unknown[] }).addresses)
           ? (res as { addresses: unknown[] }).addresses
           : Array.isArray(res)
             ? (res as unknown[])
             : [];
-        const list = rawList.map((item) => normalizeAddress((item as Record<string, unknown>) || {}));
+        const list = ensureSingleDefaultForDisplay(
+          rawList.map((item) => normalizeAddress((item as Record<string, unknown>) || {}))
+        );
         setAddresses(list);
       } catch (err: any) {
         if (err?.message?.includes("401") || err?.message?.toLowerCase().includes("token")) {
@@ -76,11 +111,64 @@ export default function AddressBook() {
         toast.error(err?.message || "Failed to load addresses");
         setAddresses([]);
       } finally {
-        setLoading(false);
+        if (showSpinner) setLoading(false);
       }
-    };
-    fetchAddresses();
-  }, [router]);
+    },
+    [router]
+  );
+
+  useEffect(() => {
+    const token = typeof window !== "undefined" ? localStorage.getItem("token") : null;
+    if (!token) {
+      router.push("/login");
+      return;
+    }
+    fetchAddressList({ showFullPageSpinner: true });
+  }, [router, fetchAddressList]);
+
+  /** Deep links from product page: ?edit=123 or ?add=1 */
+  useEffect(() => {
+    if (loading) return;
+    const editParam = searchParams.get("edit");
+    const addParam = searchParams.get("add");
+    if (!editParam && addParam !== "1" && addParam !== "true") {
+      deepLinkDone.current = false;
+      return;
+    }
+    if (deepLinkDone.current) return;
+    if (addParam === "1" || addParam === "true") {
+      deepLinkDone.current = true;
+      setEditingId(null);
+      setFormData(defaultForm);
+      requestAnimationFrame(() => {
+        document.getElementById("address-book-add-form")?.scrollIntoView({ behavior: "smooth", block: "start" });
+      });
+      return;
+    }
+    const id = parseInt(editParam || "", 10);
+    if (!isNaN(id)) {
+      const addr = addresses.find((a) => a.id === id);
+      if (addr) {
+        deepLinkDone.current = true;
+        setEditingId(addr.id);
+        setFormData({
+          streetAddress: addr.street_address,
+          addressLine2: addr.address_line2 || "",
+          city: addr.city,
+          state: addr.state,
+          postcode: addr.postcode,
+          country: addr.country || "United States",
+          addressType: (addr.address_type === "shipping" ? "shipping" : "billing") as "billing" | "shipping",
+          isDefault: !!addr.is_default,
+        });
+        requestAnimationFrame(() => {
+          document.getElementById("address-book-add-form")?.scrollIntoView({ behavior: "smooth", block: "start" });
+        });
+      } else if (addresses.length > 0) {
+        deepLinkDone.current = true;
+      }
+    }
+  }, [loading, addresses, searchParams]);
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
     const { name, value, type } = e.target;
@@ -113,7 +201,7 @@ export default function AddressBook() {
   const handleSetDefault = async (addr: Address) => {
     if (addr.is_default) return;
     try {
-      await addressesAPI.update(String(addr.id), {
+      await addressesAPI.setDefault(String(addr.id), {
         streetAddress: addr.street_address,
         addressLine2: addr.address_line2 || undefined,
         city: addr.city,
@@ -121,21 +209,12 @@ export default function AddressBook() {
         postcode: addr.postcode,
         country: addr.country,
         addressType: addr.address_type,
-        isDefault: true,
       });
-   
-      setAddresses((prev) =>
-        prev.map((a) => ({
-          ...a,
-          is_default: a.id === addr.id ? true : (a.address_type === addr.address_type ? false : a.is_default),
-        }))
-      );
+      await fetchAddressList({ showFullPageSpinner: false });
       toast.success("Default address updated.");
-    
     } catch (err: any) {
       toast.error(err?.message || "Failed to set default.");
     }
-    
   };
 
 
@@ -177,10 +256,8 @@ export default function AddressBook() {
     if (editingId) {
       try {
         setSaving(true);
-        const res = await addressesAPI.update(String(editingId), payload) as { address?: Address };
-        if (res?.address) {
-          setAddresses((prev) => prev.map((a) => (a.id === editingId ? res.address! : a)));
-        }
+        await addressesAPI.update(String(editingId), payload);
+        await fetchAddressList({ showFullPageSpinner: false });
         toast.success("Address updated.");
         cancelEdit();
       } catch (err: any) {
@@ -193,8 +270,8 @@ export default function AddressBook() {
 
     try {
       setSaving(true);
-      const res = await addressesAPI.create(payload) as { address?: Address };
-      if (res?.address) setAddresses((prev) => [res.address!, ...prev]);
+      await addressesAPI.create(payload);
+      await fetchAddressList({ showFullPageSpinner: false });
       toast.success("Address added.");
       setFormData(defaultForm);
     } catch (err: any) {
@@ -269,8 +346,11 @@ export default function AddressBook() {
                       <button
                         type="button"
                         onClick={() => handleSetDefault(addr)}
-                        className={`px-4 py-2 rounded text-sm font-medium transition-colors ${
-                          addr.is_default ? "bg-gray-300 text-gray-700" : "bg-gray-200 text-gray-700 hover:bg-gray-300"
+                        disabled={addr.is_default}
+                        className={`inline-flex w-32 shrink-0 justify-center items-center px-2 py-2 rounded text-sm font-medium transition-colors ${
+                          addr.is_default
+                            ? "bg-gray-300 text-gray-700 cursor-default"
+                            : "bg-gray-200 text-gray-700 hover:bg-gray-300"
                         }`}
                       >
                         {addr.is_default ? "Default" : "Set Default"}
@@ -305,7 +385,7 @@ export default function AddressBook() {
               </div>
             )}
 
-            <h2 className="text-xl font-bold text-gray-900 mb-4">
+            <h2 id="address-book-add-form" className="text-xl font-bold text-gray-900 mb-4 scroll-mt-24">
               {editingId ? "Update address" : "Add new address"}
             </h2>
             <div className="bg-white border border-gray-300 rounded-lg p-6">
@@ -402,7 +482,9 @@ export default function AddressBook() {
                     onChange={handleChange}
                     className="w-4 h-4 rounded border-gray-300 text-blue-600"
                   />
-                  <label htmlFor="isDefaultAddr" className="text-sm font-medium text-gray-700">Set as default for this type</label>
+                  <label htmlFor="isDefaultAddr" className="text-sm font-medium text-gray-700">
+                    Use as my default address (only one; shown on product page and checkout)
+                  </label>
                 </div>
                 <div className="flex gap-3 pt-4">
                   <button
