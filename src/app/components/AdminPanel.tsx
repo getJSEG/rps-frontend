@@ -383,15 +383,15 @@ export default function AdminPanel() {
       case "approved":
       case "shipped":
       case "delivered":
-        return "bg-green-500 text-white";
+        return "bg-emerald-50 text-emerald-800 ring-1 ring-emerald-200/80";
       case "cancelled":
       case "canceled":
-        return "bg-red-500 text-white";
+        return "bg-rose-50 text-rose-800 ring-1 ring-rose-200/80";
       case "pending":
       case "approval needed":
-        return "bg-yellow-500 text-white";
+        return "bg-amber-50 text-amber-900 ring-1 ring-amber-200/80";
       default:
-        return "bg-gray-500 text-white";
+        return "bg-slate-100 text-slate-700 ring-1 ring-slate-200/80";
     }
   };
 
@@ -420,84 +420,66 @@ export default function AdminPanel() {
   };
 
   return (
-    <AdminNavbar 
-      title="New Orders"
+    <AdminNavbar
+      title="Orders"
+      subtitle="Placed orders and items still in customer carts"
       searchQuery={searchQuery}
       onSearchChange={setSearchQuery}
     >
-      {/* Main Content */}
-      <div className="flex-1 p-6">
-          <div className="bg-white rounded-lg shadow-sm">
-            {/* Tabs */}
-            <div className="border-b border-gray-200">
-              <div className="px-6 py-4">
-                <div className="flex space-x-6 border-b-2 border-transparent">
-                  {["All Projects", "In Progress", "Pending", "Complete"].map((tab) => (
-                    <button
-                      key={tab}
-                      onClick={() => {
-                        setActiveTab(tab);
-                        setCurrentPage(1);
-                      }}
-                      className={`pb-4 px-2 font-medium transition-colors ${
-                        activeTab === tab
-                          ? "text-blue-600 border-b-2 border-blue-600"
-                          : "text-gray-600 hover:text-gray-800"
-                      }`}
-                    >
-                      {tab}
-                    </button>
-                  ))}
-                 
-                </div>
-              </div>
-            </div>
+      <div className="overflow-hidden rounded-2xl border border-slate-200/80 bg-white shadow-sm shadow-slate-900/5">
+        <div className="border-b border-slate-100 bg-slate-50/80 px-4 py-4 sm:px-6">
+          <div className="flex flex-wrap gap-2">
+            {["All Projects", "In Progress", "Pending", "Complete"].map((tab) => (
+              <button
+                key={tab}
+                type="button"
+                onClick={() => {
+                  setActiveTab(tab);
+                  setCurrentPage(1);
+                }}
+                className={`rounded-full px-4 py-2 text-sm font-medium transition-colors ${
+                  activeTab === tab
+                    ? "bg-slate-900 text-white shadow-sm"
+                    : "bg-white text-slate-600 ring-1 ring-slate-200/80 hover:bg-slate-100 hover:text-slate-900"
+                }`}
+              >
+                {tab}
+              </button>
+            ))}
+          </div>
+        </div>
 
-            {/* Orders Table */}
-            <div className="overflow-x-auto">
-              <table className="w-full">
-                <thead className="bg-gray-50 border-b border-gray-200">
-                  <tr>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Product Image & Name
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      User Name
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Email
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Order Date
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Payment Type
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Amount
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Status
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-24">
-                      Action
-                    </th>
-                  </tr>
-                </thead>
-                <tbody className="bg-white divide-y divide-gray-200">
-                  {loading ? (
-                    <tr>
-                      <td colSpan={8} className="px-6 py-8 text-center text-gray-500">
-                        Loading orders...
-                      </td>
-                    </tr>
-                  ) : paginatedOrders.length === 0 ? (
-                    <tr>
-                      <td colSpan={8} className="px-6 py-8 text-center text-gray-500">
-                        No orders found
-                      </td>
-                    </tr>
-                  ) : (
+        <div className="overflow-x-auto">
+          <table className="w-full min-w-[900px]">
+            <thead>
+              <tr className="border-b border-slate-200 bg-slate-50/90 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
+                <th className="px-4 py-3.5 sm:px-6">Product</th>
+                <th className="px-4 py-3.5 sm:px-6">Customer</th>
+                <th className="px-4 py-3.5 sm:px-6">Email</th>
+                <th className="px-4 py-3.5 sm:px-6">Date</th>
+                <th className="px-4 py-3.5 sm:px-6">Payment</th>
+                <th className="px-4 py-3.5 sm:px-6">Amount</th>
+                <th className="px-4 py-3.5 sm:px-6">Status</th>
+                <th className="w-24 px-4 py-3.5 sm:px-6">Action</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-100 text-sm">
+              {loading ? (
+                <tr>
+                  <td colSpan={8} className="px-6 py-14 text-center text-slate-500">
+                    <span className="inline-flex items-center gap-2">
+                      <span className="h-4 w-4 animate-spin rounded-full border-2 border-slate-300 border-t-slate-600" />
+                      Loading orders…
+                    </span>
+                  </td>
+                </tr>
+              ) : paginatedOrders.length === 0 ? (
+                <tr>
+                  <td colSpan={8} className="px-6 py-14 text-center text-slate-500">
+                    No orders match the current filters.
+                  </td>
+                </tr>
+              ) : (
                     paginatedOrders.map((order) => {
                       const orderId = String(order.id).trim();
                       const orderDetailUrl = order.isCartItem ? `/admin/cart-item/${orderId}` : `/admin/orders/${orderId}`;
@@ -506,12 +488,12 @@ export default function AdminPanel() {
                       <tr
                         key={order.id}
                         onClick={() => router.push(orderDetailUrl)}
-                        className={`cursor-pointer hover:bg-gray-50 ${isCart ? "bg-yellow-50" : ""} ${order.status.toLowerCase() === "complete" ? "bg-blue-50" : ""}`}
+                        className={`cursor-pointer transition-colors hover:bg-slate-50/90 ${isCart ? "bg-amber-50/40" : ""} ${order.status.toLowerCase() === "complete" ? "bg-sky-50/30" : ""}`}
                       >
-                        <td className="px-6 py-4 whitespace-nowrap">
+                        <td className="px-4 py-4 whitespace-nowrap sm:px-6">
                           <div className="flex items-center gap-3">
                             <div
-                              className="w-12 h-14 bg-gray-100 border border-gray-300 rounded flex items-center justify-center overflow-hidden shrink-0 cursor-pointer hover:opacity-80 transition-opacity"
+                              className="flex h-14 w-12 shrink-0 cursor-pointer items-center justify-center overflow-hidden rounded-lg border border-slate-200 bg-slate-100 transition-opacity hover:opacity-90"
                               onClick={(e) => {
                                 e.stopPropagation();
                                 router.push(orderDetailUrl);
@@ -551,46 +533,42 @@ export default function AdminPanel() {
                             <Link
                               href={orderDetailUrl}
                               onClick={(e) => e.stopPropagation()}
-                              className="text-sm font-medium text-gray-900 hover:text-blue-600 transition-colors"
+                              className="font-medium text-slate-900 transition-colors hover:text-sky-600"
                             >
                               {order.productName}
                             </Link>
                           </div>
                         </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-700">
+                        <td className="px-4 py-4 whitespace-nowrap text-slate-700 sm:px-6">
                           {order.user_name || "—"}
                         </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-700">
+                        <td className="px-4 py-4 whitespace-nowrap text-slate-600 sm:px-6">
                           {order.user_email || "—"}
                         </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                        <td className="px-4 py-4 whitespace-nowrap text-slate-500 sm:px-6">
                           {order.orderDate}
                         </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                        <td className="px-4 py-4 whitespace-nowrap text-slate-500 sm:px-6">
                           {order.isCartItem ? (
-                            <span className="text-yellow-600 font-medium">Cart Item</span>
+                            <span className="font-medium text-amber-700">Cart</span>
                           ) : (
                             order.paymentType
                           )}
                         </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
+                        <td className="px-4 py-4 whitespace-nowrap font-semibold text-slate-900 sm:px-6">
                           ${order.amount.toFixed(2)}
                         </td>
-                        <td className="px-6 py-4 whitespace-nowrap">
-                          <span
-                            className={`px-3 py-1 rounded-full text-xs font-medium ${getStatusColor(
-                              order.status
-                            )}`}
-                          >
+                        <td className="px-4 py-4 whitespace-nowrap sm:px-6">
+                          <span className={`inline-flex rounded-full px-2.5 py-1 text-xs font-medium ${getStatusColor(order.status)}`}>
                             {formatStatus(order.status)}
                           </span>
                         </td>
-                        <td className="px-6 py-4 whitespace-nowrap" onClick={(e) => e.stopPropagation()}>
+                        <td className="px-4 py-4 whitespace-nowrap sm:px-6" onClick={(e) => e.stopPropagation()}>
                           <button
                             type="button"
                             onClick={(e) => handleRemoveOrder(e, order)}
                             disabled={removingId === order.id}
-                            className="text-red-600 hover:text-red-800 hover:underline text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+                            className="text-sm font-medium text-rose-600 transition-colors hover:text-rose-800 disabled:cursor-not-allowed disabled:opacity-50"
                           >
                             {removingId === order.id ? "Removing…" : "Remove"}
                           </button>
@@ -603,79 +581,81 @@ export default function AdminPanel() {
               </table>
             </div>
 
-            {/* Pagination */}
-            <div className="px-6 py-4 border-t border-gray-200 flex items-center justify-between">
-              <div className="flex items-center gap-4">
-                <select
-                  value={itemsPerPage}
-                  className="px-3 py-1 border border-gray-300 rounded text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  disabled
-                >
-                  <option value={10}>10</option>
-                </select>
-                <span className="text-sm text-gray-600">
-                  Showing {startIndex + 1}-{Math.min(endIndex, filteredOrders.length)} of {filteredOrders.length}
-                </span>
-              </div>
-              <div className="flex items-center gap-2">
+        <div className="flex flex-col gap-4 border-t border-slate-100 px-4 py-4 sm:flex-row sm:items-center sm:justify-between sm:px-6">
+          <div className="flex flex-wrap items-center gap-3 text-sm text-slate-600">
+            <select
+              value={itemsPerPage}
+              className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-sky-400/40"
+              disabled
+            >
+              <option value={10}>10 / page</option>
+            </select>
+            <span>
+              {startIndex + 1}–{Math.min(endIndex, filteredOrders.length)} of {filteredOrders.length}
+            </span>
+          </div>
+          <div className="flex flex-wrap items-center gap-1.5">
+            <button
+              type="button"
+              onClick={() => setCurrentPage((prev) => Math.max(1, prev - 1))}
+              disabled={currentPage === 1}
+              className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-sm font-medium text-slate-700 shadow-sm transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40"
+            >
+              Prev
+            </button>
+            {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
+              let pageNum;
+              if (totalPages <= 5) {
+                pageNum = i + 1;
+              } else if (currentPage <= 3) {
+                pageNum = i + 1;
+              } else if (currentPage >= totalPages - 2) {
+                pageNum = totalPages - 4 + i;
+              } else {
+                pageNum = currentPage - 2 + i;
+              }
+              return (
                 <button
-                  onClick={() => setCurrentPage((prev) => Math.max(1, prev - 1))}
-                  disabled={currentPage === 1}
-                  className="px-3 py-1 border border-gray-300 rounded text-sm hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                  type="button"
+                  key={pageNum}
+                  onClick={() => setCurrentPage(pageNum)}
+                  className={`min-w-[2.25rem] rounded-lg border px-3 py-1.5 text-sm font-medium transition ${
+                    currentPage === pageNum
+                      ? "border-slate-900 bg-slate-900 text-white shadow-sm"
+                      : "border-slate-200 bg-white text-slate-700 shadow-sm hover:bg-slate-50"
+                  }`}
                 >
-                  &lt;
+                  {pageNum}
                 </button>
-                {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
-                  let pageNum;
-                  if (totalPages <= 5) {
-                    pageNum = i + 1;
-                  } else if (currentPage <= 3) {
-                    pageNum = i + 1;
-                  } else if (currentPage >= totalPages - 2) {
-                    pageNum = totalPages - 4 + i;
-                  } else {
-                    pageNum = currentPage - 2 + i;
-                  }
-                  return (
-                    <button
-                      key={pageNum}
-                      onClick={() => setCurrentPage(pageNum)}
-                      className={`px-3 py-1 border rounded text-sm ${
-                        currentPage === pageNum
-                          ? "bg-blue-600 text-white border-blue-600"
-                          : "border-gray-300 hover:bg-gray-50"
-                      }`}
-                    >
-                      {pageNum}
-                    </button>
-                  );
-                })}
-                {totalPages > 5 && currentPage < totalPages - 2 && (
-                  <span className="px-2 text-sm text-gray-500">...</span>
-                )}
-                {totalPages > 5 && (
-                  <button
-                    onClick={() => setCurrentPage(totalPages)}
-                    className={`px-3 py-1 border rounded text-sm ${
-                      currentPage === totalPages
-                        ? "bg-blue-600 text-white border-blue-600"
-                        : "border-gray-300 hover:bg-gray-50"
-                    }`}
-                  >
-                    {totalPages}
-                  </button>
-                )}
-                <button
-                  onClick={() => setCurrentPage((prev) => Math.min(totalPages, prev + 1))}
-                  disabled={currentPage === totalPages}
-                  className="px-3 py-1 border border-gray-300 rounded text-sm hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  &gt;
-                </button>
-              </div>
-            </div>
+              );
+            })}
+            {totalPages > 5 && currentPage < totalPages - 2 && (
+              <span className="px-1 text-sm text-slate-400">…</span>
+            )}
+            {totalPages > 5 && (
+              <button
+                type="button"
+                onClick={() => setCurrentPage(totalPages)}
+                className={`min-w-[2.25rem] rounded-lg border px-3 py-1.5 text-sm font-medium transition ${
+                  currentPage === totalPages
+                    ? "border-slate-900 bg-slate-900 text-white shadow-sm"
+                    : "border-slate-200 bg-white text-slate-700 shadow-sm hover:bg-slate-50"
+                }`}
+              >
+                {totalPages}
+              </button>
+            )}
+            <button
+              type="button"
+              onClick={() => setCurrentPage((prev) => Math.min(totalPages, prev + 1))}
+              disabled={currentPage === totalPages}
+              className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-sm font-medium text-slate-700 shadow-sm transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40"
+            >
+              Next
+            </button>
           </div>
         </div>
+      </div>
     </AdminNavbar>
   );
 }

@@ -100,9 +100,12 @@ export default function EmployeeDetailPage() {
 
   if (loading) {
     return (
-      <AdminNavbar title="Employee Detail">
-        <div className="p-6 flex items-center justify-center min-h-[200px]">
-          <p className="text-gray-500">Loading...</p>
+      <AdminNavbar title="Employee" subtitle="Profile">
+        <div className="flex min-h-[200px] items-center justify-center rounded-2xl border border-slate-200/80 bg-white p-8 shadow-sm">
+          <p className="flex items-center gap-2 text-slate-500">
+            <span className="h-5 w-5 animate-spin rounded-full border-2 border-slate-300 border-t-slate-600" />
+            Loading…
+          </p>
         </div>
       </AdminNavbar>
     );
@@ -110,11 +113,17 @@ export default function EmployeeDetailPage() {
 
   if (error || !employee) {
     return (
-      <AdminNavbar title="Employee Detail">
-        <div className="p-6">
-          <p className="text-red-600 mb-4">{error || "Employee not found"}</p>
-          <Link href="/admin/employees" className="text-blue-600 hover:underline">
-            ← Back to Employees
+      <AdminNavbar title="Employee" subtitle="Profile">
+        <div className="rounded-2xl border border-rose-200/80 bg-rose-50/50 p-8">
+          <p className="mb-4 font-medium text-rose-800">{error || "Employee not found"}</p>
+          <Link
+            href="/admin/employees"
+            className="inline-flex items-center gap-2 text-sm font-medium text-sky-600 hover:text-sky-800"
+          >
+            <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+            </svg>
+            Back to employees
           </Link>
         </div>
       </AdminNavbar>
@@ -126,21 +135,23 @@ export default function EmployeeDetailPage() {
   const statusLabel = employee.is_active ? "Active" : "Inactive";
 
   return (
-    <AdminNavbar title="Employee Detail">
-      <div className="p-6">
-        <div className="mb-6">
-          <Link href="/admin/employees" className="text-blue-600 hover:underline text-sm">
-            ← Back to Employees
-          </Link>
-        </div>
+    <AdminNavbar title={employee.full_name || "Employee"} subtitle="Profile & onboarding">
+      <Link
+        href="/admin/employees"
+        className="inline-flex items-center gap-2 text-sm font-medium text-slate-600 transition-colors hover:text-slate-900"
+      >
+        <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+        </svg>
+        Back to employees
+      </Link>
 
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-8 bg-white rounded-xl shadow-sm border border-gray-200 p-8">
-          {/* PROFILE IMAGE */}
+      <div className="grid grid-cols-1 gap-8 rounded-2xl border border-slate-200/80 bg-white p-6 shadow-sm shadow-slate-900/5 md:grid-cols-3 md:p-8">
           <div className="flex flex-col items-center">
-            <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-4 w-full text-left">
-              Profile Image
+            <h3 className="mb-4 w-full text-left text-xs font-semibold uppercase tracking-wider text-slate-500">
+              Profile image
             </h3>
-            <div className="w-40 h-40 rounded-full overflow-hidden bg-gray-100 border-2 border-gray-200 flex items-center justify-center">
+            <div className="flex h-40 w-40 items-center justify-center overflow-hidden rounded-full border-2 border-slate-200 bg-slate-100">
               {employee.profile_image ? (
                 // eslint-disable-next-line @next/next/no-img-element
                 <img
@@ -149,14 +160,14 @@ export default function EmployeeDetailPage() {
                   className="w-full h-full object-cover"
                 />
               ) : (
-                <span className="text-4xl font-semibold text-gray-400">
+                <span className="text-4xl font-semibold text-slate-400">
                   {(employee.full_name || "?").charAt(0).toUpperCase()}
                 </span>
               )}
             </div>
             <Link
               href={`/admin/employees?edit=${employee.id}`}
-              className="mt-4 text-blue-600 hover:text-blue-800 text-sm font-medium inline-flex items-center gap-1"
+              className="mt-4 inline-flex items-center gap-1 text-sm font-medium text-sky-600 hover:text-sky-800"
             >
               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" />
@@ -169,32 +180,30 @@ export default function EmployeeDetailPage() {
 
           {/* EMPLOYEE DETAILS */}
           <div>
-            <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-4">
-              Employee Details
-            </h3>
+            <h3 className="mb-4 text-xs font-semibold uppercase tracking-wider text-slate-500">Employee details</h3>
             <div className="space-y-4">
               <div>
-                <label className="block text-sm font-medium text-gray-600 mb-1">First Name</label>
-                <div className="px-3 py-2 bg-gray-50 rounded-lg text-gray-800 border border-gray-200">
+                <label className="mb-1 block text-sm font-medium text-slate-600">First name</label>
+                <div className="rounded-xl border border-slate-200 bg-slate-50/80 px-3 py-2.5 text-slate-900">
                   {firstName}
                 </div>
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-600 mb-1">Last Name</label>
-                <div className="px-3 py-2 bg-gray-50 rounded-lg text-gray-800 border border-gray-200">
+                <label className="mb-1 block text-sm font-medium text-slate-600">Last name</label>
+                <div className="rounded-xl border border-slate-200 bg-slate-50/80 px-3 py-2.5 text-slate-900">
                   {lastName}
                 </div>
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-600 mb-1">Email Address</label>
+                <label className="mb-1 block text-sm font-medium text-slate-600">Email</label>
                 <div className="flex items-center gap-2">
-                  <div className="flex-1 px-3 py-2 bg-gray-50 rounded-lg text-gray-800 border border-gray-200">
+                  <div className="min-w-0 flex-1 rounded-xl border border-slate-200 bg-slate-50/80 px-3 py-2.5 text-slate-900">
                     {employee.email || "—"}
                   </div>
                   <button
                     type="button"
                     onClick={() => copyToClipboard(employee.email, "Email")}
-                    className="p-2 text-gray-500 hover:text-blue-600 rounded"
+                    className="rounded-lg p-2 text-slate-500 transition hover:bg-slate-100 hover:text-sky-600"
                     title="Copy email"
                   >
                     <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -205,15 +214,15 @@ export default function EmployeeDetailPage() {
                 </div>
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-600 mb-1">Phone Number</label>
+                <label className="mb-1 block text-sm font-medium text-slate-600">Phone</label>
                 <div className="flex items-center gap-2">
-                  <div className="flex-1 px-3 py-2 bg-gray-50 rounded-lg text-gray-800 border border-gray-200">
+                  <div className="min-w-0 flex-1 rounded-xl border border-slate-200 bg-slate-50/80 px-3 py-2.5 text-slate-900">
                     {employee.telephone || "—"}
                   </div>
                   <button
                     type="button"
                     onClick={() => copyToClipboard(employee.telephone || "", "Phone")}
-                    className="p-2 text-gray-500 hover:text-blue-600 rounded"
+                    className="rounded-lg p-2 text-slate-500 transition hover:bg-slate-100 hover:text-sky-600"
                     title="Copy phone"
                   >
                     <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -224,27 +233,24 @@ export default function EmployeeDetailPage() {
                 </div>
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-600 mb-1">Position</label>
-                <div className="px-3 py-2 bg-gray-50 rounded-lg text-gray-800 border border-gray-200">
+                <label className="mb-1 block text-sm font-medium text-slate-600">Position</label>
+                <div className="rounded-xl border border-slate-200 bg-slate-50/80 px-3 py-2.5 text-slate-900">
                   {position}
                 </div>
               </div>
             </div>
           </div>
 
-          {/* ONBOARDING */}
           <div>
-            <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-4">
-              Onboarding
-            </h3>
+            <h3 className="mb-4 text-xs font-semibold uppercase tracking-wider text-slate-500">Onboarding</h3>
             <div className="space-y-4">
               <div>
-                <label className="block text-sm font-medium text-gray-600 mb-1">Starts on</label>
+                <label className="mb-1 block text-sm font-medium text-slate-600">Starts on</label>
                 <div className="flex items-center gap-2">
-                  <div className="flex-1 px-3 py-2 bg-gray-50 rounded-lg text-gray-800 border border-gray-200">
+                  <div className="min-w-0 flex-1 rounded-xl border border-slate-200 bg-slate-50/80 px-3 py-2.5 text-slate-900">
                     {formatDate(employee.hire_date)}
                   </div>
-                  <span className="text-gray-400">
+                  <span className="text-slate-400">
                     <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
                     </svg>
@@ -252,14 +258,14 @@ export default function EmployeeDetailPage() {
                 </div>
               </div>
               <div className="flex items-center justify-between">
-                <label className="text-sm font-medium text-gray-700">Onboarding required</label>
+                <label className="text-sm font-medium text-slate-700">Onboarding required</label>
                 <button
                   type="button"
                   role="switch"
                   aria-checked={onboardingRequired}
                   onClick={() => setOnboardingRequired((v) => !v)}
-                  className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 ${
-                    onboardingRequired ? "bg-blue-600" : "bg-gray-200"
+                  className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors focus:outline-none focus:ring-2 focus:ring-sky-400 focus:ring-offset-2 ${
+                    onboardingRequired ? "bg-slate-900" : "bg-slate-200"
                   }`}
                 >
                   <span
@@ -270,35 +276,33 @@ export default function EmployeeDetailPage() {
                 </button>
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-600 mb-2">Current Status</label>
-                <div className="flex items-center gap-3 flex-wrap">
+                <label className="mb-2 block text-sm font-medium text-slate-600">Current status</label>
+                <div className="flex flex-wrap items-center gap-3">
                   <span
-                    className={`inline-flex px-3 py-1.5 text-sm font-medium rounded-full ${
-                      statusLabel === "Active" ? "bg-green-100 text-green-800" : "bg-gray-200 text-gray-700"
+                    className={`inline-flex rounded-full px-3 py-1.5 text-sm font-medium ring-1 ${
+                      statusLabel === "Active"
+                        ? "bg-emerald-50 text-emerald-800 ring-emerald-200/80"
+                        : "bg-slate-100 text-slate-600 ring-slate-200/80"
                     }`}
                   >
                     {statusLabel}
                   </span>
-                  <div className="flex-1 min-w-[120px]">
-                    <div className="h-2 bg-gray-200 rounded-full overflow-hidden">
+                  <div className="min-w-[120px] flex-1">
+                    <div className="h-2 overflow-hidden rounded-full bg-slate-200">
                       <div
-                        className="h-full bg-green-500 rounded-full transition-all"
+                        className="h-full rounded-full bg-emerald-500 transition-all"
                         style={{ width: `${onboardingProgress}%` }}
                       />
                     </div>
-                    <span className="text-xs text-gray-500 mt-1 block">{onboardingProgress}%</span>
+                    <span className="mt-1 block text-xs text-slate-500">{onboardingProgress}%</span>
                   </div>
                 </div>
               </div>
-              <button
-                type="button"
-                className="text-blue-600 hover:text-blue-800 text-sm font-medium"
-              >
-                View Answers
+              <button type="button" className="text-sm font-medium text-sky-600 hover:text-sky-800">
+                View answers
               </button>
             </div>
           </div>
-        </div>
       </div>
     </AdminNavbar>
   );

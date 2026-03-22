@@ -371,46 +371,70 @@ export default function AdminProductsPage() {
     if (descEditorRef.current) descEditorRef.current.innerHTML = "";
   };
 
+  const inputClass =
+    "w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm shadow-sm outline-none transition focus:border-sky-400 focus:ring-2 focus:ring-sky-400/25";
+  const selectClass =
+    `${inputClass} disabled:cursor-not-allowed disabled:bg-slate-50 disabled:text-slate-400`;
+
   return (
-    <AdminNavbar title="Products">
-      <div className="flex-1 p-6">
-        <div className="mb-4">
-          <Link href="/admin" className="text-gray-600 hover:text-gray-900 inline-flex items-center gap-1">
-            ← Back to Orders
-          </Link>
+    <AdminNavbar title="Products" subtitle="Catalog, categories, and subcategories">
+      <Link
+        href="/admin"
+        className="inline-flex items-center gap-2 text-sm font-medium text-slate-600 transition-colors hover:text-slate-900"
+      >
+        <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+        </svg>
+        Back to orders
+      </Link>
+
+      {message && (
+        <div
+          role="alert"
+          className={`rounded-xl border px-4 py-3 text-sm font-medium ${
+            message.type === "success"
+              ? "border-emerald-200 bg-emerald-50 text-emerald-900"
+              : "border-rose-200 bg-rose-50 text-rose-900"
+          }`}
+        >
+          {message.text}
+        </div>
+      )}
+
+      <div className="overflow-hidden rounded-2xl border border-slate-200/80 bg-white shadow-sm shadow-slate-900/5">
+        <div className="flex flex-wrap gap-2 border-b border-slate-100 bg-slate-50/80 px-4 py-4 sm:px-6">
+          {(["products", "categories", "subcategories"] as Tab[]).map((tab) => (
+            <button
+              key={tab}
+              type="button"
+              onClick={() => setActiveTab(tab)}
+              className={`rounded-full px-4 py-2 text-sm font-medium capitalize transition-colors ${
+                activeTab === tab
+                  ? "bg-slate-900 text-white shadow-sm"
+                  : "bg-white text-slate-600 ring-1 ring-slate-200/80 hover:bg-slate-100 hover:text-slate-900"
+              }`}
+            >
+              {tab === "subcategories" ? "Subcategories" : tab === "products" ? "Products" : "Categories"}
+            </button>
+          ))}
         </div>
 
-        {message && (
-          <div
-            className={`mb-4 px-4 py-2 rounded-lg ${message.type === "success" ? "bg-green-100 text-green-800" : "bg-red-100 text-red-800"}`}
-          >
-            {message.text}
-          </div>
-        )}
-
-        <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
-          <div className="flex border-b border-gray-200">
-            {(["products", "categories", "subcategories"] as Tab[]).map((tab) => (
-              <button
-                key={tab}
-                onClick={() => setActiveTab(tab)}
-                className={`px-6 py-4 font-medium capitalize ${activeTab === tab ? "bg-blue-600 text-white" : "bg-gray-50 text-gray-700 hover:bg-gray-100"}`}
-              >
-                {tab === "subcategories" ? "Subcategories" : tab === "products" ? "Products" : "Categories"}
-              </button>
-            ))}
-          </div>
-
-          <div className="p-6">
+        <div className="p-5 sm:p-6">
             {loading ? (
-              <p className="text-gray-500">Loading…</p>
+              <p className="flex items-center gap-2 text-slate-500">
+                <span className="h-4 w-4 animate-spin rounded-full border-2 border-slate-300 border-t-slate-600" />
+                Loading…
+              </p>
             ) : (
               <>
                 {/* Products tab */}
                 {activeTab === "products" && (
                   <div className="space-y-6">
-                    <form onSubmit={handleProductSubmit} className="grid grid-cols-1 md:grid-cols-2 gap-4 p-4 bg-gray-50 rounded-lg">
-                      <h3 className="md:col-span-2 font-semibold text-gray-800">
+                    <form
+                      onSubmit={handleProductSubmit}
+                      className="grid grid-cols-1 gap-4 rounded-2xl border border-slate-200/80 bg-slate-50/80 p-5 md:grid-cols-2"
+                    >
+                      <h3 className="md:col-span-2 text-base font-semibold text-slate-900">
                         {editingProductId ? "Edit Product" : "Add Product"}
                       </h3>
                       <input
@@ -418,19 +442,21 @@ export default function AdminProductsPage() {
                         placeholder="Product name *"
                         value={prodName}
                         onChange={(e) => setProdName(e.target.value)}
-                        className="px-3 py-2 border border-gray-300 rounded"
+                        className={inputClass}
                       />
                       <input
                         type="text"
                         placeholder="Slug (optional)"
                         value={prodSlug}
                         onChange={(e) => setProdSlug(e.target.value)}
-                        className="px-3 py-2 border border-gray-300 rounded"
+                        className={inputClass}
                       />
                       <div className="md:col-span-2">
-                        <label className="block text-sm font-medium text-gray-700 mb-1">Description (Word-style formatting)</label>
-                        <div className="border border-gray-300 rounded bg-white">
-                          <div className="flex gap-1 p-1 border-b border-gray-200 bg-gray-50 rounded-t">
+                        <label className="mb-1 block text-sm font-medium text-slate-700">
+                          Description (Word-style formatting)
+                        </label>
+                        <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
+                          <div className="flex gap-1 rounded-t border-b border-slate-200 bg-slate-50 p-1">
                             <button
                               type="button"
                               title="Bold"
@@ -439,7 +465,7 @@ export default function AdminProductsPage() {
                                 descEditorRef.current?.focus();
                                 document.execCommand("bold");
                               }}
-                              className="px-2 py-1 font-bold text-gray-700 hover:bg-gray-200 rounded text-sm"
+                              className="rounded-md px-2 py-1 text-sm font-bold text-slate-700 hover:bg-slate-200"
                             >
                               B
                             </button>
@@ -451,7 +477,7 @@ export default function AdminProductsPage() {
                                 descEditorRef.current?.focus();
                                 document.execCommand("italic");
                               }}
-                              className="px-2 py-1 italic text-gray-700 hover:bg-gray-200 rounded text-sm"
+                              className="rounded-md px-2 py-1 text-sm italic text-slate-700 hover:bg-slate-200"
                             >
                               I
                             </button>
@@ -463,7 +489,7 @@ export default function AdminProductsPage() {
                                 descEditorRef.current?.focus();
                                 document.execCommand("insertUnorderedList");
                               }}
-                              className="px-2 py-1 text-gray-700 hover:bg-gray-200 rounded text-sm"
+                              className="rounded-md px-2 py-1 text-sm text-slate-700 hover:bg-slate-200"
                             >
                               • List
                             </button>
@@ -475,7 +501,7 @@ export default function AdminProductsPage() {
                                 descEditorRef.current?.focus();
                                 document.execCommand("insertOrderedList");
                               }}
-                              className="px-2 py-1 text-gray-700 hover:bg-gray-200 rounded text-sm"
+                              className="rounded-md px-2 py-1 text-sm text-slate-700 hover:bg-slate-200"
                             >
                               1. List
                             </button>
@@ -485,15 +511,17 @@ export default function AdminProductsPage() {
                             contentEditable
                             suppressContentEditableWarning
                             onInput={() => descEditorRef.current && setProdDescription(descEditorRef.current.innerHTML)}
-                            className="min-h-[100px] max-h-[200px] overflow-y-auto px-3 py-2 text-gray-900 focus:outline-none"
+                            className="max-h-[200px] min-h-[100px] overflow-y-auto px-3 py-2 text-slate-900 focus:outline-none"
                             data-placeholder="Enter description (bold, italic, lists supported)..."
                             style={{ outline: "none" }}
                           />
                         </div>
-                        <p className="text-xs text-gray-500 mt-1">Use toolbar for bold, italic, and lists. Shown on product page.</p>
+                        <p className="mt-1 text-xs text-slate-500">Use toolbar for bold, italic, and lists. Shown on product page.</p>
                       </div>
                       <div className="md:col-span-2">
-                        <label className="block text-sm font-medium text-gray-700 mb-1">Product properties (e.g. Size, Material)</label>
+                        <label className="mb-1 block text-sm font-medium text-slate-700">
+                          Product properties (e.g. Size, Material)
+                        </label>
                         <div className="space-y-2">
                           {prodProperties.map((pr, idx) => (
                             <div key={idx} className="flex gap-2 items-center">
@@ -506,7 +534,7 @@ export default function AdminProductsPage() {
                                   next[idx] = { ...next[idx], key: e.target.value };
                                   setProdProperties(next);
                                 }}
-                                className="flex-1 px-3 py-2 border border-gray-300 rounded"
+                                className="min-w-0 flex-1 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm shadow-sm outline-none focus:border-sky-400 focus:ring-2 focus:ring-sky-400/25"
                               />
                               <input
                                 type="text"
@@ -517,12 +545,12 @@ export default function AdminProductsPage() {
                                   next[idx] = { ...next[idx], value: e.target.value };
                                   setProdProperties(next);
                                 }}
-                                className="flex-1 px-3 py-2 border border-gray-300 rounded"
+                                className="min-w-0 flex-1 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm shadow-sm outline-none focus:border-sky-400 focus:ring-2 focus:ring-sky-400/25"
                               />
                               <button
                                 type="button"
                                 onClick={() => setProdProperties(prodProperties.filter((_, i) => i !== idx))}
-                                className="text-red-600 hover:bg-red-50 px-2 py-1 rounded"
+                                className="rounded-md px-2 py-1 text-rose-600 hover:bg-rose-50"
                               >
                                 Remove
                               </button>
@@ -531,7 +559,7 @@ export default function AdminProductsPage() {
                           <button
                             type="button"
                             onClick={() => setProdProperties([...prodProperties, { key: "", value: "" }])}
-                            className="text-sm text-blue-600 hover:underline"
+                            className="text-sm font-medium text-sky-600 hover:text-sky-800"
                           >
                             + Add property
                           </button>
@@ -544,7 +572,7 @@ export default function AdminProductsPage() {
                           setProdCategoryId("");
                           setProdSubcategory("");
                         }}
-                        className="px-3 py-2 border border-gray-300 rounded"
+                        className={selectClass}
                       >
                         <option value="">Select parent category</option>
                         {parentCategories.map((c) => (
@@ -561,7 +589,7 @@ export default function AdminProductsPage() {
                           const sub = subCategories.find((c) => String(c.id) === id);
                           if (sub) setProdSubcategory(sub.name);
                         }}
-                        className="px-3 py-2 border border-gray-300 rounded"
+                        className={selectClass}
                         disabled={!prodParentId}
                       >
                         <option value="">Select subcategory</option>
@@ -577,7 +605,7 @@ export default function AdminProductsPage() {
                         placeholder="Price"
                         value={prodPrice}
                         onChange={(e) => setProdPrice(e.target.value)}
-                        className="px-3 py-2 border border-gray-300 rounded"
+                        className={inputClass}
                       />
                       <input
                         type="number"
@@ -585,7 +613,7 @@ export default function AdminProductsPage() {
                         placeholder="Price per sq ft"
                         value={prodPricePerSqft}
                         onChange={(e) => setProdPricePerSqft(e.target.value)}
-                        className="px-3 py-2 border border-gray-300 rounded"
+                        className={inputClass}
                       />
                       <input
                         type="number"
@@ -593,19 +621,19 @@ export default function AdminProductsPage() {
                         placeholder="Min charge"
                         value={prodMinCharge}
                         onChange={(e) => setProdMinCharge(e.target.value)}
-                        className="px-3 py-2 border border-gray-300 rounded"
+                        className={inputClass}
                       />
                       <input
                         type="text"
                         placeholder="Material"
                         value={prodMaterial}
                         onChange={(e) => setProdMaterial(e.target.value)}
-                        className="px-3 py-2 border border-gray-300 rounded"
+                        className={inputClass}
                       />
                       <div className="md:col-span-2 space-y-2">
-                        <p className="text-sm font-medium text-gray-700">Product image (file ya URL)</p>
+                        <p className="text-sm font-medium text-slate-700">Product image (file or URL)</p>
                         <div className="flex flex-wrap items-center gap-2">
-                          <label className="px-3 py-2 bg-gray-200 rounded cursor-pointer hover:bg-gray-300 text-sm font-medium">
+                          <label className="cursor-pointer rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-700 shadow-sm transition hover:border-slate-300 hover:bg-slate-50">
                             {uploadingImage ? "Uploading…" : "Choose image file"}
                             <input
                               type="file"
@@ -615,17 +643,17 @@ export default function AdminProductsPage() {
                               onChange={handleProductImageUpload}
                             />
                           </label>
-                          <span className="text-gray-500 text-sm">ya</span>
+                          <span className="text-sm text-slate-400">or</span>
                           <input
                             type="text"
                             placeholder="Image URL (e.g. /image.jpg)"
                             value={prodImageUrl}
                             onChange={(e) => setProdImageUrl(e.target.value)}
-                            className="flex-1 min-w-[200px] px-3 py-2 border border-gray-300 rounded"
+                            className="min-w-[200px] flex-1 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm shadow-sm outline-none focus:border-sky-400 focus:ring-2 focus:ring-sky-400/25"
                           />
                         </div>
                         {prodImageUrl && isValidImageSrc(prodImageUrl) && (
-                          <div className="w-20 h-20 rounded border border-gray-300 overflow-hidden bg-gray-100">
+                          <div className="h-20 w-20 overflow-hidden rounded-lg border border-slate-200 bg-slate-100">
                             <Image src={getProductImageSrc(prodImageUrl)} alt="" width={80} height={80} className="w-full h-full object-cover" unoptimized />
                           </div>
                         )}
@@ -635,69 +663,103 @@ export default function AdminProductsPage() {
                         placeholder="SKU"
                         value={prodSku}
                         onChange={(e) => setProdSku(e.target.value)}
-                        className="px-3 py-2 border border-gray-300 rounded"
+                        className={inputClass}
                       />
-                      <div className="flex items-center gap-4">
-                        <label className="flex items-center gap-2">
-                          <input type="checkbox" checked={prodIsNew} onChange={(e) => setProdIsNew(e.target.checked)} />
+                      <div className="flex items-center gap-6">
+                        <label className="flex cursor-pointer items-center gap-2 text-sm text-slate-700">
+                          <input
+                            type="checkbox"
+                            className="rounded border-slate-300 text-slate-900 focus:ring-sky-400/40"
+                            checked={prodIsNew}
+                            onChange={(e) => setProdIsNew(e.target.checked)}
+                          />
                           New
                         </label>
-                        <label className="flex items-center gap-2">
-                          <input type="checkbox" checked={prodIsActive} onChange={(e) => setProdIsActive(e.target.checked)} />
+                        <label className="flex cursor-pointer items-center gap-2 text-sm text-slate-700">
+                          <input
+                            type="checkbox"
+                            className="rounded border-slate-300 text-slate-900 focus:ring-sky-400/40"
+                            checked={prodIsActive}
+                            onChange={(e) => setProdIsActive(e.target.checked)}
+                          />
                           Active
                         </label>
                       </div>
-                      <div className="md:col-span-2 flex gap-2">
-                        <button type="submit" disabled={saving} className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50">
+                      <div className="flex gap-2 md:col-span-2">
+                        <button
+                          type="submit"
+                          disabled={saving}
+                          className="rounded-lg bg-slate-900 px-4 py-2.5 text-sm font-medium text-white shadow-sm transition hover:bg-slate-800 disabled:opacity-50"
+                        >
                           {saving ? "Saving…" : editingProductId ? "Update" : "Add Product"}
                         </button>
                         {editingProductId && (
-                          <button type="button" onClick={cancelEdit} className="px-4 py-2 bg-gray-200 rounded hover:bg-gray-300">
+                          <button
+                            type="button"
+                            onClick={cancelEdit}
+                            className="rounded-lg border border-slate-200 bg-white px-4 py-2.5 text-sm font-medium text-slate-700 shadow-sm hover:bg-slate-50"
+                          >
                             Cancel
                           </button>
                         )}
                       </div>
                     </form>
-                    <div className="overflow-x-auto">
-                      <table className="w-full text-sm">
-                        <thead className="bg-gray-50 border-b">
-                          <tr>
-                            <th className="text-left p-2">Image</th>
-                            <th className="text-left p-2">Name</th>
-                            <th className="text-left p-2">Category</th>
-                            <th className="text-left p-2">Price</th>
-                            <th className="text-left p-2">Active</th>
-                            <th className="text-left p-2">Action</th>
+                    <div className="overflow-x-auto rounded-xl border border-slate-200/80">
+                      <table className="w-full min-w-[640px] text-sm">
+                        <thead>
+                          <tr className="border-b border-slate-200 bg-slate-50/90 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
+                            <th className="px-4 py-3">Image</th>
+                            <th className="px-4 py-3">Name</th>
+                            <th className="px-4 py-3">Category</th>
+                            <th className="px-4 py-3">Price</th>
+                            <th className="px-4 py-3">Active</th>
+                            <th className="px-4 py-3">Action</th>
                           </tr>
                         </thead>
-                        <tbody>
+                        <tbody className="divide-y divide-slate-100">
                           {products.map((p) => (
-                            <tr key={p.id} className="border-b">
-                              <td className="p-2">
+                            <tr key={p.id} className="transition-colors hover:bg-slate-50/80">
+                              <td className="px-4 py-3">
                                 {p.image_url && isValidImageSrc(p.image_url) ? (
-                                  <div className="w-10 h-10 rounded border overflow-hidden bg-gray-100">
-                                    <Image src={getProductImageSrc(p.image_url)} alt="" width={40} height={40} className="w-full h-full object-cover" unoptimized />
+                                  <div className="h-10 w-10 overflow-hidden rounded-lg border border-slate-200 bg-slate-100">
+                                    <Image src={getProductImageSrc(p.image_url)} alt="" width={40} height={40} className="h-full w-full object-cover" unoptimized />
                                   </div>
                                 ) : (
-                                  <span className="text-gray-400">—</span>
+                                  <span className="text-slate-400">—</span>
                                 )}
                               </td>
-                              <td className="p-2 font-medium">{p.name}</td>
-                              <td className="p-2">{p.category_name || "—"} {p.subcategory ? ` / ${p.subcategory}` : ""}</td>
-                              <td className="p-2">{p.price != null ? `$${p.price}` : "—"}</td>
-                              <td className="p-2">{p.is_active ? "Yes" : "No"}</td>
-                              <td className="p-2 flex items-center gap-2">
-                                <button type="button" onClick={() => startEditProduct(p)} className="text-blue-600 hover:underline">
-                                  Edit
-                                </button>
-                                <button
-                                  type="button"
-                                  onClick={() => handleProductDelete(p.id, p.name)}
-                                  disabled={deletingProductId === p.id}
-                                  className="text-red-600 hover:underline disabled:opacity-50"
+                              <td className="px-4 py-3 font-medium text-slate-900">{p.name}</td>
+                              <td className="px-4 py-3 text-slate-600">
+                                {p.category_name || "—"} {p.subcategory ? ` / ${p.subcategory}` : ""}
+                              </td>
+                              <td className="px-4 py-3 text-slate-700">{p.price != null ? `$${p.price}` : "—"}</td>
+                              <td className="px-4 py-3">
+                                <span
+                                  className={`inline-flex rounded-full px-2 py-0.5 text-xs font-medium ${
+                                    p.is_active ? "bg-emerald-50 text-emerald-800 ring-1 ring-emerald-200/80" : "bg-slate-100 text-slate-600 ring-1 ring-slate-200/80"
+                                  }`}
                                 >
-                                  {deletingProductId === p.id ? "Deleting…" : "Delete"}
-                                </button>
+                                  {p.is_active ? "Yes" : "No"}
+                                </span>
+                              </td>
+                              <td className="px-4 py-3">
+                                <div className="flex flex-wrap items-center gap-2">
+                                  <button
+                                    type="button"
+                                    onClick={() => startEditProduct(p)}
+                                    className="font-medium text-sky-600 hover:text-sky-800"
+                                  >
+                                    Edit
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => handleProductDelete(p.id, p.name)}
+                                    disabled={deletingProductId === p.id}
+                                    className="font-medium text-rose-600 hover:text-rose-800 disabled:opacity-50"
+                                  >
+                                    {deletingProductId === p.id ? "Deleting…" : "Delete"}
+                                  </button>
+                                </div>
                               </td>
                             </tr>
                           ))}
@@ -706,17 +768,17 @@ export default function AdminProductsPage() {
                     </div>
                     {/* Pagination */}
                     {productsPagination.pages > 1 && (
-                      <div className="flex items-center justify-between px-2 py-4 border-t border-gray-200">
-                        <p className="text-sm text-gray-600">
+                      <div className="flex flex-col gap-3 border-t border-slate-100 px-2 py-4 sm:flex-row sm:items-center sm:justify-between">
+                        <p className="text-sm text-slate-600">
                           Showing {(productsPage - 1) * productsPerPage + 1}–
                           {Math.min(productsPage * productsPerPage, productsPagination.total)} of {productsPagination.total}
                         </p>
-                        <div className="flex items-center gap-2">
+                        <div className="flex flex-wrap items-center gap-1.5">
                           <button
                             type="button"
                             onClick={() => loadProducts(productsPage - 1)}
                             disabled={productsPage <= 1}
-                            className="px-3 py-1 border border-gray-300 rounded text-sm hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                            className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-sm font-medium text-slate-700 shadow-sm hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40"
                           >
                             Previous
                           </button>
@@ -731,8 +793,10 @@ export default function AdminProductsPage() {
                                 key={pageNum}
                                 type="button"
                                 onClick={() => loadProducts(pageNum)}
-                                className={`px-3 py-1 border rounded text-sm ${
-                                  productsPage === pageNum ? "bg-blue-600 text-white border-blue-600" : "border-gray-300 hover:bg-gray-50"
+                                className={`min-w-[2.25rem] rounded-lg border px-3 py-1.5 text-sm font-medium transition ${
+                                  productsPage === pageNum
+                                    ? "border-slate-900 bg-slate-900 text-white shadow-sm"
+                                    : "border-slate-200 bg-white text-slate-700 shadow-sm hover:bg-slate-50"
                                 }`}
                               >
                                 {pageNum}
@@ -743,7 +807,7 @@ export default function AdminProductsPage() {
                             type="button"
                             onClick={() => loadProducts(productsPage + 1)}
                             disabled={productsPage >= productsPagination.pages}
-                            className="px-3 py-1 border border-gray-300 rounded text-sm hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                            className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-sm font-medium text-slate-700 shadow-sm hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40"
                           >
                             Next
                           </button>
@@ -756,84 +820,104 @@ export default function AdminProductsPage() {
                 {/* Categories tab */}
                 {activeTab === "categories" && (
                   <div className="space-y-6">
-                    <form onSubmit={handleCategorySubmit} className="p-4 bg-gray-50 rounded-lg max-w-md space-y-3">
-                      <h3 className="font-semibold text-gray-800">{editingCategoryId ? "Edit Category" : "Add Category"}</h3>
+                    <form
+                      onSubmit={handleCategorySubmit}
+                      className="max-w-md space-y-3 rounded-2xl border border-slate-200/80 bg-slate-50/80 p-5"
+                    >
+                      <h3 className="font-semibold text-slate-900">{editingCategoryId ? "Edit Category" : "Add Category"}</h3>
                       <input
                         type="text"
                         placeholder="Name *"
                         value={catName}
                         onChange={(e) => setCatName(e.target.value)}
-                        className="w-full px-3 py-2 border border-gray-300 rounded"
+                        className={inputClass}
                       />
                       <input
                         type="text"
                         placeholder="Slug (optional)"
                         value={catSlug}
                         onChange={(e) => setCatSlug(e.target.value)}
-                        className="w-full px-3 py-2 border border-gray-300 rounded"
+                        className={inputClass}
                       />
                       <textarea
                         placeholder="Description"
                         value={catDescription}
                         onChange={(e) => setCatDescription(e.target.value)}
                         rows={2}
-                        className="w-full px-3 py-2 border border-gray-300 rounded"
+                        className={inputClass}
                       />
-                      <div className="flex gap-2">
-                        <button type="submit" disabled={saving} className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50">
+                      <div className="flex flex-wrap gap-2">
+                        <button
+                          type="submit"
+                          disabled={saving}
+                          className="rounded-lg bg-slate-900 px-4 py-2.5 text-sm font-medium text-white shadow-sm hover:bg-slate-800 disabled:opacity-50"
+                        >
                           {saving ? "Saving…" : editingCategoryId ? "Update" : "Add Category"}
                         </button>
                         {editingCategoryId && (
-                          <button type="button" onClick={cancelEdit} className="px-4 py-2 bg-gray-200 rounded hover:bg-gray-300">
+                          <button
+                            type="button"
+                            onClick={cancelEdit}
+                            className="rounded-lg border border-slate-200 bg-white px-4 py-2.5 text-sm font-medium text-slate-700 shadow-sm hover:bg-slate-50"
+                          >
                             Cancel
                           </button>
                         )}
                       </div>
                     </form>
-                    <table className="w-full text-sm">
-                      <thead className="bg-gray-50 border-b">
-                        <tr>
-                          <th className="text-left p-2">Name</th>
-                          <th className="text-left p-2">Slug</th>
-                          <th className="text-left p-2">Products</th>
-                          <th className="text-left p-2">Action</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {parentCategories.map((c) => (
-                          <tr key={c.id} className="border-b">
-                            <td className="p-2 font-medium">{c.name}</td>
-                            <td className="p-2">{c.slug}</td>
-                            <td className="p-2">{c.product_count}</td>
-                            <td className="p-2">
-                              <button type="button" onClick={() => startEditCategory(c)} className="text-blue-600 hover:underline mr-2">
-                                Edit
-                              </button>
-                              <button
-                                type="button"
-                                onClick={() => handleCategoryDelete(c.id, c.name)}
-                                disabled={deletingCategoryId === c.id}
-                                className="text-red-600 hover:underline disabled:opacity-50"
-                              >
-                                {deletingCategoryId === c.id ? "Deleting…" : "Delete"}
-                              </button>
-                            </td>
+                    <div className="overflow-x-auto rounded-xl border border-slate-200/80">
+                      <table className="w-full min-w-[480px] text-sm">
+                        <thead>
+                          <tr className="border-b border-slate-200 bg-slate-50/90 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
+                            <th className="px-4 py-3">Name</th>
+                            <th className="px-4 py-3">Slug</th>
+                            <th className="px-4 py-3">Products</th>
+                            <th className="px-4 py-3">Action</th>
                           </tr>
-                        ))}
-                      </tbody>
-                    </table>
+                        </thead>
+                        <tbody className="divide-y divide-slate-100">
+                          {parentCategories.map((c) => (
+                            <tr key={c.id} className="hover:bg-slate-50/80">
+                              <td className="px-4 py-3 font-medium text-slate-900">{c.name}</td>
+                              <td className="px-4 py-3 text-slate-600">{c.slug}</td>
+                              <td className="px-4 py-3 text-slate-600">{c.product_count}</td>
+                              <td className="px-4 py-3">
+                                <button
+                                  type="button"
+                                  onClick={() => startEditCategory(c)}
+                                  className="mr-3 font-medium text-sky-600 hover:text-sky-800"
+                                >
+                                  Edit
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => handleCategoryDelete(c.id, c.name)}
+                                  disabled={deletingCategoryId === c.id}
+                                  className="font-medium text-rose-600 hover:text-rose-800 disabled:opacity-50"
+                                >
+                                  {deletingCategoryId === c.id ? "Deleting…" : "Delete"}
+                                </button>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
                   </div>
                 )}
 
                 {/* Subcategories tab */}
                 {activeTab === "subcategories" && (
                   <div className="space-y-6">
-                    <form onSubmit={handleCategorySubmit} className="p-4 bg-gray-50 rounded-lg max-w-md space-y-3">
-                      <h3 className="font-semibold text-gray-800">{editingCategoryId ? "Edit Subcategory" : "Add Subcategory"}</h3>
+                    <form
+                      onSubmit={handleCategorySubmit}
+                      className="max-w-md space-y-3 rounded-2xl border border-slate-200/80 bg-slate-50/80 p-5"
+                    >
+                      <h3 className="font-semibold text-slate-900">{editingCategoryId ? "Edit Subcategory" : "Add Subcategory"}</h3>
                       <select
                         value={catParentId}
                         onChange={(e) => setCatParentId(e.target.value)}
-                        className="w-full px-3 py-2 border border-gray-300 rounded"
+                        className={selectClass}
                       >
                         <option value="">Select parent category *</option>
                         {parentCategories.map((c) => (
@@ -847,78 +931,93 @@ export default function AdminProductsPage() {
                         placeholder="Subcategory name *"
                         value={catName}
                         onChange={(e) => setCatName(e.target.value)}
-                        className="w-full px-3 py-2 border border-gray-300 rounded"
+                        className={inputClass}
                       />
                       <input
                         type="text"
                         placeholder="Slug (optional)"
                         value={catSlug}
                         onChange={(e) => setCatSlug(e.target.value)}
-                        className="w-full px-3 py-2 border border-gray-300 rounded"
+                        className={inputClass}
                       />
                       <textarea
                         placeholder="Description"
                         value={catDescription}
                         onChange={(e) => setCatDescription(e.target.value)}
                         rows={2}
-                        className="w-full px-3 py-2 border border-gray-300 rounded"
+                        className={inputClass}
                       />
-                      <div className="flex gap-2">
-                        <button type="submit" disabled={saving} className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50">
+                      <div className="flex flex-wrap gap-2">
+                        <button
+                          type="submit"
+                          disabled={saving}
+                          className="rounded-lg bg-slate-900 px-4 py-2.5 text-sm font-medium text-white shadow-sm hover:bg-slate-800 disabled:opacity-50"
+                        >
                           {saving ? "Saving…" : editingCategoryId ? "Update" : "Add Subcategory"}
                         </button>
                         {editingCategoryId && (
-                          <button type="button" onClick={cancelEdit} className="px-4 py-2 bg-gray-200 rounded hover:bg-gray-300">
+                          <button
+                            type="button"
+                            onClick={cancelEdit}
+                            className="rounded-lg border border-slate-200 bg-white px-4 py-2.5 text-sm font-medium text-slate-700 shadow-sm hover:bg-slate-50"
+                          >
                             Cancel
                           </button>
                         )}
                       </div>
                     </form>
-                    <table className="w-full text-sm">
-                      <thead className="bg-gray-50 border-b">
-                        <tr>
-                          <th className="text-left p-2">Name</th>
-                          <th className="text-left p-2">Slug</th>
-                          <th className="text-left p-2">Parent</th>
-                          <th className="text-left p-2">Products</th>
-                          <th className="text-left p-2">Action</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {subCategories.map((c) => {
-                          const parent = categories.find((x) => x.id === c.parent_id);
-                          return (
-                            <tr key={c.id} className="border-b">
-                              <td className="p-2 font-medium">{c.name}</td>
-                              <td className="p-2">{c.slug}</td>
-                              <td className="p-2">{parent?.name || "—"}</td>
-                              <td className="p-2">{c.product_count}</td>
-                              <td className="p-2">
-                                <button type="button" onClick={() => startEditCategory(c)} className="text-blue-600 hover:underline mr-2">
-                                  Edit
-                                </button>
-                                <button
-                                  type="button"
-                                  onClick={() => handleCategoryDelete(c.id, c.name)}
-                                  disabled={deletingCategoryId === c.id}
-                                  className="text-red-600 hover:underline disabled:opacity-50"
-                                >
-                                  {deletingCategoryId === c.id ? "Deleting…" : "Delete"}
-                                </button>
-                              </td>
-                            </tr>
-                          );
-                        })}
-                      </tbody>
-                    </table>
+                    <div className="overflow-x-auto rounded-xl border border-slate-200/80">
+                      <table className="w-full min-w-[560px] text-sm">
+                        <thead>
+                          <tr className="border-b border-slate-200 bg-slate-50/90 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
+                            <th className="px-4 py-3">Name</th>
+                            <th className="px-4 py-3">Slug</th>
+                            <th className="px-4 py-3">Parent</th>
+                            <th className="px-4 py-3">Products</th>
+                            <th className="px-4 py-3">Action</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-100">
+                          {subCategories.map((c) => {
+                            const parent = categories.find((x) => x.id === c.parent_id);
+                            return (
+                              <tr key={c.id} className="hover:bg-slate-50/80">
+                                <td className="px-4 py-3 font-medium text-slate-900">{c.name}</td>
+                                <td className="px-4 py-3 text-slate-600">{c.slug}</td>
+                                <td className="px-4 py-3 text-slate-600">{parent?.name || "—"}</td>
+                                <td className="px-4 py-3 text-slate-600">{c.product_count}</td>
+                                <td className="px-4 py-3">
+                                  <button
+                                    type="button"
+                                    onClick={() => startEditCategory(c)}
+                                    className="mr-3 font-medium text-sky-600 hover:text-sky-800"
+                                  >
+                                    Edit
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => handleCategoryDelete(c.id, c.name)}
+                                    disabled={deletingCategoryId === c.id}
+                                    className="font-medium text-rose-600 hover:text-rose-800 disabled:opacity-50"
+                                  >
+                                    {deletingCategoryId === c.id ? "Deleting…" : "Delete"}
+                                  </button>
+                                </td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
                     {subCategories.length === 0 && (
-                      <p className="text-gray-500">No subcategories yet. Add one using the form above (select a parent category).</p>
+                      <p className="text-sm text-slate-500">
+                        No subcategories yet. Add one using the form above (select a parent category).
+                      </p>
                     )}
                   </div>
                 )}
               </>
             )}
-          </div>
         </div>
       </div>
     </AdminNavbar>

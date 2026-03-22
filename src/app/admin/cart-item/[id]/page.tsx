@@ -50,21 +50,6 @@ export default function CartItemDetailPage() {
     { value: "shipped", label: "Shipped" },
   ];
 
-  const getStatusColor = (s: string) => {
-    switch (s.toLowerCase()) {
-      case "processing":
-      case "complete":
-      case "shipped":
-      case "delivered":
-        return "bg-green-500 text-white";
-      case "cancelled":
-        return "bg-red-500 text-white";
-      case "pending":
-      default:
-        return "bg-yellow-500 text-white";
-    }
-  };
-
   useEffect(() => {
     if (typeof window === "undefined") return;
     if (!isAuthenticated()) {
@@ -215,11 +200,12 @@ export default function CartItemDetailPage() {
 
   if (loading) {
     return (
-      <AdminNavbar title="Cart Item">
-        <div className="flex-1 p-6">
-          <div className="bg-white rounded-lg shadow p-6">
-            <p className="text-gray-600">Loading...</p>
-          </div>
+      <AdminNavbar title="Cart item" subtitle="Promote to order">
+        <div className="rounded-2xl border border-slate-200/80 bg-white p-8 shadow-sm">
+          <p className="flex items-center gap-2 text-slate-600">
+            <span className="h-5 w-5 animate-spin rounded-full border-2 border-slate-300 border-t-slate-600" />
+            Loading…
+          </p>
         </div>
       </AdminNavbar>
     );
@@ -227,17 +213,16 @@ export default function CartItemDetailPage() {
 
   if (error || !item) {
     return (
-      <AdminNavbar title="Cart Item">
-        <div className="flex-1 p-6">
-          <div className="bg-white rounded-lg shadow p-6">
-            <p className="text-red-600 font-semibold mb-2">{error || "Item not found"}</p>
-            <button
-              onClick={() => router.push("/admin")}
-              className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
-            >
-              Back to Orders
-            </button>
-          </div>
+      <AdminNavbar title="Cart item" subtitle="Promote to order">
+        <div className="rounded-2xl border border-rose-200/80 bg-rose-50/50 p-8">
+          <p className="mb-4 font-semibold text-rose-800">{error || "Item not found"}</p>
+          <button
+            type="button"
+            onClick={() => router.push("/admin")}
+            className="rounded-lg bg-slate-900 px-4 py-2.5 text-sm font-medium text-white shadow-sm hover:bg-slate-800"
+          >
+            Back to orders
+          </button>
         </div>
       </AdminNavbar>
     );
@@ -252,20 +237,21 @@ export default function CartItemDetailPage() {
   const sizeStr = item.width != null && item.height != null ? `${item.width}" x ${item.height}"` : "—";
 
   return (
-    <AdminNavbar title="Cart Item Detail">
-      <div className="flex-1 p-6">
-        <div className="mb-4">
-          <button
-            onClick={() => router.push("/admin")}
-            className="text-gray-600 hover:text-gray-900 inline-flex items-center gap-1"
-          >
-            <span>←</span> Back to Orders
-          </button>
-        </div>
+    <AdminNavbar title="Cart item" subtitle="Review specs and save as order">
+      <button
+        type="button"
+        onClick={() => router.push("/admin")}
+        className="inline-flex items-center gap-2 text-sm font-medium text-slate-600 transition-colors hover:text-slate-900"
+      >
+        <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+        </svg>
+        Back to orders
+      </button>
 
-        <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-          <div className="flex gap-6 flex-wrap">
-            <div className="w-32 h-40 bg-gray-100 border border-gray-300 rounded flex items-center justify-center overflow-hidden shrink-0">
+      <div className="rounded-2xl border border-slate-200/80 bg-white p-6 shadow-sm shadow-slate-900/5 sm:p-8">
+          <div className="flex flex-wrap gap-6">
+            <div className="flex h-40 w-32 shrink-0 items-center justify-center overflow-hidden rounded-xl border border-slate-200 bg-slate-100">
               {item.productImage ? (
                 <Image
                   src={item.productImage}
@@ -284,14 +270,16 @@ export default function CartItemDetailPage() {
               )}
             </div>
 
-            <div className="flex-1 min-w-0">
-              <div className="flex justify-between items-start gap-4 mb-2">
-                <p className="text-sm text-gray-700">Job Name: {jobName}</p>
-                <div className="flex items-center gap-2 shrink-0">
+            <div className="min-w-0 flex-1">
+              <div className="mb-2 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                <p className="text-sm text-slate-600">
+                  Job name: <span className="font-medium text-slate-800">{jobName}</span>
+                </p>
+                <div className="flex shrink-0 flex-wrap items-center gap-2">
                   <select
                     value={status}
                     onChange={(e) => setStatus(e.target.value)}
-                    className="px-4 py-2 rounded-lg text-sm font-medium border border-gray-300 bg-white focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-800 shadow-sm outline-none focus:border-sky-400 focus:ring-2 focus:ring-sky-400/25"
                   >
                     {statusOptions.map((opt) => (
                       <option key={opt.value} value={opt.value}>
@@ -303,51 +291,66 @@ export default function CartItemDetailPage() {
                     type="button"
                     onClick={handleSaveToDatabase}
                     disabled={saving}
-                    className={`px-4 py-2 rounded-lg text-sm font-medium text-white shrink-0 ${getStatusColor(status)} hover:opacity-90 disabled:opacity-50`}
+                    className="rounded-xl bg-slate-900 px-4 py-2 text-sm font-medium text-white shadow-sm transition hover:bg-slate-800 disabled:opacity-50"
                   >
                     {saving ? "Saving…" : savedOrderId ? "Update status" : "Save to database"}
                   </button>
                 </div>
               </div>
-              {saveError && <p className="text-sm text-red-600 mb-2">{saveError}</p>}
-              {saveSuccess && <p className="text-sm text-green-600 mb-2">{saveSuccess}</p>}
+              {saveError && <p className="mb-2 text-sm text-rose-600">{saveError}</p>}
+              {saveSuccess && <p className="mb-2 text-sm text-emerald-700">{saveSuccess}</p>}
               {savedOrderId && (
-                <p className="text-sm text-gray-600 mb-2">
-                  Already saved as order.{" "}
-                  <Link href={`/admin/orders/${savedOrderId}`} className="text-blue-600 hover:underline">View order</Link>
+                <p className="mb-2 text-sm text-slate-600">
+                  Linked to order.{" "}
+                  <Link href={`/admin/orders/${savedOrderId}`} className="font-medium text-sky-600 hover:text-sky-800">
+                    View order
+                  </Link>
                 </p>
               )}
-              <p className="text-xl font-bold text-gray-900 mb-3">{productName}</p>
+              <p className="mb-3 text-xl font-bold text-slate-900">{productName}</p>
 
-              <div className="space-y-1 mb-4">
-                <p className="text-sm text-gray-600"><span className="font-medium text-gray-800">Size:</span> {sizeStr}</p>
-                <p className="text-sm text-gray-600"><span className="font-medium text-gray-800">Material:</span> —</p>
-                <p className="text-sm text-gray-600"><span className="font-medium text-gray-800"># of Sides:</span> 1 Side</p>
-                <p className="text-sm text-gray-600"><span className="font-medium text-gray-800">Hem:</span> —</p>
-                <p className="text-sm text-gray-600"><span className="font-medium text-gray-800">Grommet:</span> —</p>
-                <p className="text-sm text-gray-600"><span className="font-medium text-gray-800">Turnaround:</span> —</p>
+              <div className="mb-4 space-y-1">
+                <p className="text-sm text-slate-600">
+                  <span className="font-medium text-slate-800">Size:</span> {sizeStr}
+                </p>
+                <p className="text-sm text-slate-600">
+                  <span className="font-medium text-slate-800">Material:</span> —
+                </p>
+                <p className="text-sm text-slate-600">
+                  <span className="font-medium text-slate-800"># of sides:</span> 1 side
+                </p>
+                <p className="text-sm text-slate-600">
+                  <span className="font-medium text-slate-800">Hem:</span> —
+                </p>
+                <p className="text-sm text-slate-600">
+                  <span className="font-medium text-slate-800">Grommet:</span> —
+                </p>
+                <p className="text-sm text-slate-600">
+                  <span className="font-medium text-slate-800">Turnaround:</span> —
+                </p>
               </div>
 
-              <div className="flex items-center justify-between border-t border-gray-200 pt-4">
+              <div className="flex items-center justify-between border-t border-slate-100 pt-4">
                 <div className="flex items-center gap-2">
-                  <span className="text-sm text-gray-600">Qty:</span>
-                  <span className="w-16 px-2 py-1 border border-gray-300 rounded text-sm text-center bg-gray-50 inline-block">{qty}</span>
+                  <span className="text-sm text-slate-600">Qty</span>
+                  <span className="inline-block w-16 rounded-lg border border-slate-200 bg-slate-50 px-2 py-1.5 text-center text-sm text-slate-800">
+                    {qty}
+                  </span>
                 </div>
                 <div className="text-right">
-                  <p className="text-lg font-semibold text-gray-900">${Number(total).toFixed(2)}</p>
-                  <p className="text-sm text-gray-600">Tax: ${tax.toFixed(2)}</p>
+                  <p className="text-lg font-semibold text-slate-900">${Number(total).toFixed(2)}</p>
+                  <p className="text-sm text-slate-500">Tax: ${tax.toFixed(2)}</p>
                 </div>
               </div>
             </div>
           </div>
-        </div>
-
-        <p className="mt-4 text-sm text-gray-500">
-          {savedOrderId
-            ? "This item is already saved as an order. Change the status above and click \"Update status\" to update the order."
-            : "Choose a status and click \"Save to database\" to add this item as an order once. It will appear on the admin Orders list. Later you can change status here without creating a new order."}
-        </p>
       </div>
+
+      <p className="text-sm text-slate-500">
+        {savedOrderId
+          ? "This item is already saved as an order. Change the status above and click \"Update status\" to update the order."
+          : "Choose a status and click \"Save to database\" to add this item as an order once. It will appear on the admin Orders list. Later you can change status here without creating a new order."}
+      </p>
     </AdminNavbar>
   );
 }

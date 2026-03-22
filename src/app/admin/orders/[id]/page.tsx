@@ -240,17 +240,17 @@ export default function OrderDetails() {
       case "complete":
       case "shipped":
       case "delivered":
-        return "bg-green-500 text-white";
+        return "bg-emerald-50 text-emerald-800 ring-1 ring-emerald-200/80";
       case "cancelled":
       case "canceled":
       case "refund":
-        return "bg-red-500 text-white";
+        return "bg-rose-50 text-rose-800 ring-1 ring-rose-200/80";
       case "pending":
       case "approval_needed":
       case "approval needed":
-        return "bg-yellow-500 text-white";
+        return "bg-amber-50 text-amber-900 ring-1 ring-amber-200/80";
       default:
-        return "bg-gray-500 text-white";
+        return "bg-slate-100 text-slate-700 ring-1 ring-slate-200/80";
     }
   };
 
@@ -317,11 +317,12 @@ export default function OrderDetails() {
 
   if (loading) {
     return (
-      <AdminNavbar title="Order Details">
-        <div className="flex-1 p-6">
-          <div className="bg-white rounded-lg shadow p-6">
-            <p className="text-gray-600">Loading order details...</p>
-          </div>
+      <AdminNavbar title="Order details" subtitle="Review line items and update status">
+        <div className="rounded-2xl border border-slate-200/80 bg-white p-8 shadow-sm shadow-slate-900/5">
+          <p className="flex items-center gap-2 text-slate-600">
+            <span className="h-5 w-5 animate-spin rounded-full border-2 border-slate-300 border-t-slate-600" />
+            Loading order details…
+          </p>
         </div>
       </AdminNavbar>
     );
@@ -329,24 +330,21 @@ export default function OrderDetails() {
 
   if (error || !order) {
     return (
-      <AdminNavbar title="Order Details">
-        <div className="flex-1 p-6">
-          <div className="bg-white rounded-lg shadow p-6">
-            <p className="text-red-600 font-semibold mb-2">
-              {error || "Order not found"}
-            </p>
-            <p className="text-gray-600 mb-4">
-              {error 
-                ? "There was an error loading the order details. Please check the console for more information."
-                : "The order you're looking for doesn't exist or has been removed."}
-            </p>
-            <button
-              onClick={() => router.push("/admin")}
-              className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
-            >
-              Back to Orders
-            </button>
-          </div>
+      <AdminNavbar title="Order details" subtitle="Review line items and update status">
+        <div className="rounded-2xl border border-rose-200/80 bg-rose-50/50 p-8 shadow-sm">
+          <p className="mb-2 font-semibold text-rose-800">{error || "Order not found"}</p>
+          <p className="mb-6 text-sm text-slate-600">
+            {error
+              ? "There was an error loading the order details. Check the console for more information."
+              : "The order you are looking for does not exist or was removed."}
+          </p>
+          <button
+            type="button"
+            onClick={() => router.push("/admin")}
+            className="rounded-lg bg-slate-900 px-4 py-2.5 text-sm font-medium text-white shadow-sm hover:bg-slate-800"
+          >
+            Back to orders
+          </button>
         </div>
       </AdminNavbar>
     );
@@ -356,61 +354,59 @@ export default function OrderDetails() {
   const totalWithTax = order.total_amount + tax;
 
   return (
-    <AdminNavbar title="Order Details">
-      <div className="flex-1 p-6">
-        {/* Header with Status Dropdown */}
-        <div className="mb-6 flex items-center justify-between">
-          <h1 className="text-2xl font-bold text-gray-800">Order Details</h1>
-          <div className="relative">
-            <button
-              onClick={() => setShowStatusDropdown(!showStatusDropdown)}
-              disabled={updatingStatus}
-              className={`px-4 py-2 rounded-lg flex items-center gap-2 ${getStatusColor(order.status)} ${
-                updatingStatus ? "opacity-50 cursor-not-allowed" : "hover:opacity-90"
-              }`}
-            >
-              {formatStatus(order.status)}
-              <svg
-                className="w-4 h-4"
-                fill="none"
-                stroke="currentColor"
-                viewBox="0 0 24 24"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M19 9l-7 7-7-7"
-                />
-              </svg>
-            </button>
-            {showStatusDropdown && (
-              <div className="absolute right-0 mt-2 w-48 bg-white border border-gray-200 rounded-lg shadow-lg z-10">
-                {statusOptions.map((option) => (
-                  <button
-                    key={option.value}
-                    onClick={() => handleStatusUpdate(option.value)}
-                    className="w-full text-left px-4 py-2 hover:bg-gray-100 first:rounded-t-lg last:rounded-b-lg"
-                  >
-                    {option.label}
-                  </button>
-                ))}
-              </div>
-            )}
-          </div>
+    <AdminNavbar title="Order details" subtitle={order.order_number}>
+      <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+        <button
+          type="button"
+          onClick={() => router.push("/admin")}
+          className="inline-flex w-fit items-center gap-2 text-sm font-medium text-slate-600 transition-colors hover:text-slate-900"
+        >
+          <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+          </svg>
+          Back to orders
+        </button>
+        <div className="relative">
+          <button
+            type="button"
+            onClick={() => setShowStatusDropdown(!showStatusDropdown)}
+            disabled={updatingStatus}
+            className={`inline-flex items-center gap-2 rounded-xl px-4 py-2.5 text-sm font-semibold shadow-sm transition ${
+              getStatusColor(order.status)
+            } ${updatingStatus ? "cursor-not-allowed opacity-50" : "hover:brightness-[0.98]"}`}
+          >
+            {formatStatus(order.status)}
+            <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+            </svg>
+          </button>
+          {showStatusDropdown && (
+            <div className="absolute right-0 z-20 mt-2 w-52 overflow-hidden rounded-xl border border-slate-200/80 bg-white py-1 shadow-lg shadow-slate-900/10">
+              {statusOptions.map((option) => (
+                <button
+                  key={option.value}
+                  type="button"
+                  onClick={() => handleStatusUpdate(option.value)}
+                  className="w-full px-4 py-2.5 text-left text-sm text-slate-700 transition hover:bg-slate-50"
+                >
+                  {option.label}
+                </button>
+              ))}
+            </div>
+          )}
         </div>
+      </div>
 
-        {/* Order Information */}
-        <div className="mb-6 bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-          <h2 className="text-lg font-semibold text-gray-800 mb-4">Order Information</h2>
-          <div className="grid grid-cols-2 gap-4">
+      <div className="mb-6 rounded-2xl border border-slate-200/80 bg-white p-6 shadow-sm shadow-slate-900/5 sm:p-8">
+        <h2 className="mb-5 text-base font-semibold text-slate-900">Order information</h2>
+        <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
             <div>
-              <p className="text-sm text-gray-600">Order Number:</p>
-              <p className="text-base font-medium text-gray-900">{order.order_number}</p>
+              <p className="text-xs font-medium uppercase tracking-wide text-slate-500">Order number</p>
+              <p className="mt-1 text-base font-medium text-slate-900">{order.order_number}</p>
             </div>
             <div>
-              <p className="text-sm text-gray-600">Order Date:</p>
-              <p className="text-base font-medium text-gray-900">
+              <p className="text-xs font-medium uppercase tracking-wide text-slate-500">Order date</p>
+              <p className="mt-1 text-base font-medium text-slate-900">
                 {order.created_at 
                   ? new Date(order.created_at).toLocaleString("en-US", {
                       year: "numeric",
@@ -423,25 +419,24 @@ export default function OrderDetails() {
               </p>
             </div>
             <div>
-              <p className="text-sm text-gray-600">Payment Method:</p>
-              <p className="text-base font-medium text-gray-900">{order.payment_method || "N/A"}</p>
+              <p className="text-xs font-medium uppercase tracking-wide text-slate-500">Payment method</p>
+              <p className="mt-1 text-base font-medium text-slate-900">{order.payment_method || "N/A"}</p>
             </div>
             {order.user_email && (
               <div>
-                <p className="text-sm text-gray-600">Customer Email:</p>
-                <p className="text-base font-medium text-gray-900">{order.user_email}</p>
+                <p className="text-xs font-medium uppercase tracking-wide text-slate-500">Customer email</p>
+                <p className="mt-1 text-base font-medium text-slate-900">{order.user_email}</p>
               </div>
             )}
             {order.user_name && (
               <div>
-                <p className="text-sm text-gray-600">Customer Name:</p>
-                <p className="text-base font-medium text-gray-900">{order.user_name}</p>
+                <p className="text-xs font-medium uppercase tracking-wide text-slate-500">Customer name</p>
+                <p className="mt-1 text-base font-medium text-slate-900">{order.user_name}</p>
               </div>
             )}
-          </div>
         </div>
+      </div>
 
-        {/* Order Items */}
         <div className="space-y-4">
           {order.items && order.items.length > 0 ? (
             order.items.map((item, index) => {
@@ -452,9 +447,9 @@ export default function OrderDetails() {
               return (
                 <div
                   key={item.id}
-                  className="bg-white rounded-lg shadow-sm border border-gray-200 p-6"
+                  className="rounded-2xl border border-slate-200/80 bg-white p-6 shadow-sm shadow-slate-900/5 sm:p-8"
                 >
-                  <div className="flex gap-6">
+                  <div className="flex flex-col gap-6 sm:flex-row">
                     {/* Product Image - Left */}
                     {item.product_id ? (
                       <Link
@@ -463,7 +458,7 @@ export default function OrderDetails() {
                           e.preventDefault();
                           router.push(`/products/product-detail?productId=${String(item.product_id)}`);
                         }}
-                        className="w-32 h-40 bg-gray-100 border border-gray-300 rounded flex items-center justify-center overflow-hidden shrink-0 cursor-pointer hover:border-blue-500 transition-colors"
+                        className="flex h-40 w-32 shrink-0 cursor-pointer items-center justify-center overflow-hidden rounded-xl border border-slate-200 bg-slate-100 transition-colors hover:border-sky-400"
                       >
                         {(() => {
                           const imgSrc = getProductImageUrl(item.product_image);
@@ -481,7 +476,7 @@ export default function OrderDetails() {
                         })()}
                       </Link>
                     ) : (
-                      <div className="w-32 h-40 bg-gray-100 border border-gray-300 rounded flex items-center justify-center overflow-hidden shrink-0">
+                      <div className="flex h-40 w-32 shrink-0 items-center justify-center overflow-hidden rounded-xl border border-slate-200 bg-slate-100">
                         {(() => {
                           const imgSrc = getProductImageUrl(item.product_image);
                           const isBackend = item.product_image && String(item.product_image).startsWith("/uploads/");
@@ -503,32 +498,36 @@ export default function OrderDetails() {
                     <div className="flex-1 min-w-0">
                       {/* Top row: Job Name (left) + Status dropdown (right) */}
                       <div className="flex justify-between items-start gap-4 mb-2">
-                        <p className="text-sm text-gray-700">Job Name: {specs.jobName}</p>
+                        <p className="text-sm text-slate-600">
+                          Job name: <span className="font-medium text-slate-800">{specs.jobName}</span>
+                        </p>
                         <div className="relative shrink-0">
                           <button
+                            type="button"
                             onClick={() =>
                               setShowItemStatusDropdown({
                                 ...showItemStatusDropdown,
                                 [item.id]: !isItemStatusOpen,
                               })
                             }
-                            className={`px-4 py-2 rounded-lg flex items-center gap-2 ${getStatusColor(order.status)} hover:opacity-90`}
+                            className={`inline-flex items-center gap-2 rounded-xl px-4 py-2 text-sm font-semibold shadow-sm ${getStatusColor(order.status)} hover:brightness-[0.98]`}
                           >
                             {formatStatus(order.status)}
-                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
                             </svg>
                           </button>
                           {isItemStatusOpen && (
-                            <div className="absolute right-0 mt-2 w-48 bg-white border border-gray-200 rounded-lg shadow-lg z-10">
+                            <div className="absolute right-0 z-20 mt-2 w-52 overflow-hidden rounded-xl border border-slate-200/80 bg-white py-1 shadow-lg shadow-slate-900/10">
                               {statusOptions.map((option) => (
                                 <button
                                   key={option.value}
+                                  type="button"
                                   onClick={() => {
                                     handleStatusUpdate(option.value);
                                     setShowItemStatusDropdown({ ...showItemStatusDropdown, [item.id]: false });
                                   }}
-                                  className="w-full text-left px-4 py-2 hover:bg-gray-100 first:rounded-t-lg last:rounded-b-lg"
+                                  className="w-full px-4 py-2.5 text-left text-sm text-slate-700 transition hover:bg-slate-50"
                                 >
                                   {option.label}
                                 </button>
@@ -538,7 +537,6 @@ export default function OrderDetails() {
                         </div>
                       </div>
 
-                      {/* Product name - bold, prominent */}
                       {item.product_id ? (
                         <Link
                           href={`/products/product-detail?productId=${String(item.product_id)}`}
@@ -546,38 +544,48 @@ export default function OrderDetails() {
                             e.preventDefault();
                             router.push(`/products/product-detail?productId=${String(item.product_id)}`);
                           }}
-                          className="text-xl font-bold text-gray-900 mb-3 hover:text-blue-600 block"
+                          className="mb-3 block text-xl font-bold text-slate-900 transition hover:text-sky-600"
                         >
                           {specs.productName}
                         </Link>
                       ) : (
-                        <p className="text-xl font-bold text-gray-900 mb-3">{specs.productName}</p>
+                        <p className="mb-3 text-xl font-bold text-slate-900">{specs.productName}</p>
                       )}
 
-                      {/* Specifications - one per line like design */}
-                      <div className="space-y-1 mb-4">
-                        <p className="text-sm text-gray-600"><span className="font-medium text-gray-800">Size:</span> {specs.size}</p>
-                        <p className="text-sm text-gray-600"><span className="font-medium text-gray-800">Material:</span> {specs.material}</p>
-                        <p className="text-sm text-gray-600"><span className="font-medium text-gray-800"># of Sides:</span> {specs.sides}</p>
-                        <p className="text-sm text-gray-600"><span className="font-medium text-gray-800">Hem:</span> {specs.hem}</p>
-                        <p className="text-sm text-gray-600"><span className="font-medium text-gray-800">Grommet:</span> {specs.grommet}</p>
-                        <p className="text-sm text-gray-600"><span className="font-medium text-gray-800">Turnaround:</span> {specs.turnaround}</p>
+                      <div className="mb-4 space-y-1.5">
+                        <p className="text-sm text-slate-600">
+                          <span className="font-medium text-slate-800">Size:</span> {specs.size}
+                        </p>
+                        <p className="text-sm text-slate-600">
+                          <span className="font-medium text-slate-800">Material:</span> {specs.material}
+                        </p>
+                        <p className="text-sm text-slate-600">
+                          <span className="font-medium text-slate-800"># of sides:</span> {specs.sides}
+                        </p>
+                        <p className="text-sm text-slate-600">
+                          <span className="font-medium text-slate-800">Hem:</span> {specs.hem}
+                        </p>
+                        <p className="text-sm text-slate-600">
+                          <span className="font-medium text-slate-800">Grommet:</span> {specs.grommet}
+                        </p>
+                        <p className="text-sm text-slate-600">
+                          <span className="font-medium text-slate-800">Turnaround:</span> {specs.turnaround}
+                        </p>
                       </div>
 
-                      {/* Quantity, Price, Tax row */}
-                      <div className="flex items-center justify-between border-t border-gray-200 pt-4">
+                      <div className="flex items-center justify-between border-t border-slate-100 pt-4">
                         <div className="flex items-center gap-2">
-                          <span className="text-sm text-gray-600">Qty:</span>
+                          <span className="text-sm text-slate-600">Qty</span>
                           <input
                             type="number"
                             value={item.quantity}
                             readOnly
-                            className="w-16 px-2 py-1 border border-gray-300 rounded text-sm text-center bg-gray-50"
+                            className="w-16 rounded-lg border border-slate-200 bg-slate-50 px-2 py-1.5 text-center text-sm text-slate-800"
                           />
                         </div>
                         <div className="text-right">
-                          <p className="text-lg font-semibold text-gray-900">${item.total_price.toFixed(2)}</p>
-                          <p className="text-sm text-gray-600">Tax: ${itemTax.toFixed(2)}</p>
+                          <p className="text-lg font-semibold text-slate-900">${item.total_price.toFixed(2)}</p>
+                          <p className="text-sm text-slate-500">Tax: ${itemTax.toFixed(2)}</p>
                         </div>
                       </div>
                     </div>
@@ -586,46 +594,44 @@ export default function OrderDetails() {
               );
             })
           ) : (
-            <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-              <p className="text-gray-600">No items found in this order</p>
+            <div className="rounded-2xl border border-slate-200/80 bg-white p-8 text-center text-slate-500 shadow-sm">
+              No items in this order.
             </div>
           )}
         </div>
 
-        {/* Order Summary */}
-        <div className="mt-6 bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-          <div className="flex justify-between items-center mb-2">
-            <span className="text-gray-600">Subtotal:</span>
-            <span className="font-semibold">${order.total_amount.toFixed(2)}</span>
+        <div className="mt-6 rounded-2xl border border-slate-200/80 bg-white p-6 shadow-sm shadow-slate-900/5 sm:p-8">
+          <div className="mb-2 flex items-center justify-between text-sm">
+            <span className="text-slate-600">Subtotal</span>
+            <span className="font-semibold text-slate-900">${order.total_amount.toFixed(2)}</span>
           </div>
-          <div className="flex justify-between items-center mb-2">
-            <span className="text-gray-600">Tax:</span>
-            <span className="font-semibold">${tax.toFixed(2)}</span>
+          <div className="mb-2 flex items-center justify-between text-sm">
+            <span className="text-slate-600">Tax</span>
+            <span className="font-semibold text-slate-900">${tax.toFixed(2)}</span>
           </div>
-          <div className="flex justify-between items-center pt-4 border-t border-gray-200">
-            <span className="text-lg font-bold text-gray-900">Total:</span>
-            <span className="text-lg font-bold text-gray-900">${totalWithTax.toFixed(2)}</span>
+          <div className="flex items-center justify-between border-t border-slate-100 pt-4">
+            <span className="text-lg font-bold text-slate-900">Total</span>
+            <span className="text-lg font-bold text-slate-900">${totalWithTax.toFixed(2)}</span>
           </div>
         </div>
 
-        {/* Back and Delete */}
-        <div className="mt-6 flex items-center gap-3">
+        <div className="mt-6 flex flex-wrap items-center gap-3">
           <button
+            type="button"
             onClick={() => router.push("/admin")}
-            className="px-4 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700"
+            className="rounded-lg border border-slate-200 bg-white px-4 py-2.5 text-sm font-medium text-slate-700 shadow-sm hover:bg-slate-50"
           >
-            Back to Orders
+            Back to orders
           </button>
           <button
             type="button"
             onClick={handleDeleteOrder}
             disabled={deleting}
-            className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 disabled:opacity-50"
+            className="rounded-lg bg-rose-600 px-4 py-2.5 text-sm font-medium text-white shadow-sm hover:bg-rose-700 disabled:opacity-50"
           >
-            {deleting ? "Deleting…" : "Delete this order"}
+            {deleting ? "Deleting…" : "Delete order"}
           </button>
         </div>
-      </div>
     </AdminNavbar>
   );
 }

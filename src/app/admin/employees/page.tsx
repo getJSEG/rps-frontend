@@ -216,76 +216,74 @@ export default function EmployeesPage() {
 
   const clearMessage = () => setMessage(null);
 
+  const fieldClass =
+    "w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm shadow-sm outline-none transition focus:border-sky-400 focus:ring-2 focus:ring-sky-400/25";
+
   return (
-    <AdminNavbar title="Employees">
-      <div className="flex-1 p-6">
-        <div className="bg-white rounded-lg shadow-sm border border-gray-200">
-          <div className="px-6 py-4 border-b border-gray-200 flex items-center justify-between">
-            <h2 className="text-xl font-bold text-gray-800">Employees</h2>
-            <button
-              onClick={openAdd}
-              className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium"
-            >
-              Add Employee
+    <AdminNavbar title="Employees" subtitle="Team accounts and access">
+      <div className="overflow-hidden rounded-2xl border border-slate-200/80 bg-white shadow-sm shadow-slate-900/5">
+        <div className="flex flex-col gap-4 border-b border-slate-100 bg-slate-50/80 px-5 py-5 sm:flex-row sm:items-center sm:justify-between sm:px-6">
+          <div>
+            <h2 className="text-lg font-semibold text-slate-900">Directory</h2>
+            <p className="mt-0.5 text-sm text-slate-500">Manage staff profiles, roles, and approval state.</p>
+          </div>
+          <button
+            type="button"
+            onClick={openAdd}
+            className="rounded-lg bg-slate-900 px-4 py-2.5 text-sm font-medium text-white shadow-sm hover:bg-slate-800"
+          >
+            Add employee
+          </button>
+        </div>
+
+        {message && (
+          <div
+            role="alert"
+            className={`mx-5 mt-4 flex flex-wrap items-center justify-between gap-2 rounded-xl border px-4 py-3 text-sm font-medium sm:mx-6 ${
+              message.type === "success"
+                ? "border-emerald-200 bg-emerald-50 text-emerald-900"
+                : "border-rose-200 bg-rose-50 text-rose-900"
+            }`}
+          >
+            <span>{message.text}</span>
+            <button type="button" onClick={clearMessage} className="text-sm underline decoration-slate-400 hover:opacity-80">
+              Dismiss
             </button>
           </div>
+        )}
 
-          {message && (
-            <div
-              className={`mx-6 mt-4 px-4 py-2 rounded-lg ${
-                message.type === "success" ? "bg-green-100 text-green-800" : "bg-red-100 text-red-800"
-              }`}
-            >
-              {message.text}
-              <button type="button" onClick={clearMessage} className="ml-2 underline">
-                Dismiss
-              </button>
+        <div className="overflow-x-auto">
+          {loading ? (
+            <div className="flex items-center justify-center gap-2 px-6 py-14 text-slate-500">
+              <span className="h-5 w-5 animate-spin rounded-full border-2 border-slate-300 border-t-slate-600" />
+              Loading…
             </div>
-          )}
-
-          <div className="overflow-x-auto">
-            {loading ? (
-              <div className="px-6 py-12 text-center text-gray-500">Loading employees...</div>
-            ) : error ? (
-              <div className="px-6 py-12 text-center text-red-600">{error}</div>
-            ) : employees.length === 0 ? (
-              <div className="px-6 py-12 text-center text-gray-500">No employees yet. Add one to get started.</div>
-            ) : (
-              <table className="w-full">
-                <thead className="bg-gray-50 border-b border-gray-200">
-                  <tr>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Image
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Name
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Hire Date
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Role
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Status
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Email
-                    </th>
-                    <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Actions
-                    </th>
-                  </tr>
-                </thead>
-                <tbody className="bg-white divide-y divide-gray-200">
-                  {employees.map((emp) => (
-                    <tr
-                      key={emp.id}
-                      className="hover:bg-gray-50 cursor-pointer"
-                      onClick={() => router.push(`/admin/employees/${emp.id}`)}
-                    >
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <div className="w-12 h-12 rounded-full overflow-hidden bg-gray-200 flex items-center justify-center shrink-0">
+          ) : error ? (
+            <div className="px-6 py-14 text-center text-rose-700">{error}</div>
+          ) : employees.length === 0 ? (
+            <div className="px-6 py-14 text-center text-slate-500">No employees yet. Add one to get started.</div>
+          ) : (
+            <table className="w-full min-w-[900px]">
+              <thead>
+                <tr className="border-b border-slate-200 bg-slate-50/90 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
+                  <th className="px-4 py-3.5 sm:px-6">Image</th>
+                  <th className="px-4 py-3.5 sm:px-6">Name</th>
+                  <th className="px-4 py-3.5 sm:px-6">Hire date</th>
+                  <th className="px-4 py-3.5 sm:px-6">Role</th>
+                  <th className="px-4 py-3.5 sm:px-6">Status</th>
+                  <th className="px-4 py-3.5 sm:px-6">Email</th>
+                  <th className="px-4 py-3.5 text-right sm:px-6">Actions</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100 text-sm">
+                {employees.map((emp) => (
+                  <tr
+                    key={emp.id}
+                    className="cursor-pointer transition-colors hover:bg-slate-50/90"
+                    onClick={() => router.push(`/admin/employees/${emp.id}`)}
+                  >
+                    <td className="whitespace-nowrap px-4 py-4 sm:px-6">
+                      <div className="flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-full border border-slate-200 bg-slate-100">
                           {emp.profile_image ? (
                             // eslint-disable-next-line @next/next/no-img-element
                             <img
@@ -294,16 +292,16 @@ export default function EmployeesPage() {
                               className="w-full h-full object-cover"
                             />
                           ) : (
-                            <span className="text-gray-500 text-lg font-semibold">
+                            <span className="text-lg font-semibold text-slate-500">
                               {(emp.full_name || "?").charAt(0).toUpperCase()}
                             </span>
                           )}
                         </div>
                       </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
+                      <td className="whitespace-nowrap px-4 py-4 font-medium text-slate-900 sm:px-6">
                         {emp.full_name || "—"}
                       </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">
+                      <td className="whitespace-nowrap px-4 py-4 text-slate-600 sm:px-6">
                         {emp.hire_date
                           ? (() => {
                               try {
@@ -315,43 +313,47 @@ export default function EmployeesPage() {
                             })()
                           : "—"}
                       </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
+                      <td className="whitespace-nowrap px-4 py-4 sm:px-6">
                         <span
-                          className={`inline-flex px-2 py-1 text-xs font-medium rounded-full ${
-                            emp.role === "admin" ? "bg-purple-100 text-purple-800" : "bg-slate-100 text-slate-800"
+                          className={`inline-flex rounded-full px-2.5 py-1 text-xs font-medium ring-1 ${
+                            emp.role === "admin"
+                              ? "bg-violet-50 text-violet-800 ring-violet-200/80"
+                              : "bg-slate-100 text-slate-700 ring-slate-200/80"
                           }`}
                         >
                           {emp.role === "admin" ? "Admin" : "Employee"}
                         </span>
                       </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
+                      <td className="whitespace-nowrap px-4 py-4 sm:px-6">
                         <span
-                          className={`inline-flex px-2 py-1 text-xs font-medium rounded-full ${
-                            emp.is_active ? "bg-green-100 text-green-800" : "bg-gray-200 text-gray-700"
+                          className={`inline-flex rounded-full px-2.5 py-1 text-xs font-medium ring-1 ${
+                            emp.is_active
+                              ? "bg-emerald-50 text-emerald-800 ring-emerald-200/80"
+                              : "bg-slate-100 text-slate-600 ring-slate-200/80"
                           }`}
                         >
                           {emp.is_active ? "Active" : "Inactive"}
                         </span>
                         <span
-                          className={`ml-1 inline-flex px-2 py-1 text-xs font-medium rounded-full ${
-                            emp.is_approved ? "bg-blue-100 text-blue-800" : "bg-yellow-100 text-yellow-800"
+                          className={`ml-1 inline-flex rounded-full px-2.5 py-1 text-xs font-medium ring-1 ${
+                            emp.is_approved
+                              ? "bg-sky-50 text-sky-800 ring-sky-200/80"
+                              : "bg-amber-50 text-amber-900 ring-amber-200/80"
                           }`}
                         >
                           {emp.is_approved ? "Approved" : "Pending"}
                         </span>
                       </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">{emp.email}</td>
-                      <td className="px-6 py-4 whitespace-nowrap text-right text-sm" onClick={(e) => e.stopPropagation()}>
+                      <td className="whitespace-nowrap px-4 py-4 text-slate-600 sm:px-6">{emp.email}</td>
+                      <td className="whitespace-nowrap px-4 py-4 text-right sm:px-6" onClick={(e) => e.stopPropagation()}>
                         <button
+                          type="button"
                           onClick={() => openEdit(emp)}
-                          className="text-blue-600 hover:text-blue-800 font-medium mr-4"
+                          className="mr-4 font-medium text-sky-600 hover:text-sky-800"
                         >
                           Edit
                         </button>
-                        <button
-                          onClick={() => openDelete(emp)}
-                          className="text-red-600 hover:text-red-800 font-medium"
-                        >
+                        <button type="button" onClick={() => openDelete(emp)} className="font-medium text-rose-600 hover:text-rose-800">
                           Delete
                         </button>
                       </td>
@@ -360,15 +362,14 @@ export default function EmployeesPage() {
                 </tbody>
               </table>
             )}
-          </div>
         </div>
       </div>
 
       {/* Add Modal */}
       {showAddModal && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-lg shadow-xl max-w-md w-full p-6">
-            <h3 className="text-lg font-bold text-gray-800 mb-4">Add Employee</h3>
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 p-4 backdrop-blur-sm">
+          <div className="max-h-[90vh] w-full max-w-md overflow-y-auto rounded-2xl border border-slate-200/80 bg-white p-6 shadow-2xl shadow-slate-900/20">
+            <h3 className="mb-4 text-lg font-semibold text-slate-900">Add employee</h3>
             <form onSubmit={handleAdd} className="space-y-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Full Name *</label>
@@ -376,7 +377,7 @@ export default function EmployeesPage() {
                   type="text"
                   value={addForm.full_name}
                   onChange={(e) => setAddForm((f) => ({ ...f, full_name: e.target.value }))}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                  className={fieldClass}
                   required
                 />
               </div>
@@ -386,7 +387,7 @@ export default function EmployeesPage() {
                   type="email"
                   value={addForm.email}
                   onChange={(e) => setAddForm((f) => ({ ...f, email: e.target.value }))}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                  className={fieldClass}
                   required
                 />
               </div>
@@ -397,14 +398,14 @@ export default function EmployeesPage() {
                     type={showAddPassword ? "text" : "password"}
                     value={addForm.password}
                     onChange={(e) => setAddForm((f) => ({ ...f, password: e.target.value }))}
-                    className="w-full px-3 py-2 pr-10 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                    className={`${fieldClass} pr-10`}
                     required
                     minLength={6}
                   />
                   <button
                     type="button"
                     onClick={() => setShowAddPassword((s) => !s)}
-                    className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-700 p-1"
+                    className="absolute right-2 top-1/2 -translate-y-1/2 p-1 text-slate-500 hover:text-slate-700"
                     tabIndex={-1}
                     aria-label={showAddPassword ? "Hide password" : "Show password"}
                   >
@@ -427,7 +428,7 @@ export default function EmployeesPage() {
                   type="text"
                   value={addForm.telephone}
                   onChange={(e) => setAddForm((f) => ({ ...f, telephone: e.target.value }))}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                  className={fieldClass}
                 />
               </div>
               <div>
@@ -435,7 +436,7 @@ export default function EmployeesPage() {
                 <select
                   value={addForm.role}
                   onChange={(e) => setAddForm((f) => ({ ...f, role: e.target.value as "admin" | "employee" }))}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                  className={fieldClass}
                 >
                   <option value="employee">Employee</option>
                   <option value="admin">Admin</option>
@@ -469,11 +470,11 @@ export default function EmployeesPage() {
                       e.target.value = "";
                     }
                   }}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                  className={fieldClass}
                 />
                 {(addForm.profile_image || addFormImagePreview) && (
                   <div className="mt-2 flex items-center gap-3">
-                    <div className="w-20 h-20 rounded-full overflow-hidden bg-gray-200 border-2 border-gray-300 shrink-0">
+                    <div className="h-20 w-20 shrink-0 overflow-hidden rounded-full border-2 border-slate-200 bg-slate-100">
                       {/* eslint-disable-next-line @next/next/no-img-element */}
                       <img
                         src={addForm.profile_image ? getImageSrc(addForm.profile_image) : addFormImagePreview}
@@ -494,21 +495,21 @@ export default function EmployeesPage() {
                   type="date"
                   value={addForm.hire_date}
                   onChange={(e) => setAddForm((f) => ({ ...f, hire_date: e.target.value }))}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                  className={fieldClass}
                 />
               </div>
-              <div className="flex gap-3 pt-2">
+              <div className="flex flex-wrap gap-2 pt-2">
                 <button
                   type="submit"
                   disabled={submitting}
-                  className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50"
+                  className="rounded-lg bg-slate-900 px-4 py-2.5 text-sm font-medium text-white shadow-sm hover:bg-slate-800 disabled:opacity-50"
                 >
                   {submitting ? "Adding..." : "Add"}
                 </button>
                 <button
                   type="button"
                   onClick={() => setShowAddModal(false)}
-                  className="px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50"
+                  className="rounded-lg border border-slate-200 bg-white px-4 py-2.5 text-sm font-medium text-slate-700 shadow-sm hover:bg-slate-50"
                 >
                   Cancel
                 </button>
@@ -520,9 +521,9 @@ export default function EmployeesPage() {
 
       {/* Edit Modal */}
       {showEditModal && selectedEmployee && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-lg shadow-xl max-w-md w-full p-6">
-            <h3 className="text-lg font-bold text-gray-800 mb-4">Edit Employee</h3>
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 p-4 backdrop-blur-sm">
+          <div className="max-h-[90vh] w-full max-w-md overflow-y-auto rounded-2xl border border-slate-200/80 bg-white p-6 shadow-2xl shadow-slate-900/20">
+            <h3 className="mb-4 text-lg font-semibold text-slate-900">Edit employee</h3>
             <form onSubmit={handleEdit} className="space-y-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Full Name *</label>
@@ -530,7 +531,7 @@ export default function EmployeesPage() {
                   type="text"
                   value={editForm.full_name}
                   onChange={(e) => setEditForm((f) => ({ ...f, full_name: e.target.value }))}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                  className={fieldClass}
                   required
                 />
               </div>
@@ -540,7 +541,7 @@ export default function EmployeesPage() {
                   type="email"
                   value={editForm.email}
                   onChange={(e) => setEditForm((f) => ({ ...f, email: e.target.value }))}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                  className={fieldClass}
                   required
                 />
               </div>
@@ -550,7 +551,7 @@ export default function EmployeesPage() {
                   type="text"
                   value={editForm.telephone}
                   onChange={(e) => setEditForm((f) => ({ ...f, telephone: e.target.value }))}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                  className={fieldClass}
                 />
               </div>
               <div>
@@ -558,7 +559,7 @@ export default function EmployeesPage() {
                 <select
                   value={editForm.role}
                   onChange={(e) => setEditForm((f) => ({ ...f, role: e.target.value as "admin" | "employee" }))}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                  className={fieldClass}
                 >
                   <option value="employee">Employee</option>
                   <option value="admin">Admin</option>
@@ -592,11 +593,11 @@ export default function EmployeesPage() {
                       e.target.value = "";
                     }
                   }}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                  className={fieldClass}
                 />
                 {(editForm.profile_image || selectedEmployee?.profile_image || editFormImagePreview) && (
                   <div className="mt-2 flex items-center gap-3">
-                    <div className="w-20 h-20 rounded-full overflow-hidden bg-gray-200 border-2 border-gray-300 shrink-0">
+                    <div className="h-20 w-20 shrink-0 overflow-hidden rounded-full border-2 border-slate-200 bg-slate-100">
                       {/* eslint-disable-next-line @next/next/no-img-element */}
                       <img
                         src={
@@ -627,7 +628,7 @@ export default function EmployeesPage() {
                   type="date"
                   value={editForm.hire_date}
                   onChange={(e) => setEditForm((f) => ({ ...f, hire_date: e.target.value }))}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                  className={fieldClass}
                 />
               </div>
               <div>
@@ -637,7 +638,7 @@ export default function EmployeesPage() {
                     type={showEditPassword ? "text" : "password"}
                     value={editForm.password}
                     onChange={(e) => setEditForm((f) => ({ ...f, password: e.target.value }))}
-                    className="w-full px-3 py-2 pr-10 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                    className={`${fieldClass} pr-10`}
                     minLength={6}
                     placeholder="Optional"
                   />
@@ -667,7 +668,7 @@ export default function EmployeesPage() {
                     type="checkbox"
                     checked={editForm.is_active}
                     onChange={(e) => setEditForm((f) => ({ ...f, is_active: e.target.checked }))}
-                    className="rounded border-gray-300"
+                    className="rounded border-slate-300 text-slate-900 focus:ring-sky-400/40"
                   />
                   <span className="text-sm text-gray-700">Active</span>
                 </label>
@@ -676,23 +677,23 @@ export default function EmployeesPage() {
                     type="checkbox"
                     checked={editForm.is_approved}
                     onChange={(e) => setEditForm((f) => ({ ...f, is_approved: e.target.checked }))}
-                    className="rounded border-gray-300"
+                    className="rounded border-slate-300 text-slate-900 focus:ring-sky-400/40"
                   />
                   <span className="text-sm text-gray-700">Approved</span>
                 </label>
               </div>
-              <div className="flex gap-3 pt-2">
+              <div className="flex flex-wrap gap-2 pt-2">
                 <button
                   type="submit"
                   disabled={submitting}
-                  className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50"
+                  className="rounded-lg bg-slate-900 px-4 py-2.5 text-sm font-medium text-white shadow-sm hover:bg-slate-800 disabled:opacity-50"
                 >
                   {submitting ? "Saving..." : "Save"}
                 </button>
                 <button
                   type="button"
                   onClick={() => { setShowEditModal(false); setSelectedEmployee(null); }}
-                  className="px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50"
+                  className="rounded-lg border border-slate-200 bg-white px-4 py-2.5 text-sm font-medium text-slate-700 shadow-sm hover:bg-slate-50"
                 >
                   Cancel
                 </button>
@@ -704,24 +705,26 @@ export default function EmployeesPage() {
 
       {/* Delete Confirm */}
       {showDeleteConfirm && selectedEmployee && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-lg shadow-xl max-w-sm w-full p-6">
-            <h3 className="text-lg font-bold text-gray-800 mb-2">Delete Employee</h3>
-            <p className="text-gray-600 mb-4">
-              Are you sure you want to delete <strong>{selectedEmployee.full_name}</strong> ({selectedEmployee.email})?
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 p-4 backdrop-blur-sm">
+          <div className="w-full max-w-sm rounded-2xl border border-slate-200/80 bg-white p-6 shadow-2xl shadow-slate-900/20">
+            <h3 className="mb-2 text-lg font-semibold text-slate-900">Delete employee</h3>
+            <p className="mb-5 text-sm text-slate-600">
+              Remove <strong className="text-slate-900">{selectedEmployee.full_name}</strong> ({selectedEmployee.email})?
               This cannot be undone.
             </p>
-            <div className="flex gap-3">
+            <div className="flex flex-wrap gap-2">
               <button
+                type="button"
                 onClick={handleDelete}
                 disabled={submitting}
-                className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 disabled:opacity-50"
+                className="rounded-lg bg-rose-600 px-4 py-2.5 text-sm font-medium text-white shadow-sm hover:bg-rose-700 disabled:opacity-50"
               >
                 {submitting ? "Deleting..." : "Delete"}
               </button>
               <button
+                type="button"
                 onClick={() => { setShowDeleteConfirm(false); setSelectedEmployee(null); }}
-                className="px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50"
+                className="rounded-lg border border-slate-200 bg-white px-4 py-2.5 text-sm font-medium text-slate-700 shadow-sm hover:bg-slate-50"
               >
                 Cancel
               </button>

@@ -107,10 +107,12 @@ export default function RefundsPage() {
 
   const getStatusColor = (status: string) => {
     const s = status.toLowerCase();
-    if (s === "refund" || s === "cancelled" || s === "canceled") return "bg-red-500 text-white";
-    if (s === "approval_needed" || s === "approval needed") return "bg-yellow-500 text-white";
-    if (s === "shipped") return "bg-blue-500 text-white";
-    return "bg-gray-500 text-white";
+    if (s === "refund" || s === "cancelled" || s === "canceled")
+      return "bg-rose-50 text-rose-800 ring-1 ring-rose-200/80";
+    if (s === "approval_needed" || s === "approval needed")
+      return "bg-amber-50 text-amber-900 ring-1 ring-amber-200/80";
+    if (s === "shipped") return "bg-sky-50 text-sky-800 ring-1 ring-sky-200/80";
+    return "bg-slate-100 text-slate-700 ring-1 ring-slate-200/80";
   };
 
   const formatStatus = (status: string) => {
@@ -123,107 +125,97 @@ export default function RefundsPage() {
   };
 
   return (
-    <AdminNavbar title="Refunds">
-      <div className="flex-1 p-6">
-        <div className="mb-4">
-          <Link
-            href="/admin"
-            className="text-gray-600 hover:text-gray-900 inline-flex items-center gap-1"
-          >
-            ← Back to Orders
-          </Link>
-        </div>
-        <div className="bg-white rounded-lg shadow-sm border border-gray-200">
-          <h2 className="text-xl font-bold text-gray-800 p-6 pb-2">Refunds (Refund, Cancelled, Approval Needed, Shipped)</h2>
-          <p className="text-sm text-gray-500 px-6 pb-4">
-            Orders with these statuses are shown here. Change status from the order detail page.
+    <AdminNavbar
+      title="Refunds"
+      subtitle="Orders that need follow-up or post-sale handling"
+    >
+      <Link
+        href="/admin"
+        className="inline-flex items-center gap-2 text-sm font-medium text-slate-600 transition-colors hover:text-slate-900"
+      >
+        <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+        </svg>
+        Back to orders
+      </Link>
+
+      <div className="overflow-hidden rounded-2xl border border-slate-200/80 bg-white shadow-sm shadow-slate-900/5">
+        <div className="border-b border-slate-100 px-5 py-5 sm:px-6">
+          <h2 className="text-lg font-semibold text-slate-900">Filtered orders</h2>
+          <p className="mt-1 max-w-2xl text-sm text-slate-500">
+            Refund, cancelled, approval needed, and shipped. Update status from the order detail page.
           </p>
-          <div className="overflow-x-auto">
-            <table className="w-full">
-              <thead className="bg-gray-50 border-b border-gray-200">
+        </div>
+        <div className="overflow-x-auto">
+          <table className="w-full min-w-[640px]">
+            <thead>
+              <tr className="border-b border-slate-200 bg-slate-50/90 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
+                <th className="px-4 py-3.5 sm:px-6">Product</th>
+                <th className="px-4 py-3.5 sm:px-6">Date</th>
+                <th className="px-4 py-3.5 sm:px-6">Payment</th>
+                <th className="px-4 py-3.5 sm:px-6">Amount</th>
+                <th className="px-4 py-3.5 sm:px-6">Status</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-100 text-sm">
+              {loading ? (
                 <tr>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Product Image & Name
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Order Date
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Payment Type
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Amount
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Status
-                  </th>
-                </tr>
-              </thead>
-              <tbody className="bg-white divide-y divide-gray-200">
-                {loading ? (
-                  <tr>
-                    <td colSpan={5} className="px-6 py-8 text-center text-gray-500">
+                  <td colSpan={5} className="px-6 py-14 text-center text-slate-500">
+                    <span className="inline-flex items-center gap-2">
+                      <span className="h-4 w-4 animate-spin rounded-full border-2 border-slate-300 border-t-slate-600" />
                       Loading…
-                    </td>
-                  </tr>
-                ) : orders.length === 0 ? (
-                  <tr>
-                    <td colSpan={5} className="px-6 py-8 text-center text-gray-500">
-                      No orders with Refund / Cancelled / Approval Needed / Shipped status.
-                    </td>
-                  </tr>
-                ) : (
-                  orders.map((order) => (
-                    <tr
-                      key={order.id}
-                      onClick={() => router.push(`/admin/orders/${order.id}`)}
-                      className="cursor-pointer hover:bg-gray-50"
-                    >
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <div className="flex items-center gap-3">
-                          <div className="w-12 h-14 bg-gray-100 border border-gray-300 rounded flex items-center justify-center overflow-hidden shrink-0">
-                            {order.productImage ? (
-                              <Image
-                                src={order.productImage}
-                                alt={order.productName}
-                                width={48}
-                                height={56}
-                                className="w-full h-full object-cover"
-                                unoptimized
-                              />
-                            ) : (
-                              <div className="w-12 h-14 bg-gray-200 rounded flex items-center justify-center">
-                                <span className="text-gray-400 text-xs">—</span>
-                              </div>
-                            )}
-                          </div>
-                          <span className="text-sm font-medium text-gray-900">{order.productName}</span>
+                    </span>
+                  </td>
+                </tr>
+              ) : orders.length === 0 ? (
+                <tr>
+                  <td colSpan={5} className="px-6 py-14 text-center text-slate-500">
+                    No orders in these statuses right now.
+                  </td>
+                </tr>
+              ) : (
+                orders.map((order) => (
+                  <tr
+                    key={order.id}
+                    onClick={() => router.push(`/admin/orders/${order.id}`)}
+                    className="cursor-pointer transition-colors hover:bg-slate-50/90"
+                  >
+                    <td className="px-4 py-4 whitespace-nowrap sm:px-6">
+                      <div className="flex items-center gap-3">
+                        <div className="flex h-14 w-12 shrink-0 items-center justify-center overflow-hidden rounded-lg border border-slate-200 bg-slate-100">
+                          {order.productImage ? (
+                            <Image
+                              src={order.productImage}
+                              alt={order.productName}
+                              width={48}
+                              height={56}
+                              className="h-full w-full object-cover"
+                              unoptimized
+                            />
+                          ) : (
+                            <span className="text-xs text-slate-400">—</span>
+                          )}
                         </div>
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                        {order.orderDate}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                        {order.paymentType}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                        ${order.amount.toFixed(2)}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <span
-                          className={`px-3 py-1 rounded-full text-xs font-medium ${getStatusColor(
-                            order.status
-                          )}`}
-                        >
-                          {formatStatus(order.status)}
-                        </span>
-                      </td>
-                    </tr>
-                  ))
-                )}
-              </tbody>
-            </table>
-          </div>
+                        <span className="font-medium text-slate-900">{order.productName}</span>
+                      </div>
+                    </td>
+                    <td className="px-4 py-4 whitespace-nowrap text-slate-500 sm:px-6">{order.orderDate}</td>
+                    <td className="px-4 py-4 whitespace-nowrap text-slate-500 sm:px-6">{order.paymentType}</td>
+                    <td className="px-4 py-4 whitespace-nowrap font-semibold text-slate-900 sm:px-6">
+                      ${order.amount.toFixed(2)}
+                    </td>
+                    <td className="px-4 py-4 whitespace-nowrap sm:px-6">
+                      <span
+                        className={`inline-flex rounded-full px-2.5 py-1 text-xs font-medium ${getStatusColor(order.status)}`}
+                      >
+                        {formatStatus(order.status)}
+                      </span>
+                    </td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
         </div>
       </div>
     </AdminNavbar>
