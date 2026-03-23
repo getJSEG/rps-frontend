@@ -14,16 +14,37 @@ function shouldDisableScrollNavbar(pathname: string): boolean {
   return false;
 }
 
+function shouldSkipCartApiForPathname(pathname: string): boolean {
+  if (!pathname) return false;
+  const skipPrefixes = [
+    "/account-settings",
+    "/change-password",
+    "/credit-cards",
+    "/messages",
+    "/address-book",
+    "/claims",
+    "/favorite-jobs",
+    "/pending-payment",
+  ];
+  return skipPrefixes.some((prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`));
+}
+
 type NavItem = {
   label: string;
   hasDropdown?: boolean;
   hasNew?: boolean;
 };
 
-export default function Navbar() {
+type NavbarProps = {
+  cartCountOverride?: number;
+  skipCartCountFetch?: boolean;
+};
+
+export default function Navbar({ cartCountOverride, skipCartCountFetch = false }: NavbarProps) {
   const router = useRouter();
   const pathname = usePathname();
   const disableScrollBehavior = shouldDisableScrollNavbar(pathname ?? "");
+  const effectiveSkipCartCountFetch = skipCartCountFetch || shouldSkipCartApiForPathname(pathname ?? "");
   const [isVisible, setIsVisible] = useState(disableScrollBehavior);
   const lastScrollYRef = useRef(0);
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
@@ -50,6 +71,8 @@ export default function Navbar() {
   const dropdownRef = useRef<HTMLDivElement>(null);
   const userDropdownRef = useRef<HTMLDivElement>(null);
   const searchRef = useRef<HTMLDivElement>(null);
+  const didInitialCartFetchRef = useRef(false);
+  const effectiveCartCount = typeof cartCountOverride === "number" ? cartCountOverride : cartCount;
 
   // Cart count from API (JWT or guest X-Guest-Session-Id)
   const updateCartCount = async () => {
@@ -99,26 +122,34 @@ export default function Navbar() {
     };
 
     checkLoginStatus();
-    updateCartCount(); // Initial cart count
+    if (!effectiveSkipCartCountFetch && !didInitialCartFetchRef.current) {
+      didInitialCartFetchRef.current = true;
+      updateCartCount(); // Initial cart count
+    }
 
     // Listen for custom login status change event
     window.addEventListener("loginStatusChanged", checkLoginStatus);
     
     // Listen for cart updates
-    window.addEventListener("cartUpdated", updateCartCount);
-    
+    if (!effectiveSkipCartCountFetch) {
+      window.addEventListener("cartUpdated", updateCartCount);
+    }
+
     // Also listen for storage changes (when login happens in another tab/window)
-    window.addEventListener("storage", () => {
+    const onStorageChange = () => {
       checkLoginStatus();
-      updateCartCount();
-    });
+      if (!effectiveSkipCartCountFetch) updateCartCount();
+    };
+    window.addEventListener("storage", onStorageChange);
 
     return () => {
       window.removeEventListener("loginStatusChanged", checkLoginStatus);
-      window.removeEventListener("cartUpdated", updateCartCount);
-      window.removeEventListener("storage", checkLoginStatus);
+      if (!effectiveSkipCartCountFetch) {
+        window.removeEventListener("cartUpdated", updateCartCount);
+      }
+      window.removeEventListener("storage", onStorageChange);
     };
-  }, []);
+  }, [effectiveSkipCartCountFetch]);
 
   // Handle login
   const handleLogin = async () => {
@@ -697,9 +728,9 @@ export default function Navbar() {
                   <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H17m0 0a2 2 0 100 4 2 2 0 000-4zm-8 2a2 2 0 11-4 0 2 2 0 014 0z" />
                   </svg>
-                  {cartCount > 0 && (
+                  {effectiveCartCount > 0 && (
                     <span className="absolute -top-2 -right-2 bg-red-500 text-white text-xs font-bold rounded-full h-5 w-5 flex items-center justify-center">
-                      {cartCount > 99 ? '99+' : cartCount}
+                      {effectiveCartCount > 99 ? '99+' : effectiveCartCount}
                     </span>
                   )}
                 </Link>

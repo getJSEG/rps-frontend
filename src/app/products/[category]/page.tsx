@@ -1,6 +1,6 @@
 "use client";
 
-import { use, useState, useEffect } from "react";
+import { use, useState, useEffect, useRef } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import Navbar from "../../components/Navbar";
@@ -25,16 +25,20 @@ export default function CategoryProductsPage({ params }: { params: Promise<{ cat
   const { category: categorySlug } = use(params);
   const [products, setProducts] = useState<Product[]>([]);
   const [loading, setLoading] = useState(true);
+  const fetchedCategoryRef = useRef<string | null>(null);
 
   const titleFromSlug = categorySlug.replace(/-/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
 
   useEffect(() => {
     const fetchProducts = async () => {
+      if (fetchedCategoryRef.current === categorySlug) return;
+      fetchedCategoryRef.current = categorySlug;
       try {
         setLoading(true);
         const response = await productsAPI.getAll({ category: categorySlug, limit: 100 });
         setProducts(response.products || []);
       } catch (e) {
+        fetchedCategoryRef.current = null;
         console.error("Error fetching products:", e);
         setProducts([]);
       } finally {

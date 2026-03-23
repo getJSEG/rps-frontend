@@ -2,7 +2,7 @@
 
 import Image from "next/image";
 import Link from "next/link";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import { productsAPI, getProductImageUrl } from "../../utils/api";
 import Sidebar from "./Sidebar";
@@ -49,6 +49,7 @@ export default function Products() {
   const [products, setProducts] = useState<Product[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedCategory, setSelectedCategory] = useState<string | null>(categoryParam);
+  const lastFetchedKeyRef = useRef<string>("");
 
   // Sync category from URL when it changes (e.g. from navbar search or sidebar)
   useEffect(() => {
@@ -59,14 +60,18 @@ export default function Products() {
   useEffect(() => {
     const fetchProducts = async () => {
       try {
-        setLoading(true);
         const params: Record<string, string | number> = { limit: 100 };
         if (selectedCategory) params.category = selectedCategory;
         if (subcategoryParam) params.subcategory = subcategoryParam;
         if (searchParam) params.search = searchParam;
+        const requestKey = JSON.stringify(params);
+        if (lastFetchedKeyRef.current === requestKey) return;
+        lastFetchedKeyRef.current = requestKey;
+        setLoading(true);
         const response = await productsAPI.getAll(params);
         setProducts(response.products || []);
       } catch (error) {
+        lastFetchedKeyRef.current = "";
         console.error("Error fetching products:", error);
         setProducts([]);
       } finally {

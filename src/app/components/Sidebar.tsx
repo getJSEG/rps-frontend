@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useRef } from "react";
 import { useRouter, useSearchParams, usePathname } from "next/navigation";
 import { productsAPI } from "../../utils/api";
 
@@ -45,13 +45,17 @@ export default function Sidebar({ onCategoryClick, showAllProductsButton = true 
   const [categories, setCategories] = useState<Category[]>([]);
   const [loading, setLoading] = useState(true);
   const [openGroups, setOpenGroups] = useState<Record<number, boolean>>({});
+  const fetchedCategoriesRef = useRef(false);
 
   useEffect(() => {
     const fetchCategories = async () => {
+      if (fetchedCategoriesRef.current) return;
+      fetchedCategoriesRef.current = true;
       try {
         const res = await productsAPI.getCategories();
         setCategories(res.categories || []);
       } catch (e) {
+        fetchedCategoriesRef.current = false;
         console.error("Error fetching categories:", e);
         setCategories([]);
       } finally {
@@ -77,7 +81,10 @@ export default function Sidebar({ onCategoryClick, showAllProductsButton = true 
   }, [selectedCategory, categories]);
 
   const handleCategoryClick = (categorySlug: string) => {
-    if (onCategoryClick) onCategoryClick(categorySlug);
+    if (onCategoryClick) {
+      onCategoryClick(categorySlug);
+      return;
+    }
     router.push(`/products/${categorySlug}`);
   };
 

@@ -329,7 +329,7 @@ export default function CheckoutPage() {
   if (loading) {
     return (
       <>
-        <Navbar />
+        <Navbar skipCartCountFetch />
         <div className="min-h-screen bg-gray-50 pt-24 pb-16 flex items-center justify-center">
           <p className="text-gray-600">Loading...</p>
         </div>
@@ -341,7 +341,7 @@ export default function CheckoutPage() {
   if (cartItems.length === 0 && !clientSecret) {
     return (
       <>
-        <Navbar />
+        <Navbar skipCartCountFetch />
         <div className="min-h-screen bg-gray-50 pt-24 pb-16 flex flex-col items-center justify-center gap-4">
           <p className="text-gray-600">Your cart is empty.</p>
           <Link href="/cart" className="text-blue-600 hover:underline">Back to Cart</Link>
@@ -353,7 +353,7 @@ export default function CheckoutPage() {
 
   return (
     <>
-      <Navbar />
+      <Navbar skipCartCountFetch />
       <div className="min-h-screen bg-gray-50 pt-24 pb-16">
         <div className="max-w-3xl mx-auto px-4 py-6">
           <div className="flex items-center justify-center gap-2 sm:gap-4">

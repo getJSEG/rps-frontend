@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback, Suspense } from "react";
+import { useState, useEffect, useCallback, Suspense, useRef } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import Image from "next/image";
 import Link from "next/link";
@@ -147,6 +147,9 @@ function ProductDetailContent() {
   const [shippingUserLoggedIn, setShippingUserLoggedIn] = useState(false);
   const [savedAddresses, setSavedAddresses] = useState<SavedAddress[]>([]);
   const [addressesLoading, setAddressesLoading] = useState(false);
+  const fetchedProductForRef = useRef<string | null>(null);
+  const fetchedRelatedForRef = useRef<string | null>(null);
+  const fetchedAddressesOnceRef = useRef(false);
 
   // Default pricing values (can be overridden by product data)
   const pricePerSqFt = product?.price_per_sqft || 3.63;
@@ -159,8 +162,11 @@ function ProductDetailContent() {
       if (!productId) {
         setProduct(null);
         setLoading(false);
+        fetchedProductForRef.current = null;
         return;
       }
+      if (fetchedProductForRef.current === String(productId)) return;
+      fetchedProductForRef.current = String(productId);
 
       try {
         // Reset product state when productId changes
@@ -174,6 +180,7 @@ function ProductDetailContent() {
           setProduct(null);
         }
       } catch (_) {
+        fetchedProductForRef.current = null;
         setProduct(null);
       } finally {
         setLoading(false);
@@ -187,6 +194,8 @@ function ProductDetailContent() {
   useEffect(() => {
     const fetchRelatedProducts = async () => {
       if (!productId) return;
+      if (fetchedRelatedForRef.current === String(productId)) return;
+      fetchedRelatedForRef.current = String(productId);
 
       try {
         setLoadingRelated(true);
@@ -199,6 +208,7 @@ function ProductDetailContent() {
           setRelatedProducts([]);
         }
       } catch (_) {
+        fetchedRelatedForRef.current = null;
         setRelatedProducts([]);
       } finally {
         setLoadingRelated(false);
@@ -407,6 +417,8 @@ function ProductDetailContent() {
 
   useEffect(() => {
     if (!shippingAuthReady || !shippingUserLoggedIn) return;
+    if (fetchedAddressesOnceRef.current) return;
+    fetchedAddressesOnceRef.current = true;
     loadSavedAddresses();
   }, [shippingAuthReady, shippingUserLoggedIn, loadSavedAddresses]);
 
@@ -414,8 +426,13 @@ function ProductDetailContent() {
     const onAuthChange = () => {
       const loggedIn = isAuthenticated();
       setShippingUserLoggedIn(loggedIn);
-      if (loggedIn) void loadSavedAddresses();
-      else setSavedAddresses([]);
+      if (loggedIn) {
+        fetchedAddressesOnceRef.current = true;
+        void loadSavedAddresses();
+      } else {
+        fetchedAddressesOnceRef.current = false;
+        setSavedAddresses([]);
+      }
     };
     window.addEventListener("loginStatusChanged", onAuthChange);
     window.addEventListener("storage", onAuthChange);
@@ -468,7 +485,7 @@ function ProductDetailContent() {
   if (loading) {
     return (
       <>
-        <Navbar />
+        <Navbar skipCartCountFetch />
         <div className="min-h-screen bg-white pt-24 pb-16">
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
             <div className="text-center py-12">
@@ -484,7 +501,7 @@ function ProductDetailContent() {
   if (!product && !productId) {
     return (
       <>
-        <Navbar />
+        <Navbar skipCartCountFetch />
         <div className="min-h-screen bg-white pt-24 pb-16">
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
             <div className="text-center py-12">
@@ -502,7 +519,7 @@ function ProductDetailContent() {
 
   return (
     <>
-      <Navbar />
+      <Navbar skipCartCountFetch />
     <div className="min-h-screen bg-white pt-24 pb-16">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           {/* Breadcrumb */}
@@ -1536,7 +1553,7 @@ export default function ProductDetailPage() {
   return (
     <Suspense fallback={
       <>
-        <Navbar />
+        <Navbar skipCartCountFetch />
         <div className="min-h-screen bg-white pt-24 pb-16">
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
             <div className="text-center py-12">

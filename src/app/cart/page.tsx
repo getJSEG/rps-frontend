@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import Image from "next/image";
@@ -34,6 +34,7 @@ export default function CartPage() {
   const [cartItems, setCartItems] = useState<CartItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [isAdminView, setIsAdminView] = useState(false);
+  const hasInitializedRef = useRef(false);
 
   const loadCart = async (silent = false) => {
     if (!silent) setLoading(true);
@@ -50,6 +51,8 @@ export default function CartPage() {
   };
 
   useEffect(() => {
+    if (hasInitializedRef.current) return;
+    hasInitializedRef.current = true;
     loadCart();
     const onCartUpdated = () => loadCart(true);
     window.addEventListener("cartUpdated", onCartUpdated);
@@ -96,7 +99,7 @@ export default function CartPage() {
   if (loading) {
     return (
       <>
-        <Navbar />
+        <Navbar cartCountOverride={cartItems.length} skipCartCountFetch />
         <div className="min-h-screen bg-white  pb-16">
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
             <div className="text-center py-12">
@@ -115,7 +118,7 @@ export default function CartPage() {
 
   return (
     <>
-      <Navbar />
+      <Navbar cartCountOverride={cartItems.length} skipCartCountFetch />
       <div className="min-h-screen bg-gray-50 pt-12 pb-16">
         <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
           {cartItems.length === 0 ? (
