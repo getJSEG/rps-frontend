@@ -139,7 +139,7 @@ export default function RefundsPage() {
         Back to orders
       </Link>
 
-      <div className="overflow-hidden rounded-2xl border border-slate-200/80 bg-white shadow-sm shadow-slate-900/5">
+      <div className="overflow-hidden rounded-xl border border-slate-200/60 bg-white shadow-sm shadow-slate-900/5">
         <div className="border-b border-slate-100 px-5 py-5 sm:px-6">
           <h2 className="text-lg font-semibold text-slate-900">Filtered orders</h2>
           <p className="mt-1 max-w-2xl text-sm text-slate-500">
@@ -206,7 +206,7 @@ export default function RefundsPage() {
                     </td>
                     <td className="px-4 py-4 whitespace-nowrap sm:px-6">
                       <span
-                        className={`inline-flex rounded-full px-2.5 py-1 text-xs font-medium ${getStatusColor(order.status)}`}
+                        className={`inline-flex rounded-lg px-2.5 py-1 text-xs font-medium ${getStatusColor(order.status)}`}
                       >
                         {formatStatus(order.status)}
                       </span>

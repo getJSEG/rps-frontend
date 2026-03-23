@@ -293,41 +293,54 @@ export default function AddressBook() {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-white pt-20 flex items-center justify-center">
-        <p className="text-gray-600">Loading addresses...</p>
+      <div className="min-h-screen bg-gradient-to-b from-slate-50 via-gray-50 to-gray-100 pt-20 flex items-center justify-center">
+        <div className="rounded-sm border border-gray-200 bg-white px-6 py-4 shadow-[0_10px_30px_-18px_rgba(15,23,42,0.4)]">
+          <p className="text-sm font-medium text-gray-600">Loading addresses...</p>
+        </div>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-white pt-20">
-      <div className="max-w-7xl mx-auto px-4 py-8">
-        <div className="flex gap-8">
-          <aside className="w-64 shrink-0 bg-gray-100 p-6">
-            <h2 className="text-xl font-bold text-gray-900 mb-6">Settings</h2>
-            <nav className="space-y-0">
+    <div className="min-h-screen bg-gradient-to-b from-slate-50 via-gray-50 to-gray-100 pt-20">
+      <div className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:py-10">
+        <div className="mb-6 rounded-sm border border-gray-200 bg-white/80 px-5 py-4 shadow-[0_10px_35px_-24px_rgba(15,23,42,0.5)] backdrop-blur-sm">
+          <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-gray-500">Account Area</p>
+          <h1 className="mt-1 text-2xl font-semibold tracking-tight text-gray-900 sm:text-3xl">Address Book</h1>
+          <p className="mt-1.5 text-sm text-gray-600">Manage your billing and shipping addresses.</p>
+        </div>
+
+        <div className="flex flex-col gap-5 lg:flex-row lg:gap-8">
+          <aside className="h-fit w-full shrink-0 self-start rounded-sm border border-gray-200 bg-white p-4 shadow-[0_14px_35px_-24px_rgba(15,23,42,0.45)] lg:w-72 lg:p-5">
+            <h2 className="mb-4 text-xs font-semibold uppercase tracking-[0.18em] text-gray-500">Settings</h2>
+            <nav className="space-y-2">
               {menuItems.map((item) => (
                 <Link
                   key={item.label}
                   href={item.href}
-                  className={`block w-full text-left px-4 py-3 transition-colors border-b border-gray-200 last:border-b-0 ${
-                    item.active ? "bg-blue-100 text-gray-900 font-medium" : "text-gray-700 hover:bg-gray-200 hover:text-gray-900"
+                  className={`group block w-full border-l-2 px-3 py-2.5 text-sm transition-all ${
+                    item.active
+                      ? "border-blue-600 bg-blue-50/80 font-semibold text-blue-800 shadow-[inset_0_0_0_1px_rgba(191,219,254,0.5)]"
+                      : "border-transparent text-gray-700 hover:border-gray-300 hover:bg-gray-50 hover:text-gray-900"
                   }`}
                 >
-                  {item.label}
+                  <span className="flex items-center justify-between gap-3">
+                    <span>{item.label}</span>
+                    <span className="text-[10px] text-gray-300 transition-colors group-hover:text-gray-400">&gt;</span>
+                  </span>
                 </Link>
               ))}
             </nav>
           </aside>
 
-          <main className="flex-1 bg-white p-8">
-            <h1 className="text-2xl font-bold text-gray-900 mb-2">Your Default Address</h1>
-            <p className="text-gray-500 text-sm mb-6">
+          <main className="flex-1 rounded-sm border border-gray-200 bg-white p-5 shadow-[0_18px_45px_-30px_rgba(15,23,42,0.5)] sm:p-7">
+            <h2 className="text-xl font-semibold tracking-tight text-gray-900 sm:text-2xl">Your Default Address</h2>
+            <p className="mb-6 mt-1 text-sm text-gray-600">
               Your address from registration is shown below. You can update it anytime—click Edit, change the details, and save.
             </p>
 
             {addresses.length === 0 && !loading && (
-              <div className="mb-8 p-6 bg-amber-50 border border-amber-200 rounded-lg">
+              <div className="mb-8 rounded-sm border border-amber-200 bg-amber-50 px-6 py-5">
                 <p className="text-amber-800 font-medium">No saved address yet.</p>
                 <p className="text-amber-700 text-sm mt-1">
                   If you added an address at registration, it should appear here when you’re logged in. You can also add one below.
@@ -340,17 +353,17 @@ export default function AddressBook() {
                 {addresses.map((addr) => (
                   <div
                     key={addr.id}
-                    className="bg-white border border-gray-300 rounded-lg p-5 flex items-center justify-between"
+                    className="flex items-center justify-between rounded-sm border border-gray-200 bg-white p-5 shadow-[0_8px_26px_-24px_rgba(15,23,42,0.5)]"
                   >
                     <div className="flex items-center gap-4 flex-1">
                       <button
                         type="button"
                         onClick={() => handleSetDefault(addr)}
                         disabled={addr.is_default}
-                        className={`inline-flex w-32 shrink-0 justify-center items-center px-2 py-2 rounded text-sm font-medium transition-colors ${
+                        className={`inline-flex w-32 shrink-0 items-center justify-center rounded-sm px-2 py-2 text-sm font-medium transition-colors ${
                           addr.is_default
-                            ? "bg-gray-300 text-gray-700 cursor-default"
-                            : "bg-gray-200 text-gray-700 hover:bg-gray-300"
+                            ? "cursor-default bg-gray-200 text-gray-700"
+                            : "bg-gray-100 text-gray-700 hover:bg-gray-200"
                         }`}
                       >
                         {addr.is_default ? "Default" : "Set Default"}
@@ -365,7 +378,7 @@ export default function AddressBook() {
                       <button
                         type="button"
                         onClick={() => fillFormForEdit(addr)}
-                        className="text-blue-600 hover:text-blue-800 text-sm font-medium"
+                        className="text-sm font-semibold text-blue-700 hover:text-blue-800"
                       >
                         Edit
                       </button>
@@ -385,51 +398,51 @@ export default function AddressBook() {
               </div>
             )}
 
-            <h2 id="address-book-add-form" className="text-xl font-bold text-gray-900 mb-4 scroll-mt-24">
+            <h3 id="address-book-add-form" className="mb-4 scroll-mt-24 text-lg font-semibold text-gray-900">
               {editingId ? "Update address" : "Add new address"}
-            </h2>
-            <div className="bg-white border border-gray-300 rounded-lg p-6">
+            </h3>
+            <div className="rounded-sm border border-gray-200 bg-white p-6 shadow-[0_10px_28px_-24px_rgba(15,23,42,0.5)]">
               <form onSubmit={handleSubmit} className="space-y-4 max-w-2xl">
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Street address *</label>
+                  <label className="mb-1 block text-[11px] font-semibold uppercase tracking-[0.16em] text-gray-600">Street address *</label>
                   <input
                     type="text"
                     name="streetAddress"
                     value={formData.streetAddress}
                     onChange={handleChange}
-                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    className="w-full rounded-sm border border-gray-300 bg-white px-3 py-2.5 text-sm text-gray-900 outline-none transition-all focus:border-gray-400 focus:ring-2 focus:ring-gray-100"
                     required
                   />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Address line 2</label>
+                  <label className="mb-1 block text-[11px] font-semibold uppercase tracking-[0.16em] text-gray-600">Address line 2</label>
                   <input
                     type="text"
                     name="addressLine2"
                     value={formData.addressLine2}
                     onChange={handleChange}
-                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    className="w-full rounded-sm border border-gray-300 bg-white px-3 py-2.5 text-sm text-gray-900 outline-none transition-all focus:border-gray-400 focus:ring-2 focus:ring-gray-100"
                   />
                 </div>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">City *</label>
+                    <label className="mb-1 block text-[11px] font-semibold uppercase tracking-[0.16em] text-gray-600">City *</label>
                     <input
                       type="text"
                       name="city"
                       value={formData.city}
                       onChange={handleChange}
-                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      className="w-full rounded-sm border border-gray-300 bg-white px-3 py-2.5 text-sm text-gray-900 outline-none transition-all focus:border-gray-400 focus:ring-2 focus:ring-gray-100"
                       required
                     />
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">State *</label>
+                    <label className="mb-1 block text-[11px] font-semibold uppercase tracking-[0.16em] text-gray-600">State *</label>
                     <select
                       name="state"
                       value={formData.state}
                       onChange={handleChange}
-                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      className="w-full rounded-sm border border-gray-300 bg-white px-3 py-2.5 text-sm text-gray-900 outline-none transition-all focus:border-gray-400 focus:ring-2 focus:ring-gray-100"
                       required
                     >
                       {states.map((s) => (
@@ -440,62 +453,64 @@ export default function AddressBook() {
                 </div>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Postcode *</label>
+                    <label className="mb-1 block text-[11px] font-semibold uppercase tracking-[0.16em] text-gray-600">Postcode *</label>
                     <input
                       type="text"
                       name="postcode"
                       value={formData.postcode}
                       onChange={handleChange}
-                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      className="w-full rounded-sm border border-gray-300 bg-white px-3 py-2.5 text-sm text-gray-900 outline-none transition-all focus:border-gray-400 focus:ring-2 focus:ring-gray-100"
                       required
                     />
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Country</label>
+                    <label className="mb-1 block text-[11px] font-semibold uppercase tracking-[0.16em] text-gray-600">Country</label>
                     <input
                       type="text"
                       name="country"
                       value={formData.country}
                       onChange={handleChange}
-                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      className="w-full rounded-sm border border-gray-300 bg-white px-3 py-2.5 text-sm text-gray-900 outline-none transition-all focus:border-gray-400 focus:ring-2 focus:ring-gray-100"
                     />
                   </div>
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Address type</label>
+                  <label className="mb-1 block text-[11px] font-semibold uppercase tracking-[0.16em] text-gray-600">Address type</label>
                   <select
                     name="addressType"
                     value={formData.addressType}
                     onChange={handleChange}
-                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    className="w-full rounded-sm border border-gray-300 bg-white px-3 py-2.5 text-sm text-gray-900 outline-none transition-all focus:border-gray-400 focus:ring-2 focus:ring-gray-100"
                   >
                     <option value="billing">Billing</option>
                     <option value="shipping">Shipping</option>
                   </select>
                 </div>
-                <div className="flex items-center gap-2">
-                  <input
-                    type="checkbox"
-                    id="isDefaultAddr"
-                    name="isDefault"
-                    checked={formData.isDefault}
-                    onChange={handleChange}
-                    className="w-4 h-4 rounded border-gray-300 text-blue-600"
-                  />
-                  <label htmlFor="isDefaultAddr" className="text-sm font-medium text-gray-700">
-                    Use as my default address (only one; shown on product page and checkout)
+                <div className="rounded-sm border border-gray-200 bg-gray-50/80 px-3 py-3">
+                  <label htmlFor="isDefaultAddr" className="flex cursor-pointer items-start gap-3">
+                    <input
+                      type="checkbox"
+                      id="isDefaultAddr"
+                      name="isDefault"
+                      checked={formData.isDefault}
+                      onChange={handleChange}
+                      className="mt-0.5 h-4 w-4 rounded border-gray-300 text-blue-600"
+                    />
+                    <span className="text-sm font-medium text-gray-700">
+                      Use as my default address (only one; shown on product page and checkout)
+                    </span>
                   </label>
                 </div>
-                <div className="flex gap-3 pt-4">
+                <div className="flex flex-wrap gap-3 border-t border-gray-200 pt-4">
                   <button
                     type="submit"
                     disabled={saving}
-                    className="bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white font-medium px-8 py-3 rounded-lg transition-colors"
+                    className="inline-flex min-w-28 items-center justify-center rounded-sm bg-blue-600 px-6 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60"
                   >
                     {saving ? "Saving…" : editingId ? "Update" : "Add"}
                   </button>
                   {editingId && (
-                    <button type="button" onClick={cancelEdit} className="px-6 py-3 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50">
+                    <button type="button" onClick={cancelEdit} className="rounded-sm border border-gray-300 px-5 py-2.5 text-sm font-medium text-gray-700 transition-colors hover:bg-gray-50">
                       Cancel
                     </button>
                   )}

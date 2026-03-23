@@ -201,7 +201,7 @@ export default function CartItemDetailPage() {
   if (loading) {
     return (
       <AdminNavbar title="Cart item" subtitle="Promote to order">
-        <div className="rounded-2xl border border-slate-200/80 bg-white p-8 shadow-sm">
+        <div className="rounded-xl border border-slate-200/60 bg-white p-8 shadow-sm">
           <p className="flex items-center gap-2 text-slate-600">
             <span className="h-5 w-5 animate-spin rounded-full border-2 border-slate-300 border-t-slate-600" />
             Loading…
@@ -214,7 +214,7 @@ export default function CartItemDetailPage() {
   if (error || !item) {
     return (
       <AdminNavbar title="Cart item" subtitle="Promote to order">
-        <div className="rounded-2xl border border-rose-200/80 bg-rose-50/50 p-8">
+        <div className="rounded-xl border border-rose-200/60 bg-rose-50/50 p-8">
           <p className="mb-4 font-semibold text-rose-800">{error || "Item not found"}</p>
           <button
             type="button"
@@ -249,7 +249,7 @@ export default function CartItemDetailPage() {
         Back to orders
       </button>
 
-      <div className="rounded-2xl border border-slate-200/80 bg-white p-6 shadow-sm shadow-slate-900/5 sm:p-8">
+      <div className="rounded-xl border border-slate-200/60 bg-white p-6 shadow-sm shadow-slate-900/5 sm:p-8">
           <div className="flex flex-wrap gap-6">
             <div className="flex h-40 w-32 shrink-0 items-center justify-center overflow-hidden rounded-xl border border-slate-200 bg-slate-100">
               {item.productImage ? (

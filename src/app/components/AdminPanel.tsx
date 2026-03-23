@@ -426,7 +426,7 @@ export default function AdminPanel() {
       searchQuery={searchQuery}
       onSearchChange={setSearchQuery}
     >
-      <div className="overflow-hidden rounded-2xl border border-slate-200/80 bg-white shadow-sm shadow-slate-900/5">
+      <div className="overflow-hidden rounded-xl border border-slate-200/60 bg-white shadow-sm shadow-slate-900/5">
         <div className="border-b border-slate-100 bg-slate-50/80 px-4 py-4 sm:px-6">
           <div className="flex flex-wrap gap-2">
             {["All Projects", "In Progress", "Pending", "Complete"].map((tab) => (
@@ -437,9 +437,9 @@ export default function AdminPanel() {
                   setActiveTab(tab);
                   setCurrentPage(1);
                 }}
-                className={`rounded-full px-4 py-2 text-sm font-medium transition-colors ${
+                className={`rounded-xl px-4 py-2 text-sm font-medium transition-colors ${
                   activeTab === tab
-                    ? "bg-slate-900 text-white shadow-sm"
+                    ? "bg-slate-700 text-white shadow-sm"
                     : "bg-white text-slate-600 ring-1 ring-slate-200/80 hover:bg-slate-100 hover:text-slate-900"
                 }`}
               >
@@ -559,7 +559,7 @@ export default function AdminPanel() {
                           ${order.amount.toFixed(2)}
                         </td>
                         <td className="px-4 py-4 whitespace-nowrap sm:px-6">
-                          <span className={`inline-flex rounded-full px-2.5 py-1 text-xs font-medium ${getStatusColor(order.status)}`}>
+                          <span className={`inline-flex rounded-lg px-2.5 py-1 text-xs font-medium ${getStatusColor(order.status)}`}>
                             {formatStatus(order.status)}
                           </span>
                         </td>
@@ -621,7 +621,7 @@ export default function AdminPanel() {
                   onClick={() => setCurrentPage(pageNum)}
                   className={`min-w-[2.25rem] rounded-lg border px-3 py-1.5 text-sm font-medium transition ${
                     currentPage === pageNum
-                      ? "border-slate-900 bg-slate-900 text-white shadow-sm"
+                      ? "border-slate-700 bg-slate-700 text-white shadow-sm"
                       : "border-slate-200 bg-white text-slate-700 shadow-sm hover:bg-slate-50"
                   }`}
                 >
@@ -638,7 +638,7 @@ export default function AdminPanel() {
                 onClick={() => setCurrentPage(totalPages)}
                 className={`min-w-[2.25rem] rounded-lg border px-3 py-1.5 text-sm font-medium transition ${
                   currentPage === totalPages
-                    ? "border-slate-900 bg-slate-900 text-white shadow-sm"
+                    ? "border-slate-700 bg-slate-700 text-white shadow-sm"
                     : "border-slate-200 bg-white text-slate-700 shadow-sm hover:bg-slate-50"
                 }`}
               >

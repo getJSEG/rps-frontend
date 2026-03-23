@@ -57,8 +57,8 @@ export default function AdminNavbar({
 
   return (
     <div className="admin-app min-h-screen flex bg-slate-100 text-slate-900">
-      <aside className="flex w-52 shrink-0 flex-col border-r border-slate-800/80 bg-slate-900 text-slate-300 sm:w-56">
-        <div className="p-5 border-b border-slate-800/80">
+      <aside className="flex w-52 shrink-0 flex-col border-r border-slate-700/50 bg-slate-800 text-slate-200 sm:w-56">
+        <div className="p-5 border-b border-slate-700/50">
           <div className="rounded-xl bg-white/95 p-2.5 shadow-sm ring-1 ring-black/5">
             <Image
               src="/logo.png"
@@ -69,7 +69,7 @@ export default function AdminNavbar({
               priority
             />
           </div>
-          <p className="mt-3 text-[10px] font-semibold uppercase tracking-[0.2em] text-slate-500">
+          <p className="mt-3 text-[10px] font-semibold uppercase tracking-[0.2em] text-slate-400">
             Control panel
           </p>
         </div>
@@ -82,13 +82,13 @@ export default function AdminNavbar({
                 href={href}
                 className={`flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors ${
                   active
-                    ? "bg-slate-800 text-white shadow-sm"
-                    : "text-slate-400 hover:bg-slate-800/60 hover:text-white"
+                    ? "bg-slate-700 text-white shadow-sm"
+                    : "text-slate-300 hover:bg-slate-700/70 hover:text-white"
                 }`}
               >
                 <span
                   className={`flex h-8 w-8 items-center justify-center rounded-md ${
-                    active ? "bg-sky-500/20 text-sky-300" : "bg-slate-800 text-slate-500"
+                    active ? "bg-sky-400/20 text-sky-200" : "bg-slate-700 text-slate-300"
                   }`}
                   aria-hidden
                 >
@@ -118,7 +118,7 @@ export default function AdminNavbar({
             );
           })}
         </nav>
-        <div className="p-4 border-t border-slate-800/80 text-xs text-slate-500">
+        <div className="p-4 border-t border-slate-700/50 text-xs text-slate-400">
           Signed in as admin
         </div>
       </aside>

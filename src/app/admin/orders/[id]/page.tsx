@@ -318,7 +318,7 @@ export default function OrderDetails() {
   if (loading) {
     return (
       <AdminNavbar title="Order details" subtitle="Review line items and update status">
-        <div className="rounded-2xl border border-slate-200/80 bg-white p-8 shadow-sm shadow-slate-900/5">
+        <div className="rounded-xl border border-slate-200/60 bg-white p-8 shadow-sm shadow-slate-900/5">
           <p className="flex items-center gap-2 text-slate-600">
             <span className="h-5 w-5 animate-spin rounded-full border-2 border-slate-300 border-t-slate-600" />
             Loading order details…
@@ -331,7 +331,7 @@ export default function OrderDetails() {
   if (error || !order) {
     return (
       <AdminNavbar title="Order details" subtitle="Review line items and update status">
-        <div className="rounded-2xl border border-rose-200/80 bg-rose-50/50 p-8 shadow-sm">
+        <div className="rounded-xl border border-rose-200/60 bg-rose-50/50 p-8 shadow-sm">
           <p className="mb-2 font-semibold text-rose-800">{error || "Order not found"}</p>
           <p className="mb-6 text-sm text-slate-600">
             {error
@@ -397,7 +397,7 @@ export default function OrderDetails() {
         </div>
       </div>
 
-      <div className="mb-6 rounded-2xl border border-slate-200/80 bg-white p-6 shadow-sm shadow-slate-900/5 sm:p-8">
+      <div className="mb-6 rounded-xl border border-slate-200/60 bg-white p-6 shadow-sm shadow-slate-900/5 sm:p-8">
         <h2 className="mb-5 text-base font-semibold text-slate-900">Order information</h2>
         <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
             <div>
@@ -447,7 +447,7 @@ export default function OrderDetails() {
               return (
                 <div
                   key={item.id}
-                  className="rounded-2xl border border-slate-200/80 bg-white p-6 shadow-sm shadow-slate-900/5 sm:p-8"
+                  className="rounded-xl border border-slate-200/60 bg-white p-6 shadow-sm shadow-slate-900/5 sm:p-8"
                 >
                   <div className="flex flex-col gap-6 sm:flex-row">
                     {/* Product Image - Left */}
@@ -594,13 +594,13 @@ export default function OrderDetails() {
               );
             })
           ) : (
-            <div className="rounded-2xl border border-slate-200/80 bg-white p-8 text-center text-slate-500 shadow-sm">
+            <div className="rounded-xl border border-slate-200/60 bg-white p-8 text-center text-slate-500 shadow-sm">
               No items in this order.
             </div>
           )}
         </div>
 
-        <div className="mt-6 rounded-2xl border border-slate-200/80 bg-white p-6 shadow-sm shadow-slate-900/5 sm:p-8">
+        <div className="mt-6 rounded-xl border border-slate-200/60 bg-white p-6 shadow-sm shadow-slate-900/5 sm:p-8">
           <div className="mb-2 flex items-center justify-between text-sm">
             <span className="text-slate-600">Subtotal</span>
             <span className="font-semibold text-slate-900">${order.total_amount.toFixed(2)}</span>

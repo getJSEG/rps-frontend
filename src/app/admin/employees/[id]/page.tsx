@@ -101,7 +101,7 @@ export default function EmployeeDetailPage() {
   if (loading) {
     return (
       <AdminNavbar title="Employee" subtitle="Profile">
-        <div className="flex min-h-[200px] items-center justify-center rounded-2xl border border-slate-200/80 bg-white p-8 shadow-sm">
+        <div className="flex min-h-[200px] items-center justify-center rounded-xl border border-slate-200/60 bg-white p-8 shadow-sm">
           <p className="flex items-center gap-2 text-slate-500">
             <span className="h-5 w-5 animate-spin rounded-full border-2 border-slate-300 border-t-slate-600" />
             Loading…
@@ -114,7 +114,7 @@ export default function EmployeeDetailPage() {
   if (error || !employee) {
     return (
       <AdminNavbar title="Employee" subtitle="Profile">
-        <div className="rounded-2xl border border-rose-200/80 bg-rose-50/50 p-8">
+        <div className="rounded-xl border border-rose-200/60 bg-rose-50/50 p-8">
           <p className="mb-4 font-medium text-rose-800">{error || "Employee not found"}</p>
           <Link
             href="/admin/employees"
@@ -146,7 +146,7 @@ export default function EmployeeDetailPage() {
         Back to employees
       </Link>
 
-      <div className="grid grid-cols-1 gap-8 rounded-2xl border border-slate-200/80 bg-white p-6 shadow-sm shadow-slate-900/5 md:grid-cols-3 md:p-8">
+      <div className="grid grid-cols-1 gap-8 rounded-xl border border-slate-200/60 bg-white p-6 shadow-sm shadow-slate-900/5 md:grid-cols-3 md:p-8">
           <div className="flex flex-col items-center">
             <h3 className="mb-4 w-full text-left text-xs font-semibold uppercase tracking-wider text-slate-500">
               Profile image
@@ -279,7 +279,7 @@ export default function EmployeeDetailPage() {
                 <label className="mb-2 block text-sm font-medium text-slate-600">Current status</label>
                 <div className="flex flex-wrap items-center gap-3">
                   <span
-                    className={`inline-flex rounded-full px-3 py-1.5 text-sm font-medium ring-1 ${
+                    className={`inline-flex rounded-lg px-3 py-1.5 text-sm font-medium ring-1 ${
                       statusLabel === "Active"
                         ? "bg-emerald-50 text-emerald-800 ring-emerald-200/80"
                         : "bg-slate-100 text-slate-600 ring-slate-200/80"

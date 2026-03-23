@@ -105,30 +105,43 @@ export default function ChangePassword() {
   );
 
   return (
-    <div className="min-h-screen bg-white pt-20">
-      <div className="max-w-7xl mx-auto px-4 py-8">
-        <div className="flex gap-8">
-          <aside className="w-64 shrink-0 bg-gray-100 p-6">
-            <h2 className="text-xl font-bold text-gray-900 mb-6">Settings</h2>
-            <nav className="space-y-0">
+    <div className="min-h-screen bg-gradient-to-b from-slate-50 via-gray-50 to-gray-100 pt-20">
+      <div className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:py-10">
+        <div className="mb-6 rounded-sm border border-gray-200 bg-white/80 px-5 py-4 shadow-[0_10px_35px_-24px_rgba(15,23,42,0.5)] backdrop-blur-sm">
+          <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-gray-500">Account Area</p>
+          <h1 className="mt-1 text-2xl font-semibold tracking-tight text-gray-900 sm:text-3xl">Change Password</h1>
+          <p className="mt-1.5 text-sm text-gray-600">
+            A verification code will be sent to your email. Enter the code and set a new password.
+          </p>
+        </div>
+
+        <div className="flex flex-col gap-5 lg:flex-row lg:gap-8">
+          <aside className="h-fit w-full shrink-0 self-start rounded-sm border border-gray-200 bg-white p-4 shadow-[0_14px_35px_-24px_rgba(15,23,42,0.45)] lg:w-72 lg:p-5">
+            <h2 className="mb-4 text-xs font-semibold uppercase tracking-[0.18em] text-gray-500">Settings</h2>
+            <nav className="space-y-2">
               {menuItems.map((item) => (
                 <Link
                   key={item.label}
                   href={item.href}
-                  className={`block w-full text-left px-4 py-3 transition-colors border-b border-gray-200 last:border-b-0 ${
-                    item.active ? "bg-blue-100 text-gray-900 font-medium" : "text-gray-700 hover:bg-gray-200 hover:text-gray-900"
+                  className={`group block w-full border-l-2 px-3 py-2.5 text-sm transition-all ${
+                    item.active
+                      ? "border-blue-600 bg-blue-50/80 font-semibold text-blue-800 shadow-[inset_0_0_0_1px_rgba(191,219,254,0.5)]"
+                      : "border-transparent text-gray-700 hover:border-gray-300 hover:bg-gray-50 hover:text-gray-900"
                   }`}
                 >
-                  {item.label}
+                  <span className="flex items-center justify-between gap-3">
+                    <span>{item.label}</span>
+                    <span className="text-[10px] text-gray-300 transition-colors group-hover:text-gray-400">&gt;</span>
+                  </span>
                 </Link>
               ))}
             </nav>
           </aside>
 
-          <main className="flex-1 bg-white p-8">
-            <div className="mb-6 pb-4 border-b border-gray-200">
-              <h1 className="text-2xl font-bold text-gray-900">Change Password</h1>
-              <p className="text-gray-600 text-sm mt-1">
+          <main className="flex-1 rounded-sm border border-gray-200 bg-white p-5 shadow-[0_18px_45px_-30px_rgba(15,23,42,0.5)] sm:p-7">
+            <div className="mb-6 border-b border-gray-200 pb-4">
+              <h2 className="text-xl font-semibold tracking-tight text-gray-900 sm:text-2xl">Change Password</h2>
+              <p className="mt-1 text-sm text-gray-600">
                 A code will be sent to your email. Enter the code and your new password below.
               </p>
             </div>
@@ -136,13 +149,15 @@ export default function ChangePassword() {
             {step === "email" ? (
               <form onSubmit={handleSendCode} className="space-y-6 max-w-2xl">
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Email <span className="text-red-500">*</span></label>
+                  <label className="mb-2 block text-[11px] font-semibold uppercase tracking-[0.16em] text-gray-600">
+                    Email <span className="text-red-500">*</span>
+                  </label>
                   <input
                     type="email"
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
                     placeholder="Your registered email"
-                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
+                    className="w-full rounded-sm border border-gray-300 bg-white px-3 py-2.5 text-sm text-gray-900 outline-none transition-all placeholder:text-gray-400 focus:border-gray-400 focus:ring-2 focus:ring-gray-100"
                     required
                   />
                 </div>
@@ -150,7 +165,7 @@ export default function ChangePassword() {
                   <button
                     type="submit"
                     disabled={sendingCode}
-                    className="bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white font-medium px-8 py-3 rounded-lg transition-colors"
+                    className="inline-flex min-w-40 items-center justify-center rounded-sm bg-blue-600 px-6 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60"
                   >
                     {sendingCode ? "Sending…" : "Send code to email"}
                   </button>
@@ -158,28 +173,32 @@ export default function ChangePassword() {
               </form>
             ) : (
               <>
-                <div className="mb-6 p-3 bg-blue-50 rounded-lg text-sm text-gray-700">
+                <div className="mb-6 rounded-sm border border-blue-100 bg-blue-50/80 px-3 py-3 text-sm text-gray-700">
                   Code sent to <strong>{email}</strong>. Check your email and enter the 6-digit code below.
                 </div>
                 <form onSubmit={handleResetPassword} className="space-y-6 max-w-2xl">
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">Email</label>
-                    <input type="email" value={email} readOnly className="w-full px-4 py-2 border border-gray-200 rounded-lg bg-gray-50 text-gray-600" />
+                    <label className="mb-2 block text-[11px] font-semibold uppercase tracking-[0.16em] text-gray-600">Email</label>
+                    <input type="email" value={email} readOnly className="w-full rounded-sm border border-gray-200 bg-gray-50 px-3 py-2.5 text-sm text-gray-600" />
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">Code from email <span className="text-red-500">*</span></label>
+                    <label className="mb-2 block text-[11px] font-semibold uppercase tracking-[0.16em] text-gray-600">
+                      Code from email <span className="text-red-500">*</span>
+                    </label>
                     <input
                       type="text"
                       value={code}
                       onChange={(e) => setCode(e.target.value.replace(/\D/g, "").slice(0, 6))}
                       placeholder="6-digit code"
                       maxLength={6}
-                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white font-mono text-lg tracking-widest"
+                      className="w-full rounded-sm border border-gray-300 bg-white px-3 py-2.5 font-mono text-lg tracking-widest text-gray-900 outline-none transition-all focus:border-gray-400 focus:ring-2 focus:ring-gray-100"
                       required
                     />
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">New password <span className="text-red-500">*</span></label>
+                    <label className="mb-2 block text-[11px] font-semibold uppercase tracking-[0.16em] text-gray-600">
+                      New password <span className="text-red-500">*</span>
+                    </label>
                     <div className="relative">
                       <input
                         type={showNew ? "text" : "password"}
@@ -187,7 +206,7 @@ export default function ChangePassword() {
                         onChange={(e) => setNewPassword(e.target.value)}
                         placeholder="At least 6 characters"
                         minLength={6}
-                        className="w-full px-4 py-2 pr-10 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
+                        className="w-full rounded-sm border border-gray-300 bg-white px-3 py-2.5 pr-10 text-sm text-gray-900 outline-none transition-all placeholder:text-gray-400 focus:border-gray-400 focus:ring-2 focus:ring-gray-100"
                         required
                       />
                       <button type="button" onClick={() => setShowNew((s) => !s)} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-700 p-1" tabIndex={-1} aria-label={showNew ? "Hide password" : "Show password"}>
@@ -196,7 +215,9 @@ export default function ChangePassword() {
                     </div>
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">Confirm new password <span className="text-red-500">*</span></label>
+                    <label className="mb-2 block text-[11px] font-semibold uppercase tracking-[0.16em] text-gray-600">
+                      Confirm new password <span className="text-red-500">*</span>
+                    </label>
                     <div className="relative">
                       <input
                         type={showConfirm ? "text" : "password"}
@@ -204,7 +225,7 @@ export default function ChangePassword() {
                         onChange={(e) => setConfirmPassword(e.target.value)}
                         placeholder="Re-enter new password"
                         minLength={6}
-                        className="w-full px-4 py-2 pr-10 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
+                        className="w-full rounded-sm border border-gray-300 bg-white px-3 py-2.5 pr-10 text-sm text-gray-900 outline-none transition-all placeholder:text-gray-400 focus:border-gray-400 focus:ring-2 focus:ring-gray-100"
                         required
                       />
                       <button type="button" onClick={() => setShowConfirm((s) => !s)} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-700 p-1" tabIndex={-1} aria-label={showConfirm ? "Hide password" : "Show password"}>
@@ -212,18 +233,18 @@ export default function ChangePassword() {
                       </button>
                     </div>
                   </div>
-                  <div className="flex gap-3 pt-4">
+                  <div className="flex flex-wrap gap-3 border-t border-gray-200 pt-4">
                     <button
                       type="button"
                       onClick={() => setStep("email")}
-                      className="px-6 py-3 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50"
+                      className="rounded-sm border border-gray-300 px-5 py-2.5 text-sm font-medium text-gray-700 transition-colors hover:bg-gray-50"
                     >
                       Use different email
                     </button>
                     <button
                       type="submit"
                       disabled={resetting}
-                      className="bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white font-medium px-8 py-3 rounded-lg transition-colors"
+                      className="inline-flex min-w-40 items-center justify-center rounded-sm bg-blue-600 px-6 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60"
                     >
                       {resetting ? "Updating…" : "Change password"}
                     </button>

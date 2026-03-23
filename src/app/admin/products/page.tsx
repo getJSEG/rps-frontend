@@ -391,7 +391,7 @@ export default function AdminProductsPage() {
       {message && (
         <div
           role="alert"
-          className={`rounded-xl border px-4 py-3 text-sm font-medium ${
+          className={`rounded-lg border px-4 py-3 text-sm font-medium ${
             message.type === "success"
               ? "border-emerald-200 bg-emerald-50 text-emerald-900"
               : "border-rose-200 bg-rose-50 text-rose-900"
@@ -401,16 +401,16 @@ export default function AdminProductsPage() {
         </div>
       )}
 
-      <div className="overflow-hidden rounded-2xl border border-slate-200/80 bg-white shadow-sm shadow-slate-900/5">
+      <div className="overflow-hidden rounded-xl border border-slate-200/60 bg-white shadow-sm shadow-slate-900/5">
         <div className="flex flex-wrap gap-2 border-b border-slate-100 bg-slate-50/80 px-4 py-4 sm:px-6">
           {(["products", "categories", "subcategories"] as Tab[]).map((tab) => (
             <button
               key={tab}
               type="button"
               onClick={() => setActiveTab(tab)}
-              className={`rounded-full px-4 py-2 text-sm font-medium capitalize transition-colors ${
+              className={`rounded-xl px-4 py-2 text-sm font-medium capitalize transition-colors ${
                 activeTab === tab
-                  ? "bg-slate-900 text-white shadow-sm"
+                  ? "bg-slate-700 text-white shadow-sm"
                   : "bg-white text-slate-600 ring-1 ring-slate-200/80 hover:bg-slate-100 hover:text-slate-900"
               }`}
             >
@@ -432,7 +432,7 @@ export default function AdminProductsPage() {
                   <div className="space-y-6">
                     <form
                       onSubmit={handleProductSubmit}
-                      className="grid grid-cols-1 gap-4 rounded-2xl border border-slate-200/80 bg-slate-50/80 p-5 md:grid-cols-2"
+                      className="grid grid-cols-1 gap-4 rounded-xl border border-slate-200/60 bg-slate-50/80 p-5 md:grid-cols-2"
                     >
                       <h3 className="md:col-span-2 text-base font-semibold text-slate-900">
                         {editingProductId ? "Edit Product" : "Add Product"}
@@ -735,7 +735,7 @@ export default function AdminProductsPage() {
                               <td className="px-4 py-3 text-slate-700">{p.price != null ? `$${p.price}` : "—"}</td>
                               <td className="px-4 py-3">
                                 <span
-                                  className={`inline-flex rounded-full px-2 py-0.5 text-xs font-medium ${
+                                  className={`inline-flex rounded-lg px-2 py-0.5 text-xs font-medium ${
                                     p.is_active ? "bg-emerald-50 text-emerald-800 ring-1 ring-emerald-200/80" : "bg-slate-100 text-slate-600 ring-1 ring-slate-200/80"
                                   }`}
                                 >
@@ -795,7 +795,7 @@ export default function AdminProductsPage() {
                                 onClick={() => loadProducts(pageNum)}
                                 className={`min-w-[2.25rem] rounded-lg border px-3 py-1.5 text-sm font-medium transition ${
                                   productsPage === pageNum
-                                    ? "border-slate-900 bg-slate-900 text-white shadow-sm"
+                                    ? "border-slate-700 bg-slate-700 text-white shadow-sm"
                                     : "border-slate-200 bg-white text-slate-700 shadow-sm hover:bg-slate-50"
                                 }`}
                               >
@@ -822,7 +822,7 @@ export default function AdminProductsPage() {
                   <div className="space-y-6">
                     <form
                       onSubmit={handleCategorySubmit}
-                      className="max-w-md space-y-3 rounded-2xl border border-slate-200/80 bg-slate-50/80 p-5"
+                      className="max-w-md space-y-3 rounded-xl border border-slate-200/60 bg-slate-50/80 p-5"
                     >
                       <h3 className="font-semibold text-slate-900">{editingCategoryId ? "Edit Category" : "Add Category"}</h3>
                       <input
@@ -911,7 +911,7 @@ export default function AdminProductsPage() {
                   <div className="space-y-6">
                     <form
                       onSubmit={handleCategorySubmit}
-                      className="max-w-md space-y-3 rounded-2xl border border-slate-200/80 bg-slate-50/80 p-5"
+                      className="max-w-md space-y-3 rounded-xl border border-slate-200/60 bg-slate-50/80 p-5"
                     >
                       <h3 className="font-semibold text-slate-900">{editingCategoryId ? "Edit Subcategory" : "Add Subcategory"}</h3>
                       <select

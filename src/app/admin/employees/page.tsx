@@ -221,7 +221,7 @@ export default function EmployeesPage() {
 
   return (
     <AdminNavbar title="Employees" subtitle="Team accounts and access">
-      <div className="overflow-hidden rounded-2xl border border-slate-200/80 bg-white shadow-sm shadow-slate-900/5">
+      <div className="overflow-hidden rounded-xl border border-slate-200/60 bg-white shadow-sm shadow-slate-900/5">
         <div className="flex flex-col gap-4 border-b border-slate-100 bg-slate-50/80 px-5 py-5 sm:flex-row sm:items-center sm:justify-between sm:px-6">
           <div>
             <h2 className="text-lg font-semibold text-slate-900">Directory</h2>
@@ -239,7 +239,7 @@ export default function EmployeesPage() {
         {message && (
           <div
             role="alert"
-            className={`mx-5 mt-4 flex flex-wrap items-center justify-between gap-2 rounded-xl border px-4 py-3 text-sm font-medium sm:mx-6 ${
+            className={`mx-5 mt-4 flex flex-wrap items-center justify-between gap-2 rounded-lg border px-4 py-3 text-sm font-medium sm:mx-6 ${
               message.type === "success"
                 ? "border-emerald-200 bg-emerald-50 text-emerald-900"
                 : "border-rose-200 bg-rose-50 text-rose-900"
@@ -315,7 +315,7 @@ export default function EmployeesPage() {
                       </td>
                       <td className="whitespace-nowrap px-4 py-4 sm:px-6">
                         <span
-                          className={`inline-flex rounded-full px-2.5 py-1 text-xs font-medium ring-1 ${
+                          className={`inline-flex rounded-lg px-2.5 py-1 text-xs font-medium ring-1 ${
                             emp.role === "admin"
                               ? "bg-violet-50 text-violet-800 ring-violet-200/80"
                               : "bg-slate-100 text-slate-700 ring-slate-200/80"
@@ -326,7 +326,7 @@ export default function EmployeesPage() {
                       </td>
                       <td className="whitespace-nowrap px-4 py-4 sm:px-6">
                         <span
-                          className={`inline-flex rounded-full px-2.5 py-1 text-xs font-medium ring-1 ${
+                          className={`inline-flex rounded-lg px-2.5 py-1 text-xs font-medium ring-1 ${
                             emp.is_active
                               ? "bg-emerald-50 text-emerald-800 ring-emerald-200/80"
                               : "bg-slate-100 text-slate-600 ring-slate-200/80"
@@ -335,7 +335,7 @@ export default function EmployeesPage() {
                           {emp.is_active ? "Active" : "Inactive"}
                         </span>
                         <span
-                          className={`ml-1 inline-flex rounded-full px-2.5 py-1 text-xs font-medium ring-1 ${
+                          className={`ml-1 inline-flex rounded-lg px-2.5 py-1 text-xs font-medium ring-1 ${
                             emp.is_approved
                               ? "bg-sky-50 text-sky-800 ring-sky-200/80"
                               : "bg-amber-50 text-amber-900 ring-amber-200/80"
@@ -368,7 +368,7 @@ export default function EmployeesPage() {
       {/* Add Modal */}
       {showAddModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 p-4 backdrop-blur-sm">
-          <div className="max-h-[90vh] w-full max-w-md overflow-y-auto rounded-2xl border border-slate-200/80 bg-white p-6 shadow-2xl shadow-slate-900/20">
+          <div className="max-h-[90vh] w-full max-w-md overflow-y-auto rounded-xl border border-slate-200/60 bg-white p-6 shadow-2xl shadow-slate-900/20">
             <h3 className="mb-4 text-lg font-semibold text-slate-900">Add employee</h3>
             <form onSubmit={handleAdd} className="space-y-4">
               <div>
@@ -522,7 +522,7 @@ export default function EmployeesPage() {
       {/* Edit Modal */}
       {showEditModal && selectedEmployee && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 p-4 backdrop-blur-sm">
-          <div className="max-h-[90vh] w-full max-w-md overflow-y-auto rounded-2xl border border-slate-200/80 bg-white p-6 shadow-2xl shadow-slate-900/20">
+          <div className="max-h-[90vh] w-full max-w-md overflow-y-auto rounded-xl border border-slate-200/60 bg-white p-6 shadow-2xl shadow-slate-900/20">
             <h3 className="mb-4 text-lg font-semibold text-slate-900">Edit employee</h3>
             <form onSubmit={handleEdit} className="space-y-4">
               <div>
@@ -706,7 +706,7 @@ export default function EmployeesPage() {
       {/* Delete Confirm */}
       {showDeleteConfirm && selectedEmployee && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 p-4 backdrop-blur-sm">
-          <div className="w-full max-w-sm rounded-2xl border border-slate-200/80 bg-white p-6 shadow-2xl shadow-slate-900/20">
+          <div className="w-full max-w-sm rounded-xl border border-slate-200/60 bg-white p-6 shadow-2xl shadow-slate-900/20">
             <h3 className="mb-2 text-lg font-semibold text-slate-900">Delete employee</h3>
             <p className="mb-5 text-sm text-slate-600">
               Remove <strong className="text-slate-900">{selectedEmployee.full_name}</strong> ({selectedEmployee.email})?
