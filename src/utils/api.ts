@@ -189,6 +189,9 @@ export const authAPI = {
 
 // Users API (profile update for logged-in user / admin / employee)
 export const usersAPI = {
+  getAllAdmin: async () => {
+    return apiCall('/users/admin/all');
+  },
   updateProfile: async (data: { fullName?: string; telephone?: string; newsletter?: boolean }) => {
     return apiCall('/users/profile', {
       method: 'PUT',
