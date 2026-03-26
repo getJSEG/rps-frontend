@@ -29,10 +29,11 @@ function shouldSkipCartApiForPathname(pathname: string): boolean {
   return skipPrefixes.some((prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`));
 }
 
-type NavItem = {
-  label: string;
-  hasDropdown?: boolean;
-  hasNew?: boolean;
+type Category = {
+  id: number;
+  name: string;
+  slug: string;
+  parent_id: number | null;
 };
 
 type NavbarProps = {
@@ -56,7 +57,7 @@ export default function Navbar({ cartCountOverride, skipCartCountFetch = false }
   const effectiveSkipCartCountFetch = skipCartCountFetch || shouldSkipCartApiForPathname(pathname ?? "");
   const [isVisible, setIsVisible] = useState(disableScrollBehavior);
   const lastScrollYRef = useRef(0);
-  const [isDropdownOpen, setIsDropdownOpen] = useState(false);
+  const [openCategoryId, setOpenCategoryId] = useState<number | null>(null);
   const [isUserDropdownOpen, setIsUserDropdownOpen] = useState(false);
   const [isSearchOpen, setIsSearchOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
@@ -77,11 +78,13 @@ export default function Navbar({ cartCountOverride, skipCartCountFetch = false }
   });
   const [loginError, setLoginError] = useState("");
   const [showPassword, setShowPassword] = useState(false);
-  const dropdownRef = useRef<HTMLDivElement>(null);
+  const categoryNavRef = useRef<HTMLDivElement>(null);
   const userDropdownRef = useRef<HTMLDivElement>(null);
   const searchRef = useRef<HTMLDivElement>(null);
+  const categoryCloseTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const didInitialCartFetchRef = useRef(false);
   const effectiveCartCount = typeof cartCountOverride === "number" ? cartCountOverride : cartCount;
+  const [categories, setCategories] = useState<Category[]>([]);
 
   // Cart count from API (JWT or guest X-Guest-Session-Id)
   const updateCartCount = async () => {
@@ -157,6 +160,25 @@ export default function Navbar({ cartCountOverride, skipCartCountFetch = false }
       window.removeEventListener("storage", onStorageChange);
     };
   }, [effectiveSkipCartCountFetch]);
+
+  useEffect(() => {
+    let mounted = true;
+    const loadCategories = async () => {
+      try {
+        const { productsAPI } = await import("../../utils/api");
+        const res = await productsAPI.getCategories();
+        if (!mounted) return;
+        setCategories(Array.isArray(res?.categories) ? res.categories : []);
+      } catch {
+        if (!mounted) return;
+        setCategories([]);
+      }
+    };
+    loadCategories();
+    return () => {
+      mounted = false;
+    };
+  }, []);
 
   // Handle login
   const handleLogin = async () => {
@@ -240,8 +262,8 @@ export default function Navbar({ cartCountOverride, skipCartCountFetch = false }
   // Close dropdown when clicking outside
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
-      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
-        setIsDropdownOpen(false);
+      if (categoryNavRef.current && !categoryNavRef.current.contains(event.target as Node)) {
+        setOpenCategoryId(null);
       }
       if (userDropdownRef.current && !userDropdownRef.current.contains(event.target as Node)) {
         setIsUserDropdownOpen(false);
@@ -251,150 +273,32 @@ export default function Navbar({ cartCountOverride, skipCartCountFetch = false }
       }
     };
 
-    if (isDropdownOpen || isUserDropdownOpen || isSearchOpen) {
+    if (isUserDropdownOpen || isSearchOpen || openCategoryId !== null) {
       document.addEventListener("mousedown", handleClickOutside);
     }
 
     return () => {
       document.removeEventListener("mousedown", handleClickOutside);
     };
-  }, [isDropdownOpen, isUserDropdownOpen, isSearchOpen]);
+  }, [isUserDropdownOpen, isSearchOpen, openCategoryId]);
 
-  const navItems: NavItem[] = [
-    { label: "All Products", hasDropdown: true },
-    { label: "DTF and UV DTF", hasNew: true },
-    { label: "Banners" },
-    { label: "Flags" },
-    { label: "Banner Stands" },
-    { label: "Trade Show" },
-    { label: "Tents" },
-    { label: "Table Throws" },
-    { label: "Rigids" },
-    { label: "Adhesives" },
-    { label: "Wall Art" },
-  ];
-
-  const loggedInNavItems: NavItem[] = [
-    { label: "All Products", hasDropdown: true },
-    // { label: "DTF and UV DTF", hasNew: true },
-    { label: "Banners" },
-    { label: "Flags" },
-    { label: "Banner Stands" },
-    { label: "Trade Show" },
-    { label: "Tents" },
-    // { label: "Table Throws" },
-    // { label: "Rigids" },
-    // { label: "Adhesives" },
-    { label: "Wall Art" },
-    // { label: "Channel Letters" },
-  ];
-
-  // Map category labels to slugs for navigation (navbar + dropdown)
-  const categorySlugMap: { [key: string]: string } = {
-    "Banners": "banners",
-    "Flags": "advertising-flags",
-    "Channel Letters": "channel-letters",
-    "Banner Stands": "banner-stands",
-    "Trade Show": "trade-show-products",
-    "Tents": "custom-event-tents",
-    "Table Throws": "table-throws",
-    "Rigids": "rigid-signs-magnets",
-    "Adhesives": "adhesive-products",
-    "Wall Art": "wall-art",
-    "DTF and UV DTF": "dtf-uv-dtf",
-    "Advertising Flags": "advertising-flags",
-    "Step and Repeat Backdrop": "step-repeat-backdrop",
-    "Real Estate Products": "real-estate-products",
-    "A Frame and Sign Holders": "a-frame-sign-holders",
-    "Signicade A-Frames": "signicade-a-frames",
-    "SEG Products": "seg-products",
-    "Trade Show Products": "trade-show-products",
-    "Custom Event Tents": "custom-event-tents",
-    "Hardware Only": "hardware-only",
-    "13oz Vinyl Banner": "13oz-vinyl-banner",
-    "18oz Blockout Banner": "18oz-blockout-banner",
-    "Backlit Banner": "backlit-banner",
-    "Mesh Banner": "mesh-banner",
-    "Indoor Banner": "indoor-banner",
-    "Pole Banner": "pole-banner",
-    "9oz Fabric Banner": "9oz-fabric-banner",
-    "Blockout Fabric Banner": "blockout-fabric-banner",
-    "Tension Fabric": "tension-fabric",
-    "Hand Banner": "hand-banner",
-    "Wall Murals": "wall-murals",
-    "Adhesive Products": "adhesive-products",
-    "Rigid Signs and Magnets": "rigid-signs-magnets",
-    "Reflective Products": "reflective-products",
-    "Dry Erase Products": "dry-erase-products",
-    "Backlit Film": "backlit-film",
-    "Premium Window Cling": "premium-window-cling",
-    "Posters": "posters",
-    "Styrene": "styrene",
-    "Popup": "popup",
-    "Canvas Roll": "canvas-roll",
-    "Material": "material",
-  };
-
-  const dropdownColumns = [
-    {
-      title: "Signs / Letters",
-      items: [
-        { label: "Channel Letters", hasArrow: true },
-        { label: "Advertising Flags", hasArrow: true },
-        { label: "Banner Stands", hasArrow: true },
-        { label: "Step and Repeat Backdrop", hasArrow: true },
-        { label: "Real Estate Products", hasArrow: true },
-        { label: "A Frame and Sign Holders", hasArrow: true },
-        { label: "Signicade A-Frames", hasArrow: true },
-        { label: "SEG Products", hasNew: true, hasArrow: true },
-        { label: "Trade Show Products", hasArrow: true },
-        { label: "Custom Event Tents", hasNew: true, hasArrow: true },
-        { label: "Table Throws", hasNew: true, hasArrow: true },
-        { label: "Hardware Only", hasArrow: true },
-      ],
-    },
-    {
-      title: "Banners",
-      items: [
-        { label: "13oz Vinyl Banner", hasArrow: true },
-        { label: "18oz Blockout Banner", hasArrow: true },
-        { label: "Backlit Banner", hasArrow: true },
-        { label: "Mesh Banner", hasArrow: true },
-        { label: "Indoor Banner", hasArrow: true },
-        { label: "Pole Banner", hasArrow: true },
-        { label: "9oz Fabric Banner", hasArrow: true },
-        { label: "Blockout Fabric Banner", hasArrow: true },
-        { label: "Tension Fabric", hasArrow: true },
-        { label: "Hand Banner", hasNew: true, hasArrow: true },
-      ],
-    },
-    {
-      title: "Large Format",
-      items: [
-        { label: "Wall Art", hasArrow: true },
-        { label: "Wall Murals", hasNew: true, hasArrow: true },
-        { label: "Adhesive Products", hasArrow: true },
-        { label: "Rigid Signs and Magnets", hasArrow: true },
-        { label: "Reflective Products", hasArrow: true },
-        { label: "Dry Erase Products", hasArrow: true },
-        { label: "DTF and UV DTF", hasNew: true, hasArrow: true },
-        { label: "Backlit Film", hasArrow: true },
-        { label: "Premium Window Cling", hasArrow: true },
-        { label: "Posters", hasArrow: true },
-        { label: "Styrene", hasArrow: true },
-        { label: "Popup", hasArrow: true },
-        { label: "Canvas Roll", hasArrow: true },
-        { label: "Material", hasArrow: true },
-      ],
-    },
-  ];
+  // Keep only the first 9 parent categories (preserve API order = "first created").
+  const parentCategories = categories.filter((c) => c.parent_id == null);
+  const navbarParentCategories = parentCategories.slice(0, 9);
+  const subCategoriesByParent = categories.reduce<Record<number, Category[]>>((acc, c) => {
+    if (c.parent_id != null) {
+      if (!acc[c.parent_id]) acc[c.parent_id] = [];
+      acc[c.parent_id].push(c);
+    }
+    return acc;
+  }, {});
 
   return (
     <>
       <nav
-        className={`fixed top-0 left-0 right-0 nav-bg shadow-md z-50 transition-transform duration-300`}
+        className={`fixed top-0 left-0 right-0 nav-bg border-b border-slate-200 shadow-sm z-50 transition-transform duration-300`}
       >
-        <div className="max-w-full mx-auto px-4 py-3">
+        <div className="max-w-full mx-auto px-4 py-2.5">
           <div className="flex items-center justify-between gap-4">
             {/* Left Section - Logo and White Label */}
             <div className="flex items-center gap-3 shrink-0">
@@ -412,89 +316,101 @@ export default function Navbar({ cartCountOverride, skipCartCountFetch = false }
             </div>
 
             {/* Middle Section - Navigation Links */}
-            <div className="hidden lg:flex items-center gap-4 overflow-x-auto flex-1 justify-center">
-              {(isLoggedIn ? loggedInNavItems : navItems).map((item, index) => (
-                <div
-                  key={index}
-                  className="flex items-center gap-1 whitespace-nowrap relative"
-                  ref={item.hasDropdown ? dropdownRef : null}
+            <div
+              ref={categoryNavRef}
+              className="hidden lg:flex items-center gap-1 flex-1 justify-center"
+            >
+              <div className="flex items-center gap-0.5 whitespace-nowrap relative">
+                <Link
+                  href="/products"
+                  className="text-slate-700 hover:text-slate-900 hover:bg-slate-100 text-sm font-normal transition-colors px-2 py-1 rounded-sm"
                 >
-                  {item.hasDropdown ? (
+                  All Products
+                </Link>
+              </div>
+              {navbarParentCategories.map((category) => {
+                const subcategories = subCategoriesByParent[category.id] || [];
+                const hasDropdown = subcategories.length > 0;
+                const categorySlug = category.slug || category.name.toLowerCase().replace(/\s+/g, "-");
+                return (
+                <div
+                  key={category.id}
+                  className="flex items-center gap-0.5 whitespace-nowrap relative pb-1"
+                  onMouseEnter={() => {
+                    if (!hasDropdown) return;
+                    if (categoryCloseTimeoutRef.current) {
+                      clearTimeout(categoryCloseTimeoutRef.current);
+                      categoryCloseTimeoutRef.current = null;
+                    }
+                    setOpenCategoryId(category.id);
+                  }}
+                  onMouseLeave={() => {
+                    if (!hasDropdown) return;
+                    categoryCloseTimeoutRef.current = setTimeout(() => {
+                      setOpenCategoryId((prev) => (prev === category.id ? null : prev));
+                    }, 120);
+                  }}
+                >
+                  {hasDropdown ? (
                     <>
-                      {item.label === "All Products" ? (
-                        <Link
-                          href="/"
-                          className="text-gray-700 hover:text-gray-900 text-sm font-medium transition-colors flex items-center gap-1"
-                        >
-                          {item.label}
-                          <svg
-                            className="w-4 h-4 text-gray-600"
-                            fill="none"
-                            stroke="currentColor"
-                            viewBox="0 0 24 24"
-                          >
-                            <path
-                              strokeLinecap="round"
-                              strokeLinejoin="round"
-                              strokeWidth={2}
-                              d="M19 9l-7 7-7-7"
-                            />
-                          </svg>
-                        </Link>
-                      ) : (
                     <button
-                      onClick={() => setIsDropdownOpen(!isDropdownOpen)}
-                      onMouseEnter={() => setIsDropdownOpen(true)}
-                      className="text-gray-700 hover:text-gray-900 text-sm font-medium transition-colors flex items-center gap-1"
+                      className="text-slate-700 hover:text-slate-900 hover:bg-slate-100 text-sm font-normal transition-colors flex items-center gap-0.5 px-2 py-1 rounded-sm border border-transparent hover:border-slate-200"
                     >
-                      {item.label}
-                      <svg
-                        className="w-4 h-4 text-gray-600"
-                        fill="none"
-                        stroke="currentColor"
-                        viewBox="0 0 24 24"
-                      >
-                        <path
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                          strokeWidth={2}
-                          d="M19 9l-7 7-7-7"
-                        />
-                      </svg>
+                      {category.name}
                     </button>
-                      )}
+                    {openCategoryId === category.id && (
+                      <div
+                        className="absolute left-0 top-full mt-0 w-max min-w-[170px] max-w-[300px] bg-white border border-slate-300 rounded-sm shadow-lg shadow-slate-900/10 z-50"
+                        onMouseEnter={() => {
+                          if (categoryCloseTimeoutRef.current) {
+                            clearTimeout(categoryCloseTimeoutRef.current);
+                            categoryCloseTimeoutRef.current = null;
+                          }
+                        }}
+                        onMouseLeave={() => setOpenCategoryId((prev) => (prev === category.id ? null : prev))}
+                      >
+                        <ul className="py-1">
+                          {subcategories.map((sub) => (
+                            <li key={sub.id}>
+                              <Link
+                                href={`/products?category=${encodeURIComponent(categorySlug)}&subcategory=${encodeURIComponent(sub.name)}`}
+                                className="block px-3 py-1.5 text-sm font-normal text-slate-700 hover:bg-slate-100 hover:text-slate-900 transition-colors whitespace-nowrap"
+                                onClick={() => setOpenCategoryId(null)}
+                              >
+                                {sub.name}
+                              </Link>
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
                     </>
                   ) : (
                     <Link
-                      href={`/products/${categorySlugMap[item.label] || item.label.toLowerCase().replace(/\s+/g, "-")}`}
-                      className="text-gray-700 hover:text-gray-900 text-sm font-medium transition-colors"
+                      href={`/products/${categorySlug}`}
+                      className="text-slate-700 hover:text-slate-900 hover:bg-slate-100 text-sm font-normal transition-colors px-2 py-1 rounded-sm"
                     >
-                      {item.label}
+                      {category.name}
                     </Link>
                   )}
-                  {item.hasNew && (
-                    <span className="bg-green-500 text-white text-xs px-2 py-0.5 rounded-full">
-                      New
-                    </span>
-                  )}
                 </div>
-              ))}
+              )})}
             </div>
 
             {/* Right Section - Login Form or User Actions */}
             {!isLoggedIn ? (
-              <div className="flex flex-col items-end gap-1 shrink-0">
+              <div className="flex flex-col items-end gap-1.5 shrink-0">
                 {loginError && (
-                  <p className="text-red-600 text-sm" role="alert">
+                  <p className="text-red-600 text-xs font-medium" role="alert">
                     {loginError}
                   </p>
                 )}
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-1.5 rounded-sm border border-slate-200 bg-white/90 p-1">
                   <input
                     type="email"
                     value={email}
                     onChange={(e) => { setEmail(e.target.value); setLoginError(""); }}
-                    className="hidden xl:block w-40 px-3 py-2 bg-gray-100 rounded-lg text-gray-700 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    className="hidden xl:block w-44 px-3 py-1.5 bg-slate-50 border border-slate-200 rounded-sm text-slate-700 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-400"
                     placeholder="Email"
                   />
                   <div className="hidden xl:flex items-center gap-2">
@@ -503,13 +419,13 @@ export default function Navbar({ cartCountOverride, skipCartCountFetch = false }
                         type={showPassword ? "text" : "password"}
                         value={password}
                         onChange={(e) => { setPassword(e.target.value); setLoginError(""); }}
-                        className="w-32 pl-3 pr-9 py-2 bg-gray-100 rounded-lg text-gray-700 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        className="w-36 pl-3 pr-9 py-1.5 bg-slate-50 border border-slate-200 rounded-sm text-slate-700 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-400"
                         placeholder="Password"
                       />
                       <button
                         type="button"
                         onClick={() => setShowPassword((s) => !s)}
-                        className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-700 p-0.5"
+                        className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-700 p-0.5"
                         tabIndex={-1}
                         aria-label={showPassword ? "Hide password" : "Show password"}
                       >
@@ -520,22 +436,16 @@ export default function Navbar({ cartCountOverride, skipCartCountFetch = false }
                         )}
                       </button>
                     </div>
-                    <a
-                      href="#"
-                      className="text-[#0B6BCB] hover:text-[#0B6BCB] text-sm whitespace-nowrap"
-                    >
-                      Forgot?
-                    </a>
                   </div>
                   <button
                     onClick={handleLogin}
-                    className="bg-[#0B6BCB] hover:bg-[#0B6BCB] text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors whitespace-nowrap"
+                    className="bg-[#0B6BCB] hover:bg-blue-700 text-white px-4 py-1.5 rounded-sm text-sm font-semibold transition-colors whitespace-nowrap border border-[#0B6BCB]"
                   >
                     Sign In
                   </button>
                   <a
                     href="/register"
-                    className="bg-red-500 hover:bg-red-600 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors whitespace-nowrap inline-block text-center"
+                    className="bg-red-500 hover:bg-red-600 text-white px-4 py-1.5 rounded-sm text-sm font-semibold transition-colors whitespace-nowrap inline-block text-center border border-red-500"
                   >
                     Register
                   </a>
@@ -709,120 +619,6 @@ export default function Navbar({ cartCountOverride, skipCartCountFetch = false }
         </div>
       </nav>
 
-      {/* Dropdown Menu */}
-      {isDropdownOpen && (
-        <div
-          ref={dropdownRef}
-          className="fixed top-[60px] left-0 right-0 bg-white shadow-lg z-40 border-t border-gray-200"
-          onMouseLeave={() => setIsDropdownOpen(false)}
-        >
-          <div className="max-w-7xl mx-auto px-8 py-8">
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-              {dropdownColumns.map((column, colIndex) => (
-                <div key={colIndex}>
-                  <h3 className="text-lg font-bold text-gray-900 mb-4">
-                    {column.title}
-                  </h3>
-                  <ul className="space-y-2">
-                    {column.items.map((item: any, itemIndex) => {
-                      // Handle nested subcategories (like Indoor / Outdoor Displays)
-                      if (item.isSubcategory && item.subItems) {
-                        return (
-                          <li key={itemIndex} className="space-y-2">
-                            <div className="text-sm font-bold text-gray-900 py-1">
-                              {item.label}
-                            </div>
-                            <ul className="pl-4 space-y-1.5">
-                              {item.subItems.map((subItem: any, subIndex: number) => {
-                                const subSlug = categorySlugMap[subItem.label] || subItem.label.toLowerCase().replace(/\s+/g, '-');
-                                const subHref = subItem.label === "Material" ? "/material" : 
-                                               subItem.label === "Products detail" ? "/products/product-detail" :
-                                               `/products/${subSlug}`;
-                                
-                                return (
-                                  <li key={subIndex}>
-                                    <Link
-                                      href={subHref}
-                                      className="flex items-center justify-between text-gray-600 hover:text-gray-900 text-sm py-1 group"
-                                    >
-                                      <span className="flex items-center gap-2">
-                                        {subItem.label}
-                                        {subItem.hasNew && (
-                                          <span className="bg-green-500 text-white text-xs px-2 py-0.5 rounded-full">
-                                            New
-                                          </span>
-                                        )}
-                                      </span>
-                                      {subItem.hasArrow && (
-                                        <svg
-                                          className="w-4 h-4 text-gray-400 group-hover:text-gray-600"
-                                          fill="none"
-                                          stroke="currentColor"
-                                          viewBox="0 0 24 24"
-                                        >
-                                          <path
-                                            strokeLinecap="round"
-                                            strokeLinejoin="round"
-                                            strokeWidth={2}
-                                            d="M9 5l7 7-7 7"
-                                          />
-                                        </svg>
-                                      )}
-                                    </Link>
-                                  </li>
-                                );
-                              })}
-                            </ul>
-                          </li>
-                        );
-                      }
-                      
-                      // Generate href for main category items
-                      const slug = categorySlugMap[item.label] || item.label.toLowerCase().replace(/\s+/g, '-');
-                      let href = item.label === "Material" ? "/material" : 
-                                item.label === "Products detail" ? "/products/product-detail" :
-                                `/products/${slug}`;
-                      
-                      return (
-                      <li key={itemIndex}>
-                        <Link
-                            href={href}
-                          className="flex items-center justify-between text-gray-600 hover:text-gray-900 text-sm py-1 group"
-                        >
-                          <span className="flex items-center gap-2">
-                            {item.label}
-                              {(item as any).hasNew && (
-                              <span className="bg-green-500 text-white text-xs px-2 py-0.5 rounded-full">
-                                New
-                              </span>
-                            )}
-                          </span>
-                          {item.hasArrow && (
-                            <svg
-                              className="w-4 h-4 text-gray-400 group-hover:text-gray-600"
-                              fill="none"
-                              stroke="currentColor"
-                              viewBox="0 0 24 24"
-                            >
-                              <path
-                                strokeLinecap="round"
-                                strokeLinejoin="round"
-                                strokeWidth={2}
-                                d="M9 5l7 7-7 7"
-                              />
-                            </svg>
-                          )}
-                        </Link>
-                      </li>
-                      );
-                    })}
-                  </ul>
-                </div>
-              ))}
-            </div>
-          </div>
-        </div>
-      )}
     </>
   );
 }
