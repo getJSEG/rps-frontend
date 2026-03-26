@@ -843,9 +843,9 @@ function ProductDetailContent() {
             <div className="mb-6 p-4 border border-gray-200 rounded-lg">
               <h2 className="text-lg font-semibold text-gray-900 mb-4">Job Details</h2>
               {/* grid grid-cols-4 gap-2 mb-4-4 */}
-              <div className="flex flex-wrap gap-4">
+              <div className="flex flex-wrap gap-4 items-end">
                 {/* Job Name */}
-                <div className="w-8/16">
+                <div className="min-w-0 flex-1">
                   <label className="block text-sm font-medium text-gray-700 mb-2">
                     Job Name/PO# <span className="text-red-500">(Required)</span>
                   </label>
@@ -859,7 +859,7 @@ function ProductDetailContent() {
                 </div>
 
                 {/* qty per job */}
-                <div className="w-3/16">
+                <div className="w-28 shrink-0">
                   <label className="block text-sm font-medium text-gray-700 mb-2">Qty</label>
                   <input
                     type="number"
@@ -870,10 +870,13 @@ function ProductDetailContent() {
                   />
                 </div>
 
-                {/* prices per job */}
-                <div className="w-2/16">
+                {/* prices per job — width grows with formatted amount */}
+                <div className="shrink-0">
                   <label className="block text-sm font-medium text-gray-700 mb-2">Price</label>
-                  <div className="px-3 py-2 text-gray-500 border-gray-300">
+                  <div
+                    className="inline-flex max-w-full min-h-[42px] items-center overflow-x-auto whitespace-nowrap rounded-lg border border-gray-300 bg-gray-50 px-3 py-2 text-black tabular-nums [scrollbar-width:thin]"
+                    aria-readonly="true"
+                  >
                     ${subtotal.toFixed(2)}
                   </div>
                 </div>
