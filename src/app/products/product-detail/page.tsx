@@ -1447,7 +1447,7 @@ function ProductDetailContent() {
                   <div
                     key={relatedProduct.id}
                     onClick={handleSelectProduct}
-                    className="bg-white rounded-lg shadow-md overflow-hidden hover:shadow-lg group border-2 border-gray-200 hover:border-blue-500 h-full cursor-pointer transition-all"
+                    className="bg-white rounded-lg shadow-md overflow-hidden hover:shadow-lg group border-2 border-gray-200 hover:border-gray-300 h-full cursor-pointer transition-all"
                   >
                     {/* Product Image */}
                     <div className="w-full h-48 bg-gray-200 relative overflow-hidden">

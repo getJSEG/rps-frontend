@@ -1,41 +1,6 @@
 "use client";
 
-import Image from "next/image";
-
 export default function Footer() {
-  const handleCopyAddress = (address: string) => {
-    navigator.clipboard.writeText(address);
-    // You could add a toast notification here
-  };
-
-  const handleGoTo = (address: string) => {
-    const encodedAddress = encodeURIComponent(address);
-    window.open(`https://www.google.com/maps/search/?api=1&query=${encodedAddress}`, '_blank');
-  };
-
-  const storePickups = [
-    {
-      name: "B2Sign Headquarters",
-      address: "462 Humane Way, Pomona, CA 91766",
-      hours: "8:00am - 5:00pm PST",
-    },
-    {
-      name: "Sign Department",
-      address: "1260 E Grand Ave, Pomona, CA 91766",
-      hours: "8:30am - 5:30pm PST",
-    },
-    {
-      name: "TX Print Facility",
-      address: "3422 W Kingsley Rd, Garland, TX 75041",
-      hours: "2:00pm - 4:30pm CST",
-    },
-    {
-      name: "PA Print Facility",
-      address: "9250 Ashton Rd, Philadelphia, PA 19114",
-      hours: "2:00pm - 4:30pm EST",
-    },
-  ];
-
   const navigationLinks = [
     "About Us",
     "Contact Us",
@@ -46,148 +11,129 @@ export default function Footer() {
   ];
 
   return (
-    <footer className="bg-[#3f3f3f] text-white">
-      {/* Yellow Top Border */}
-      <div className="bg-[#f47b23] h-1"></div>
-      {/* Main Content Area */}
-      <div className="max-w-4xl mx-auto px-4 py-6">
-        <div className="grid grid-cols-1 md:grid-cols-[280px_180px_220px] justify-center items-start gap-5 mb-3">
-          {/* Column 1: Store Pickup */}
-          {/* <div>
-            <h3 className="text-xl font-bold mb-6">Store Pickup</h3>
-            <div className="space-y-6">
-              {storePickups.map((store, index) => (
-                <div key={index}>
-                  <div className="flex justify-between items-start gap-4">
-                    <div className="flex-1">
-                      <h4 className="text-sm text-gray-300 mb-1">{store.name}</h4>
-                      <p className="text-sm text-gray-300 mb-1">{store.address}</p>
-                      <p className="text-sm text-gray-300">Pick Up Hours: {store.hours}</p>
-                    </div>
-                    <div className="flex flex-col gap-2">
-                      <button
-                        onClick={() => handleCopyAddress(store.address)}
-                        className="bg-[#656565] border border-gray-400 hover:bg-black text- px-2 py-2 rounded-lg text-sm transition-colors whitespace-nowrap"
-                      >
-                        Copy Address
-                      </button>
-                      <button
-                        onClick={() => handleGoTo(store.address)}
-                        className="bg-[#656565] border border-gray-400 hover:bg-black  px-4 py-2 rounded-lg text-sm transition-colors flex items-center justify-between whitespace-nowrap w-full"
-                      >
-                        Go To
-                        <Image
-                          src="/google-map-icon.svg"
-                          alt="Map icon"
-                          width={16}
-                          height={16}
-                          className="w-4 h-4"
-                        />
-                      </button>
-                    </div>
-                  </div>
-                  {index < storePickups.length - 1 && (
-                    <div className="border-t border-dashed border-gray-400 mt-6"></div>
-                  )}
+    <footer className="relative w-full min-w-0 bg-[#3f3f3f] text-white">
+      {/* Full-width accent */}
+      <div
+        className="h-1 w-full bg-gradient-to-r from-[#d96a18] via-[#f47b23] to-[#d96a18]"
+        aria-hidden
+      />
+
+      {/* Main band — edge-to-edge with responsive gutters */}
+      <div className="relative w-full border-b border-white/5 bg-gradient-to-b from-[#434343] to-[#3a3a3a]">
+        <div className="w-full px-6 py-6 sm:px-10 sm:py-7 md:px-12 md:py-8 lg:px-16 xl:px-20 2xl:px-24">
+          <div className="mx-auto grid w-full max-w-none grid-cols-1 gap-6 md:grid-cols-3 md:gap-8 lg:gap-12 xl:gap-16 md:items-start">
+            <section className="flex min-w-0 flex-col">
+              <h3 className="mb-3 border-b border-[#f47b23]/35 pb-2 text-base font-semibold tracking-wide text-white">
+                Contact
+              </h3>
+              <div className="flex flex-col gap-4">
+                <div className="space-y-1">
+                  <p className="text-xs font-medium text-gray-100 sm:text-sm">
+                    Customer Service Office Hour
+                  </p>
+                  <p className="text-xs leading-snug text-gray-300 sm:text-sm">
+                    Mon - Fri: 8:00am - 5:00pm PST
+                  </p>
                 </div>
-              ))}
-            </div>
-          </div> */}
 
-          {/* Column 2: Contact */}
-          <div>
-            <h3 className="text-base font-semibold tracking-wide leading-none text-white">Contact</h3>
-            <div className="mt-3 space-y-4">
-              <div>
-                <p className="text-xs text-gray-200/90 mb-1.5">
-                  Customer Service Office Hour:
-                </p>
-                <p className="text-xs text-gray-300 mb-3">
-                  Mon - Fri: 8:00am - 5:00pm PST
-                </p>
-                <div className="border-t border-dashed border-gray-500/70"></div>
-              </div>
-
-              <div>
-                <p className="text-xs text-gray-200/90 mb-2">Toll Free: 1(888)739-8501</p>
-                <div className="flex gap-2">
-                  <button className="bg-[#0B6BCB] hover:bg-blue-700 text-white px-3 py-1.5 rounded-sm text-xs font-medium transition-colors border border-[#0B6BCB] flex items-center gap-1.5">
-                    <svg
-                      className="w-3.5 h-3.5"
-                      fill="none"
-                      stroke="currentColor"
-                      viewBox="0 0 24 24"
+                <div className="space-y-2.5 border-t border-dashed border-gray-500/50 pt-3">
+                  <p className="text-xs font-medium text-gray-100 sm:text-sm">
+                    Toll Free:{" "}
+                    <span className="font-normal text-gray-200">
+                      1 (888) 739-8501
+                    </span>
+                  </p>
+                  <div className="flex flex-wrap gap-2">
+                    <button
+                      type="button"
+                      className="inline-flex items-center gap-1.5 rounded-md bg-[#0B6BCB] px-3 py-1.5 text-xs font-medium text-white shadow-sm transition-colors hover:bg-blue-600 sm:text-sm"
                     >
-                      <path
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        strokeWidth={2}
-                        d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z"
-                      />
-                    </svg>
-                    Call
-                  </button>
-                  <button className="bg-[#595959] border border-gray-400/80 hover:bg-[#4e4e4e] px-3 py-1.5 rounded-sm text-xs transition-colors">
-                    Request Callback
-                  </button>
+                      <svg
+                        className="h-3.5 w-3.5 shrink-0"
+                        fill="none"
+                        stroke="currentColor"
+                        viewBox="0 0 24 24"
+                      >
+                        <path
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          strokeWidth={2}
+                          d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z"
+                        />
+                      </svg>
+                      Call
+                    </button>
+                    <button
+                      type="button"
+                      className="rounded-md border border-gray-400/70 bg-[#4a4a4a] px-3 py-1.5 text-xs text-gray-100 shadow-sm transition-colors hover:bg-[#555] sm:text-sm"
+                    >
+                      Request Callback
+                    </button>
+                  </div>
                 </div>
-                <div className="border-t border-dashed border-gray-500/70 mt-4"></div>
               </div>
+            </section>
 
-              <div>
-                {/* <p className="text-sm text-gray-400 mb-4">
-                  <span className="inline-block w-2 h-2 bg-gray-500 rounded-full mr-2"></span>
-                  Live Chat: • Offline
-                </p> */}
-                {/* <div className="border-t border-dashed border-gray-400"></div> */}
-              </div>
-
-            </div>
-          </div>
-
-          {/* Column 3: Product Catalog */}
-          <div>
-            <h3 className="text-base font-semibold tracking-wide leading-none text-white">Product Catalog</h3>
-            <div className="mt-3">
-              <button className="w-full max-w-[160px] bg-[#595959] border border-gray-400/80 hover:bg-[#4e4e4e] py-1.5 rounded-sm text-xs transition-colors">
+            <section className="flex min-w-0 flex-col">
+              <h3 className="mb-3 border-b border-[#f47b23]/35 pb-2 text-base font-semibold tracking-wide text-white">
+                Product Catalog
+              </h3>
+              <button
+                type="button"
+                className="inline-flex w-full max-w-xs items-center justify-center rounded-md border border-gray-400/70 bg-[#4a4a4a] px-4 py-1.5 text-xs font-medium text-gray-100 shadow-sm transition-colors hover:bg-[#555] sm:w-auto sm:min-w-[160px] sm:text-sm"
+              >
                 Download PDF
               </button>
-            </div>
+            </section>
+
+            <section className="flex min-w-0 flex-col">
+              <h3 className="mb-3 border-b border-[#f47b23]/35 pb-2 text-base font-semibold tracking-wide text-white">
+                Email
+              </h3>
+              <a
+                href="mailto:info@resourcefulDigital.com"
+                className="break-all text-xs leading-snug text-gray-200 underline-offset-2 transition-colors hover:text-white hover:underline sm:text-sm"
+              >
+                info@resourcefulDigital.com
+              </a>
+            </section>
           </div>
 
-          {/* Column 4: Email */}
-          <div>
-            <h3 className="text-base font-semibold tracking-wide leading-none text-white">Email</h3>
-            <p className="mt-3 text-xs text-gray-300 break-all">info@resourcefulDigital.com</p>
-          </div>
+          <nav
+            className="mx-auto mt-6 w-full max-w-none border-t border-dashed border-gray-500/45 pt-5 md:mt-7 md:pt-6"
+            aria-label="Footer links"
+          >
+            <ul className="flex flex-wrap items-center justify-center gap-x-5 gap-y-2 sm:gap-x-7 md:gap-x-9">
+              {navigationLinks.map((link, index) => (
+                <li key={index}>
+                  <a
+                    href="#"
+                    className="text-xs text-gray-300 transition-colors hover:text-[#f47b23] sm:text-sm"
+                  >
+                    {link}
+                  </a>
+                </li>
+              ))}
+            </ul>
+          </nav>
         </div>
-        <div className="flex flex-wrap justify-center gap-3 md:gap-4 pt-0.5">
-            {navigationLinks.map((link, index) => (
-              <a
-                key={index}
-                href="#"
-                className="text-gray-300/80 hover:text-white text-xs transition-colors"
-              >
-                {link}
-              </a>
-            ))}
-          </div>
       </div>
 
-      {/* Footer Bottom */}
-      <div className="bg-[#232323] border-t border-gray-600/70">
-        <div className="max-w-5xl mx-auto px-4 py-2.5">
-         
-        
-
-          {/* Copyright and Terms */}
-          <div className="text-center flex flex-wrap justify-center items-center gap-x-4 gap-y-1">
-            <p className="text-xs text-gray-400">
-              Copyright © 2026-2027 Resourceful Print Solutions, Inc. All Rights Reserved.
+      {/* Full-width bottom bar */}
+      <div className="w-full border-t border-gray-600/80 bg-[#1e1e1e]">
+        <div className="w-full px-6 py-2 sm:px-10 md:px-12 lg:px-16 xl:px-20 2xl:px-24">
+          <div className="flex w-full flex-col items-center justify-center gap-1.5 text-center sm:flex-row sm:flex-wrap sm:gap-x-5 sm:gap-y-0">
+            <p className="text-[11px] leading-snug text-gray-500 sm:text-xs">
+              Copyright © 2026-2027 Resourceful Print Solutions, Inc. All Rights
+              Reserved.
             </p>
+            <span
+              className="hidden h-3 w-px shrink-0 bg-gray-600 sm:block"
+              aria-hidden
+            />
             <a
               href="#"
-              className="text-blue-300 hover:text-blue-200 text-xs transition-colors"
+              className="text-[11px] text-blue-400/90 transition-colors hover:text-blue-300 sm:text-xs"
             >
               Terms & Conditions
             </a>
@@ -197,4 +143,3 @@ export default function Footer() {
     </footer>
   );
 }
-
