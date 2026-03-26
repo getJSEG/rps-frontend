@@ -4,6 +4,7 @@ import { useRouter, usePathname } from "next/navigation";
 import Link from "next/link";
 import Image from "next/image";
 import { ReactNode } from "react";
+import { FiLogOut } from "react-icons/fi";
 
 interface AdminNavbarProps {
   children: ReactNode;
@@ -172,16 +173,9 @@ export default function AdminNavbar({
             <button
               type="button"
               onClick={handleLogout}
-              className="inline-flex h-10 items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 text-sm font-medium text-slate-700 shadow-sm transition hover:border-slate-300 hover:bg-slate-50"
+              className="inline-flex h-10 items-center gap-2 rounded-xl border border-red-200 bg-white px-4 text-sm font-medium text-red-700 shadow-sm transition hover:border-red-300 hover:bg-red-50"
             >
-              <svg className="h-4 w-4 text-slate-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"
-                />
-              </svg>
+              <FiLogOut className="h-4 w-4 text-red-500" />
               Log out
             </button>
           </div>

@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import AdminNavbar from "../../components/AdminNavbar";
 import { canAccessAdminPanel, isAuthenticated } from "../../../utils/roles";
 import { employeesAPI } from "../../../utils/api";
+import { FiEdit, FiTrash2 } from "react-icons/fi";
 
 interface Employee {
   id: number;
@@ -315,7 +316,7 @@ export default function EmployeesPage() {
                       </td>
                       <td className="whitespace-nowrap px-4 py-4 sm:px-6">
                         <span
-                          className={`inline-flex rounded-lg px-2.5 py-1 text-xs font-medium ring-1 ${
+                          className={`inline-flex rounded-lg px-3 py-1 text-xs font-medium ring-1 ${
                             emp.role === "admin"
                               ? "bg-violet-50 text-violet-800 ring-violet-200/80"
                               : "bg-slate-100 text-slate-700 ring-slate-200/80"
@@ -325,37 +326,47 @@ export default function EmployeesPage() {
                         </span>
                       </td>
                       <td className="whitespace-nowrap px-4 py-4 sm:px-6">
-                        <span
-                          className={`inline-flex rounded-lg px-2.5 py-1 text-xs font-medium ring-1 ${
-                            emp.is_active
-                              ? "bg-emerald-50 text-emerald-800 ring-emerald-200/80"
-                              : "bg-slate-100 text-slate-600 ring-slate-200/80"
-                          }`}
-                        >
-                          {emp.is_active ? "Active" : "Inactive"}
-                        </span>
-                        <span
-                          className={`ml-1 inline-flex rounded-lg px-2.5 py-1 text-xs font-medium ring-1 ${
-                            emp.is_approved
-                              ? "bg-sky-50 text-sky-800 ring-sky-200/80"
-                              : "bg-amber-50 text-amber-900 ring-amber-200/80"
-                          }`}
-                        >
-                          {emp.is_approved ? "Approved" : "Pending"}
-                        </span>
+                        <div className="flex items-center gap-3">
+                          <span
+                            className={`inline-flex rounded-lg px-3 py-1 text-xs font-medium ring-1 ${
+                              emp.is_active
+                                ? "bg-emerald-50 text-emerald-800 ring-emerald-200/80"
+                                : "bg-slate-100 text-slate-600 ring-slate-200/80"
+                            }`}
+                          >
+                            {emp.is_active ? "Active" : "Inactive"}
+                          </span>
+                          <span
+                            className={`inline-flex rounded-lg px-3 py-1 text-xs font-medium ring-1 ${
+                              emp.is_approved
+                                ? "bg-sky-50 text-sky-800 ring-sky-200/80"
+                                : "bg-amber-50 text-amber-900 ring-amber-200/80"
+                            }`}
+                          >
+                            {emp.is_approved ? "Approved" : "Pending"}
+                          </span>
+                        </div>
                       </td>
                       <td className="whitespace-nowrap px-4 py-4 text-slate-600 sm:px-6">{emp.email}</td>
                       <td className="whitespace-nowrap px-4 py-4 text-right sm:px-6" onClick={(e) => e.stopPropagation()}>
-                        <button
-                          type="button"
-                          onClick={() => openEdit(emp)}
-                          className="mr-4 font-medium text-sky-600 hover:text-sky-800"
-                        >
-                          Edit
-                        </button>
-                        <button type="button" onClick={() => openDelete(emp)} className="font-medium text-rose-600 hover:text-rose-800">
-                          Delete
-                        </button>
+                        <div className="flex justify-end items-center gap-3">
+                          <button
+                            type="button"
+                            onClick={() => openEdit(emp)}
+                            className="font-medium text-sky-600 hover:text-sky-800 transition-colors p-1"
+                            title="Edit"
+                          >
+                            <FiEdit size={18} />
+                          </button>
+                          <button 
+                            type="button" 
+                            onClick={() => openDelete(emp)} 
+                            className="font-medium text-rose-600 hover:text-rose-800 transition-colors p-1"
+                            title="Delete"
+                          >
+                            <FiTrash2 size={18} />
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   ))}
@@ -369,7 +380,7 @@ export default function EmployeesPage() {
       {showAddModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 p-4 backdrop-blur-sm">
           <div className="max-h-[90vh] w-full max-w-md overflow-y-auto rounded-xl border border-slate-200/60 bg-white p-6 shadow-2xl shadow-slate-900/20">
-            <h3 className="mb-4 text-lg font-semibold text-slate-900">Add employee</h3>
+            <h3 className="mb-4 text-lg font-semibold text-slate-500">Add employee</h3>
             <form onSubmit={handleAdd} className="space-y-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Full Name *</label>

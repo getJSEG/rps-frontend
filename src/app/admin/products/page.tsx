@@ -667,22 +667,34 @@ export default function AdminProductsPage() {
                         className={inputClass}
                       />
                       <div className="flex items-center gap-6">
-                        <label className="flex cursor-pointer items-center gap-2 text-sm text-slate-700">
-                          <input
-                            type="checkbox"
-                            className="rounded border-slate-300 text-slate-900 focus:ring-sky-400/40"
-                            checked={prodIsNew}
-                            onChange={(e) => setProdIsNew(e.target.checked)}
-                          />
+                        <label className="group flex cursor-pointer items-center gap-2 text-sm text-slate-700 transition-colors">
+                          <div className="relative flex items-center justify-center">
+                            <input
+                              type="checkbox"
+                              className="peer sr-only"
+                              checked={prodIsNew}
+                              onChange={(e) => setProdIsNew(e.target.checked)}
+                            />
+                            <div className="h-4 w-4 rounded border border-slate-300 bg-white transition-all peer-checked:border-sky-500 peer-checked:bg-sky-500 group-hover:border-sky-400"></div>
+                            <svg className="absolute h-3 w-3 text-white opacity-0 transition-all peer-checked:opacity-100 peer-checked:scale-100 scale-50 pointer-events-none" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
+                              <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                            </svg>
+                          </div>
                           New
                         </label>
-                        <label className="flex cursor-pointer items-center gap-2 text-sm text-slate-700">
-                          <input
-                            type="checkbox"
-                            className="rounded border-slate-300 text-slate-900 focus:ring-sky-400/40"
-                            checked={prodIsActive}
-                            onChange={(e) => setProdIsActive(e.target.checked)}
-                          />
+                        <label className="group flex cursor-pointer items-center gap-2 text-sm text-slate-700 transition-colors">
+                          <div className="relative flex items-center justify-center">
+                            <input
+                              type="checkbox"
+                              className="peer sr-only"
+                              checked={prodIsActive}
+                              onChange={(e) => setProdIsActive(e.target.checked)}
+                            />
+                            <div className="h-4 w-4 rounded border border-slate-300 bg-white transition-all peer-checked:border-sky-500 peer-checked:bg-sky-500 group-hover:border-sky-400"></div>
+                            <svg className="absolute h-3 w-3 text-white opacity-0 transition-all peer-checked:opacity-100 peer-checked:scale-100 scale-50 pointer-events-none" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
+                              <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                            </svg>
+                          </div>
                           Active
                         </label>
                       </div>
