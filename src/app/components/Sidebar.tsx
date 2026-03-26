@@ -173,10 +173,10 @@ export default function Sidebar({ onCategoryClick, showAllProductsButton = true 
                                     <button
                                       type="button"
                                       onClick={() => handleCategoryClick(child.slug)}
-                                      className={`group w-full flex items-center justify-between gap-1.5 py-1 pl-1.5 pr-1 text-left text-sm leading-tight border-l-2 rounded-r-md transition-colors ${
+                                      className={`group w-full flex items-center justify-between gap-1.5 py-1 pl-1.5 pr-1 text-left text-sm leading-tight rounded-md transition-colors ${
                                         isSelected
-                                          ? "border-blue-600 text-blue-800 font-medium bg-blue-50/50"
-                                          : "border-transparent text-gray-600 hover:text-gray-900 hover:bg-gray-50/80"
+                                          ? "text-blue-800 font-medium bg-blue-50/50"
+                                          : "text-gray-600 hover:text-gray-900 hover:bg-gray-50/80"
                                       }`}
                                     >
                                       <span className="truncate">{child.name}</span>
@@ -201,10 +201,10 @@ export default function Sidebar({ onCategoryClick, showAllProductsButton = true 
                       <button
                         type="button"
                         onClick={() => handleCategoryClick(parent.slug)}
-                        className={`flex w-full items-center justify-between gap-2 py-1.5 px-2 text-left text-sm rounded-md transition-colors border-l-2 ${
+                        className={`flex w-full items-center justify-between gap-2 py-1.5 px-2 text-left text-sm rounded-md transition-colors ${
                           parentSelected
-                            ? "border-blue-600 bg-blue-50/70 text-blue-800 font-medium"
-                            : "border-transparent text-gray-800 hover:bg-gray-50/90"
+                            ? "bg-blue-50/70 text-blue-800 font-medium"
+                            : "text-gray-800 hover:bg-gray-50/90"
                         }`}
                       >
                         <span className="truncate font-normal">{parent.name}</span>
