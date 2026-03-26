@@ -5,7 +5,7 @@ import { useRouter, useParams } from "next/navigation";
 import Link from "next/link";
 import AdminNavbar from "../../../components/AdminNavbar";
 import { canAccessAdminPanel, isAuthenticated } from "../../../../utils/roles";
-import { employeesAPI } from "../../../../utils/api";
+import { employeesAPI, getProductImageUrl } from "../../../../utils/api";
 
 interface Employee {
   id: number;
@@ -22,13 +22,11 @@ interface Employee {
 }
 
 const getImageSrc = (path: string | null | undefined): string => {
-  if (!path) return "";
-  if (path.startsWith("http")) return path;
-  const base =
-    typeof window !== "undefined"
-      ? (process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000/api").replace(/\/api\/?$/, "")
-      : "http://localhost:5000";
-  return `${base}${path.startsWith("/") ? path : "/" + path}`;
+  if (!path || typeof path !== "string") return "";
+  const p = path.trim();
+  if (!p) return "";
+  if (p.startsWith("uploads/")) return getProductImageUrl(`/${p}`);
+  return getProductImageUrl(p);
 };
 
 function splitName(fullName: string): { firstName: string; lastName: string } {
@@ -56,8 +54,6 @@ export default function EmployeeDetailPage() {
   const [employee, setEmployee] = useState<Employee | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [onboardingRequired, setOnboardingRequired] = useState(true);
-  const [onboardingProgress] = useState(35);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -257,24 +253,6 @@ export default function EmployeeDetailPage() {
                   </span>
                 </div>
               </div>
-              <div className="flex items-center justify-between">
-                <label className="text-sm font-medium text-slate-700">Onboarding required</label>
-                <button
-                  type="button"
-                  role="switch"
-                  aria-checked={onboardingRequired}
-                  onClick={() => setOnboardingRequired((v) => !v)}
-                  className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors focus:outline-none focus:ring-2 focus:ring-sky-400 focus:ring-offset-2 ${
-                    onboardingRequired ? "bg-slate-900" : "bg-slate-200"
-                  }`}
-                >
-                  <span
-                    className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition ${
-                      onboardingRequired ? "translate-x-5" : "translate-x-1"
-                    }`}
-                  />
-                </button>
-              </div>
               <div>
                 <label className="mb-2 block text-sm font-medium text-slate-600">Current status</label>
                 <div className="flex flex-wrap items-center gap-3">
@@ -287,20 +265,8 @@ export default function EmployeeDetailPage() {
                   >
                     {statusLabel}
                   </span>
-                  <div className="min-w-[120px] flex-1">
-                    <div className="h-2 overflow-hidden rounded-full bg-slate-200">
-                      <div
-                        className="h-full rounded-full bg-emerald-500 transition-all"
-                        style={{ width: `${onboardingProgress}%` }}
-                      />
-                    </div>
-                    <span className="mt-1 block text-xs text-slate-500">{onboardingProgress}%</span>
-                  </div>
                 </div>
               </div>
-              <button type="button" className="text-sm font-medium text-sky-600 hover:text-sky-800">
-                View answers
-              </button>
             </div>
           </div>
       </div>

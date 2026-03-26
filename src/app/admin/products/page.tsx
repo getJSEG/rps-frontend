@@ -6,7 +6,7 @@ import Link from "next/link";
 import Image from "next/image";
 import AdminNavbar from "../../components/AdminNavbar";
 import { canAccessAdminPanel, isAuthenticated } from "../../../utils/roles";
-import { productsAPI } from "../../../utils/api";
+import { getProductImageUrl, productsAPI } from "../../../utils/api";
 import { FiEdit, FiTrash2 } from "react-icons/fi";
 
 type Tab = "products" | "categories" | "subcategories";
@@ -80,6 +80,8 @@ export default function AdminProductsPage() {
   const [prodIsActive, setProdIsActive] = useState(true);
   const [prodProperties, setProdProperties] = useState<ProductProperty[]>([]);
   const descEditorRef = useRef<HTMLDivElement>(null);
+  const productFormRef = useRef<HTMLFormElement>(null);
+  const categoryFormRef = useRef<HTMLFormElement>(null);
   const [editingProductId, setEditingProductId] = useState<number | null>(null);
   const [uploadingImage, setUploadingImage] = useState(false);
   const [deletingProductId, setDeletingProductId] = useState<number | null>(null);
@@ -92,11 +94,8 @@ export default function AdminProductsPage() {
     if (!url || typeof url !== "string") return "";
     const u = url.trim();
     if (!u) return "";
-    if (u.startsWith("/uploads/")) {
-      const base = (typeof window !== "undefined" ? process.env.NEXT_PUBLIC_API_URL : undefined) || "http://localhost:5000/api";
-      return (base.replace(/\/api\/?$/, "") || "http://localhost:5000") + u;
-    }
-    return u;
+    if (u.startsWith("uploads/")) return getProductImageUrl(`/${u}`);
+    return getProductImageUrl(u);
   };
 
   const isValidImageSrc = (url: string | null | undefined) => {
@@ -299,6 +298,9 @@ export default function AdminProductsPage() {
     setCatSlug(c.slug);
     setCatParentId(c.parent_id == null ? "" : String(c.parent_id));
     setCatDescription(c.description || "");
+    setTimeout(() => {
+      categoryFormRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+    }, 0);
   };
 
   const handleCategoryDelete = async (id: number, name: string) => {
@@ -342,6 +344,9 @@ export default function AdminProductsPage() {
     setProdSku(p.sku || "");
     setProdIsNew(p.is_new);
     setProdIsActive(p.is_active);
+    setTimeout(() => {
+      productFormRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+    }, 0);
     setTimeout(() => {
       if (descEditorRef.current) descEditorRef.current.innerHTML = p.description || "";
     }, 0);
@@ -432,6 +437,7 @@ export default function AdminProductsPage() {
                 {activeTab === "products" && (
                   <div className="space-y-6">
                     <form
+                      ref={productFormRef}
                       onSubmit={handleProductSubmit}
                       className="grid grid-cols-1 gap-4 rounded-xl border border-slate-200/60 bg-slate-50/80 p-5 md:grid-cols-2"
                     >
@@ -840,6 +846,7 @@ export default function AdminProductsPage() {
                 {activeTab === "categories" && (
                   <div className="space-y-6">
                     <form
+                      ref={categoryFormRef}
                       onSubmit={handleCategorySubmit}
                       className="max-w-md space-y-3 rounded-xl border border-slate-200/60 bg-slate-50/80 p-5"
                     >
@@ -935,6 +942,7 @@ export default function AdminProductsPage() {
                 {activeTab === "subcategories" && (
                   <div className="space-y-6">
                     <form
+                      ref={categoryFormRef}
                       onSubmit={handleCategorySubmit}
                       className="max-w-md space-y-3 rounded-xl border border-slate-200/60 bg-slate-50/80 p-5"
                     >

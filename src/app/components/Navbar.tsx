@@ -40,6 +40,15 @@ type NavbarProps = {
   skipCartCountFetch?: boolean;
 };
 
+function getDisplayNameFromUser(user: any): string {
+  if (!user || typeof user !== "object") return "";
+  const candidates = [user.fullName, user.full_name, user.name, user.firstName, user.email];
+  for (const value of candidates) {
+    if (typeof value === "string" && value.trim()) return value.trim();
+  }
+  return "";
+}
+
 export default function Navbar({ cartCountOverride, skipCartCountFetch = false }: NavbarProps) {
   const router = useRouter();
   const pathname = usePathname();
@@ -99,9 +108,7 @@ export default function Navbar({ cartCountOverride, skipCartCountFetch = false }
         if (userStr) {
           try {
             const user = JSON.parse(userStr);
-            if (user.email) {
-              setUserName(user.email);
-            }
+            setUserName(getDisplayNameFromUser(user));
           } catch (e) {
             console.error("Error parsing user data:", e);
           }
@@ -624,6 +631,11 @@ export default function Navbar({ cartCountOverride, skipCartCountFetch = false }
                   )}
                 </div>
 
+                {/* Orders - shows cart products (items user added to cart) */}
+                <Link href="/cart" className="text-gray-700 hover:text-gray-900 text-sm font-medium transition-colors">
+                  Orders
+                </Link>
+
                 {/* User Name or Estimate */}
                 {isLoggedIn && userName ? (
                   <span className="text-gray-700 text-sm font-medium">
@@ -634,11 +646,6 @@ export default function Navbar({ cartCountOverride, skipCartCountFetch = false }
                   Estimate
                 </a>
                 )}
-
-                {/* Orders - shows cart products (items user added to cart) */}
-                <Link href="/cart" className="text-gray-700 hover:text-gray-900 text-sm font-medium transition-colors">
-                  Orders
-                </Link>
 
                 {/* User Profile Icon */}
                 <div className="relative" ref={userDropdownRef}>
@@ -653,70 +660,32 @@ export default function Navbar({ cartCountOverride, skipCartCountFetch = false }
 
                   {/* User Dropdown Menu */}
                   {isUserDropdownOpen && (
-                    <div className="absolute -right-14 top-full mt-2 w-110 bg-white rounded-lg shadow-xl border border-gray-200 z-50">
-                      {/* Header */}
-                      <div className="px-6 py-4 border-b border-gray-200">
-                        <div className="flex items-center justify-between">
-                          <h3 className="font-bold text-gray-900">Welcome, Elmer</h3>
+                    <div className="absolute right-0 top-full mt-2 w-max max-w-[92vw] rounded-md border border-slate-300 bg-white shadow-lg shadow-slate-900/10 z-50">
+                      {/* Menu Options */}
+                      <div className="px-2.5 py-2">
+                        <div className="space-y-0.5">
+                          <a href="/account-settings" className="flex items-center rounded-sm px-1.5 py-1 text-[#0B6BCB] hover:bg-slate-100 hover:text-blue-800 text-sm whitespace-nowrap">
+                            Account Settings
+                          </a>
+                          <a href="/change-password" className="flex items-center rounded-sm px-1.5 py-1 text-[#0B6BCB] hover:bg-slate-100 hover:text-blue-800 text-sm whitespace-nowrap">
+                            Change Password
+                          </a>
+                          <a href="/credit-cards" className="flex items-center rounded-sm px-1.5 py-1 text-[#0B6BCB] hover:bg-slate-100 hover:text-blue-800 text-sm whitespace-nowrap">
+                            Manage Credit Cards
+                          </a>
+                          <a href="/messages" className="flex items-center rounded-sm px-1.5 py-1 text-[#0B6BCB] hover:bg-slate-100 hover:text-blue-800 text-sm whitespace-nowrap">
+                            Messages
+                          </a>
+                          <a href="/address-book" className="flex items-center rounded-sm px-1.5 py-1 text-[#0B6BCB] hover:bg-slate-100 hover:text-blue-800 text-sm whitespace-nowrap">
+                            Address Book
+                          </a>
                           <button
+                            type="button"
                             onClick={handleLogout}
-                            className="text-[#0B6BCB] hover:text-[#0B6BCB] text-sm font-medium"
+                            className="flex w-full items-center rounded-sm px-1.5 py-1 text-left text-sm font-semibold text-rose-600 hover:bg-rose-50"
                           >
                             Logout
                           </button>
-                        </div>
-                      </div>
-
-                      {/* Menu Options - Two Columns */}
-                      <div className="px-6 py-4">
-                        <div className="grid grid-cols-2 gap-4">
-                          {/* Left Column */}
-                          <div className="space-y-3">
-                            <Link href="/cart" className="flex items-center gap-2 text-[#0B6BCB] hover:text-blue-800 text-sm">
-                              <span className="w-2 h-2 bg-[#0B6BCB] rounded-full"></span>
-                              Orders (Cart)
-                            </Link>
-                            <a href="/pending-payment" className="flex items-center gap-2 text-[#0B6BCB] hover:text-blue-800 text-sm">
-                              <span className="w-2 h-2 bg-[#0B6BCB] rounded-full"></span>
-                              Pending Payment
-                            </a>
-                            <a href="/favorite-jobs" className="flex items-center gap-2 text-[#0B6BCB] hover:text-blue-800 text-sm">
-                              <span className="w-2 h-2 bg-[#0B6BCB] rounded-full"></span>
-                              Favorite
-                            </a>
-                            <a href="/estimates" className="flex items-center gap-2 text-[#0B6BCB] hover:text-blue-800 text-sm">
-                              <span className="w-2 h-2 bg-[#0B6BCB] rounded-full"></span>
-                              Estimate
-                            </a>
-                          </div>
-
-                          {/* Right Column */}
-                          <div className="space-y-3">
-                            <a href="/account-settings" className="flex items-center gap-2 text-[#0B6BCB] hover:text-blue-800 text-sm">
-                              <span className="w-2 h-2 bg-[#0B6BCB] rounded-full"></span>
-                              Account Setting
-                            </a>
-                            <a href="/change-password" className="flex items-center gap-2 text-[#0B6BCB] hover:text-blue-800 text-sm">
-                              <span className="w-2 h-2 bg-[#0B6BCB] rounded-full"></span>
-                              Change Password
-                            </a>
-                            <a href="/credit-cards" className="flex items-center gap-2 text-[#0B6BCB] hover:text-blue-800 text-sm">
-                              <span className="w-2 h-2 bg-[#0B6BCB] rounded-full"></span>
-                              Manage Credit Cards
-                            </a>
-                            <a href="/messages" className="flex items-center gap-2 text-[#0B6BCB] hover:text-blue-800 text-sm">
-                              <span className="w-2 h-2 bg-[#0B6BCB] rounded-full"></span>
-                              Messages <span className="text-gray-600">(13)</span>
-                            </a>
-                            <a href="/address-book" className="flex items-center gap-2 text-[#0B6BCB] hover:text-blue-800 text-sm">
-                              <span className="w-2 h-2 bg-[#0B6BCB] rounded-full"></span>
-                              Address Book
-                            </a>
-                            <a href="/claims" className="flex items-center gap-2 text-[#0B6BCB] hover:text-blue-800 text-sm">
-                              <span className="w-2 h-2 bg-[#0B6BCB] rounded-full"></span>
-                              Claims
-                            </a>
-                          </div>
                         </div>
                       </div>
                     </div>

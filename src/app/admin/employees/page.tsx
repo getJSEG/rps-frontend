@@ -4,8 +4,8 @@ import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import AdminNavbar from "../../components/AdminNavbar";
 import { canAccessAdminPanel, isAuthenticated } from "../../../utils/roles";
-import { employeesAPI } from "../../../utils/api";
 import { FiEdit, FiTrash2 } from "react-icons/fi";
+import { employeesAPI, getProductImageUrl } from "../../../utils/api";
 
 interface Employee {
   id: number;
@@ -31,15 +31,12 @@ const emptyForm = {
   hire_date: "",
 };
 
-// Backend returns path like /uploads/employees/xxx.jpg; build full URL for img src
 const getImageSrc = (path: string | null | undefined): string => {
-  if (!path) return "";
-  if (path.startsWith("http")) return path;
-  const base =
-    typeof window !== "undefined"
-      ? (process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000/api").replace(/\/api\/?$/, "")
-      : "http://localhost:5000";
-  return `${base}${path.startsWith("/") ? path : "/" + path}`;
+  if (!path || typeof path !== "string") return "";
+  const p = path.trim();
+  if (!p) return "";
+  if (p.startsWith("uploads/")) return getProductImageUrl(`/${p}`);
+  return getProductImageUrl(p);
 };
 
 export default function EmployeesPage() {
