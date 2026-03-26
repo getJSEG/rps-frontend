@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { addressesAPI } from "../../utils/api";
 import { toast } from "react-toastify";
+import { FiEdit, FiTrash2 } from "react-icons/fi";
 
 interface Address {
   id: number;
@@ -368,31 +369,34 @@ export default function AddressBook() {
                       >
                         {addr.is_default ? "Default" : "Set Default"}
                       </button>
-                      <div className="flex-1 text-sm text-gray-700">
+                      <div className="min-w-0 flex-1 text-sm text-gray-700">
                         <div className="font-medium text-gray-900 capitalize">{addr.address_type}</div>
                         <div>{addr.street_address}</div>
                         {addr.address_line2 && <div>{addr.address_line2}</div>}
                         <div>{addr.city}, {addr.state} {addr.postcode}</div>
                         <div>{addr.country}</div>
                       </div>
+                    </div>
+                    <div className="flex shrink-0 flex-wrap items-center gap-2">
                       <button
                         type="button"
                         onClick={() => fillFormForEdit(addr)}
-                        className="text-sm font-semibold text-blue-700 hover:text-blue-800"
+                        className="font-medium text-sky-600 hover:text-sky-800"
+                        title="Edit"
+                        aria-label="Edit address"
                       >
-                        Edit
+                        <FiEdit size={18} />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleDelete(addr.id)}
+                        className="font-medium text-rose-600 hover:text-rose-800"
+                        title="Delete"
+                        aria-label="Delete address"
+                      >
+                        <FiTrash2 size={18} />
                       </button>
                     </div>
-                    <button
-                      type="button"
-                      onClick={() => handleDelete(addr.id)}
-                      className="text-gray-500 hover:text-red-600 p-2"
-                      aria-label="Delete address"
-                    >
-                      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                      </svg>
-                    </button>
                   </div>
                 ))}
               </div>
@@ -505,12 +509,12 @@ export default function AddressBook() {
                   <button
                     type="submit"
                     disabled={saving}
-                    className="inline-flex min-w-28 items-center justify-center rounded-sm bg-blue-600 px-6 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60"
+                    className="inline-flex min-w-28 items-center justify-center rounded-sm bg-blue-500 px-6 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60"
                   >
                     {saving ? "Saving…" : editingId ? "Update" : "Add"}
                   </button>
                   {editingId && (
-                    <button type="button" onClick={cancelEdit} className="rounded-sm border border-gray-300 px-5 py-2.5 text-sm font-medium text-gray-700 transition-colors hover:bg-gray-50">
+                    <button type="button" onClick={cancelEdit} className="rounded-sm border border-gray-400 text-gray-800 px-5 py-2.5 text-sm font-medium transition-colors hover:bg-gray-200">
                       Cancel
                     </button>
                   )}

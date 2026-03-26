@@ -4,7 +4,15 @@ import { useState, useEffect, useRef } from "react";
 import { useRouter, usePathname } from "next/navigation";
 import Link from "next/link";
 import Image from "next/image";
-import { IoPersonCircleOutline } from "react-icons/io5";
+import {
+  IoPersonCircleOutline,
+  IoSettingsOutline,
+  IoKeyOutline,
+  IoCardOutline,
+  IoMailOutline,
+  IoBookOutline,
+  IoLogOutOutline,
+} from "react-icons/io5";
 import { toast } from "react-toastify";
 
 function shouldDisableScrollNavbar(pathname: string): boolean {
@@ -574,26 +582,32 @@ export default function Navbar({ cartCountOverride, skipCartCountFetch = false }
                       {/* Menu Options */}
                       <div className="px-2.5 py-2">
                         <div className="space-y-0.5">
-                          <a href="/account-settings" className="flex items-center rounded-sm px-1.5 py-1 text-[#0B6BCB] hover:bg-slate-100 hover:text-blue-800 text-sm whitespace-nowrap">
+                          <a href="/account-settings" className="flex items-center gap-2 rounded-sm px-1.5 py-1 text-[#0B6BCB] hover:bg-slate-100 hover:text-blue-800 text-sm whitespace-nowrap">
+                            <IoSettingsOutline className="h-4 w-4 shrink-0 opacity-90" aria-hidden />
                             Account Settings
                           </a>
-                          <a href="/change-password" className="flex items-center rounded-sm px-1.5 py-1 text-[#0B6BCB] hover:bg-slate-100 hover:text-blue-800 text-sm whitespace-nowrap">
+                          <a href="/change-password" className="flex items-center gap-2 rounded-sm px-1.5 py-1 text-[#0B6BCB] hover:bg-slate-100 hover:text-blue-800 text-sm whitespace-nowrap">
+                            <IoKeyOutline className="h-4 w-4 shrink-0 opacity-90" aria-hidden />
                             Change Password
                           </a>
-                          <a href="/credit-cards" className="flex items-center rounded-sm px-1.5 py-1 text-[#0B6BCB] hover:bg-slate-100 hover:text-blue-800 text-sm whitespace-nowrap">
+                          <a href="/credit-cards" className="flex items-center gap-2 rounded-sm px-1.5 py-1 text-[#0B6BCB] hover:bg-slate-100 hover:text-blue-800 text-sm whitespace-nowrap">
+                            <IoCardOutline className="h-4 w-4 shrink-0 opacity-90" aria-hidden />
                             Manage Credit Cards
                           </a>
-                          <a href="/messages" className="flex items-center rounded-sm px-1.5 py-1 text-[#0B6BCB] hover:bg-slate-100 hover:text-blue-800 text-sm whitespace-nowrap">
+                          <a href="/messages" className="flex items-center gap-2 rounded-sm px-1.5 py-1 text-[#0B6BCB] hover:bg-slate-100 hover:text-blue-800 text-sm whitespace-nowrap">
+                            <IoMailOutline className="h-4 w-4 shrink-0 opacity-90" aria-hidden />
                             Messages
                           </a>
-                          <a href="/address-book" className="flex items-center rounded-sm px-1.5 py-1 text-[#0B6BCB] hover:bg-slate-100 hover:text-blue-800 text-sm whitespace-nowrap">
+                          <a href="/address-book" className="flex items-center gap-2 rounded-sm px-1.5 py-1 text-[#0B6BCB] hover:bg-slate-100 hover:text-blue-800 text-sm whitespace-nowrap">
+                            <IoBookOutline className="h-4 w-4 shrink-0 opacity-90" aria-hidden />
                             Address Book
                           </a>
                           <button
                             type="button"
                             onClick={handleLogout}
-                            className="flex w-full items-center rounded-sm px-1.5 py-1 text-left text-sm font-semibold text-rose-600 hover:bg-rose-50"
+                            className="flex w-full items-center gap-2 rounded-sm px-1.5 py-1 text-left text-sm  text-rose-600 hover:bg-rose-50"
                           >
+                            <IoLogOutOutline className="h-4 w-4 shrink-0 opacity-90" aria-hidden />
                             Logout
                           </button>
                         </div>

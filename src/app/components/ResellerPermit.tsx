@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
+import { FiEdit, FiTrash2 } from "react-icons/fi";
 
 export default function ResellerPermit() {
   const [formData, setFormData] = useState({
@@ -99,7 +100,7 @@ export default function ResellerPermit() {
 
             <div className="mb-6 rounded-sm border border-gray-200 bg-gray-50/80 px-3 py-3 text-sm text-gray-700">
               Please choose a state first then download Permit Form:{" "}
-              <a href="#" className="text-blue-600 hover:text-blue-800 underline">
+              <a href="#" className="text-blue-500 hover:text-blue-800 underline">
                 CA Download Form
               </a>
             </div>
@@ -155,7 +156,7 @@ export default function ResellerPermit() {
                 </div>
                 <div className="flex items-center gap-3">
                   <label className="cursor-pointer">
-                    <span className="inline-block rounded-sm bg-blue-600 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-blue-700">
+                    <span className="inline-block rounded-sm bg-blue-500 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-blue-700">
                       Choose File
                     </span>
                     <input
@@ -180,7 +181,7 @@ export default function ResellerPermit() {
                 </div>
                 <div className="flex items-center gap-3">
                   <label className="cursor-pointer">
-                    <span className="inline-block rounded-sm bg-blue-600 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-blue-700">
+                    <span className="inline-block rounded-sm bg-blue-500 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-blue-700">
                       Choose File
                     </span>
                     <input
@@ -199,7 +200,7 @@ export default function ResellerPermit() {
               <div className="border-t border-gray-200 pt-4">
                 <button
                   type="submit"
-                  className="inline-flex min-w-32 items-center justify-center rounded-sm bg-blue-600 px-6 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-blue-700"
+                  className="inline-flex min-w-32 items-center justify-center rounded-sm bg-blue-500 px-6 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-blue-700"
                 >
                   Update
                 </button>

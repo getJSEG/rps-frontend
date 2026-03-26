@@ -236,7 +236,7 @@ export default function AccountSettings() {
                 <button
                   type="submit"
                   disabled={saving}
-                  className="inline-flex min-w-32 items-center justify-center rounded-sm bg-blue-600 px-6 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60"
+                  className="inline-flex min-w-32 items-center justify-center rounded-sm bg-blue-500 px-6 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60"
                 >
                   {saving ? "Updating…" : "Update"}
                 </button>

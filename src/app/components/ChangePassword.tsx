@@ -165,7 +165,7 @@ export default function ChangePassword() {
                   <button
                     type="submit"
                     disabled={sendingCode}
-                    className="inline-flex min-w-40 items-center justify-center rounded-sm bg-blue-600 px-6 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60"
+                    className="inline-flex min-w-40 items-center justify-center rounded-sm bg-blue-500 px-6 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60"
                   >
                     {sendingCode ? "Sending…" : "Send code to email"}
                   </button>
@@ -244,7 +244,7 @@ export default function ChangePassword() {
                     <button
                       type="submit"
                       disabled={resetting}
-                      className="inline-flex min-w-40 items-center justify-center rounded-sm bg-blue-600 px-6 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60"
+                      className="inline-flex min-w-40 items-center justify-center rounded-sm bg-blue-500 px-6 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60"
                     >
                       {resetting ? "Updating…" : "Change password"}
                     </button>
