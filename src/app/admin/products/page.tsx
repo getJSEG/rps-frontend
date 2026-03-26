@@ -7,6 +7,7 @@ import Image from "next/image";
 import AdminNavbar from "../../components/AdminNavbar";
 import { canAccessAdminPanel, isAuthenticated } from "../../../utils/roles";
 import { productsAPI } from "../../../utils/api";
+import { FiEdit, FiTrash2 } from "react-icons/fi";
 
 type Tab = "products" | "categories" | "subcategories";
 
@@ -748,16 +749,22 @@ export default function AdminProductsPage() {
                                     type="button"
                                     onClick={() => startEditProduct(p)}
                                     className="font-medium text-sky-600 hover:text-sky-800"
+                                    title="Edit"
                                   >
-                                    Edit
+                                    <FiEdit size={18} />
                                   </button>
                                   <button
                                     type="button"
                                     onClick={() => handleProductDelete(p.id, p.name)}
                                     disabled={deletingProductId === p.id}
                                     className="font-medium text-rose-600 hover:text-rose-800 disabled:opacity-50"
+                                    title="Delete"
                                   >
-                                    {deletingProductId === p.id ? "Deleting…" : "Delete"}
+                                    {deletingProductId === p.id ? (
+                                      <span className="inline-block h-4 w-4 animate-spin rounded-full border-2 border-rose-300 border-t-rose-600" />
+                                    ) : (
+                                      <FiTrash2 size={18} />
+                                    )}
                                   </button>
                                 </div>
                               </td>
@@ -886,16 +893,22 @@ export default function AdminProductsPage() {
                                   type="button"
                                   onClick={() => startEditCategory(c)}
                                   className="mr-3 font-medium text-sky-600 hover:text-sky-800"
+                                  title="Edit"
                                 >
-                                  Edit
+                                  <FiEdit size={18} />
                                 </button>
                                 <button
                                   type="button"
                                   onClick={() => handleCategoryDelete(c.id, c.name)}
                                   disabled={deletingCategoryId === c.id}
                                   className="font-medium text-rose-600 hover:text-rose-800 disabled:opacity-50"
+                                  title="Delete"
                                 >
-                                  {deletingCategoryId === c.id ? "Deleting…" : "Delete"}
+                                  {deletingCategoryId === c.id ? (
+                                      <span className="inline-block h-4 w-4 animate-spin rounded-full border-2 border-rose-300 border-t-rose-600" />
+                                    ) : (
+                                      <FiTrash2 size={18} />
+                                    )}
                                 </button>
                               </td>
                             </tr>
@@ -991,16 +1004,22 @@ export default function AdminProductsPage() {
                                     type="button"
                                     onClick={() => startEditCategory(c)}
                                     className="mr-3 font-medium text-sky-600 hover:text-sky-800"
+                                    title="Edit"
                                   >
-                                    Edit
+                                    <FiEdit size={18} />
                                   </button>
                                   <button
                                     type="button"
                                     onClick={() => handleCategoryDelete(c.id, c.name)}
                                     disabled={deletingCategoryId === c.id}
                                     className="font-medium text-rose-600 hover:text-rose-800 disabled:opacity-50"
+                                    title="Delete"
                                   >
-                                    {deletingCategoryId === c.id ? "Deleting…" : "Delete"}
+                                    {deletingCategoryId === c.id ? (
+                                      <span className="inline-block h-4 w-4 animate-spin rounded-full border-2 border-rose-300 border-t-rose-600" />
+                                    ) : (
+                                      <FiTrash2 size={18} />
+                                    )}
                                   </button>
                                 </td>
                               </tr>
