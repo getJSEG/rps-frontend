@@ -672,7 +672,7 @@ export default function AdminProductsPage() {
                         onChange={(e) => setProdSku(e.target.value)}
                         className={inputClass}
                       />
-                      <div className="flex items-center gap-6">
+                      {/* <div className="flex items-center gap-6">
                         <label className="group flex cursor-pointer items-center gap-2 text-sm text-slate-700 transition-colors">
                           <div className="relative flex items-center justify-center">
                             <input
@@ -701,9 +701,9 @@ export default function AdminProductsPage() {
                               <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
                             </svg>
                           </div>
-                          Active
+                          Activesss
                         </label>
-                      </div>
+                      </div> */}
                       <div className="flex gap-2 md:col-span-2">
                         <button
                           type="submit"

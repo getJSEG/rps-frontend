@@ -100,7 +100,7 @@ export default function Products() {
     const metaLine = metaParts.join(" ");
 
     return (
-      <Link href={`/products/product/${product.id}`} className="block h-full">
+      <Link href={`/products/product-detail?productId=${product.id}`} className="block h-full">
         <div className="group flex h-full cursor-pointer flex-col">
           {/* Bordered box = image only; title + price sit below, outside */}
           <div className="relative aspect-square w-full overflow-hidden rounded-sm border border-gray-200 bg-[#f5f5f5] transition-colors group-hover:border-gray-300">
@@ -171,7 +171,7 @@ export default function Products() {
                     ? `Products: ${subcategoryParam}`
                     : selectedCategory
                       ? `Products: ${selectedCategory.replace(/-/g, " ")}`
-                      : "All Products"}
+                      : "All Prosssducts"}
               </h1>
               <p className="text-gray-600">
                 {searchParam

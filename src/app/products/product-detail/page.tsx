@@ -816,7 +816,7 @@ function ProductDetailContent() {
                     type="number"
                     value={width}
                     onChange={(e) => setWidth(e.target.value)}
-                    className="w-full px-4 py-2 border border-gray-300 text-black rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    className="w-full px-3 py-2 border border-gray-300 text-black rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
                     placeholder="0"
                     min="0"
                     step="0.01"
@@ -830,7 +830,7 @@ function ProductDetailContent() {
                     type="number"
                     value={height}
                     onChange={(e) => setHeight(e.target.value)}
-                    className="w-full px-4 py-2 border border-gray-300 text-black rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    className="w-full px-3 py-2 border border-gray-300 text-black rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
                     placeholder="0"
                     min="0"
                     step="0.01"
@@ -853,7 +853,7 @@ function ProductDetailContent() {
                     type="text"
                     value={jobName}
                     onChange={(e) => setJobName(e.target.value)}
-                    className="w-full px-4 py-2 border border-gray-300 text-black rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    className="w-full px-3 py-2 border border-gray-300 text-black rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
                     placeholder="Job Name/PO#"
                   />
                 </div>
@@ -865,7 +865,7 @@ function ProductDetailContent() {
                     type="number"
                     value={quantity}
                     onChange={(e) => setQuantity(e.target.value)}
-                    className="w-full px-4 py-2 border border-gray-300 rounded-lg text-black  focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-black  focus:outline-none focus:ring-2 focus:ring-blue-500"
                     min="1"
                   />
                 </div>
@@ -873,19 +873,19 @@ function ProductDetailContent() {
                 {/* prices per job */}
                 <div className="w-2/16">
                   <label className="block text-sm font-medium text-gray-700 mb-2">Price</label>
-                  <div className="px-4 py-2 text-gray-500 border-gray-300">
+                  <div className="px-3 py-2 text-gray-500 border-gray-300">
                     ${subtotal.toFixed(2)}
                   </div>
                 </div>
 
 
-                <div className="w-1/16">
+                {/* <div className="w-1/16">
                   <div className="hover:bg-gray-100 text-red-500  font-bold my-7 py-1 px-2 rounded">
                     <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="size-6">
                       <path strokeLinecap="round" strokeLinejoin="round" d="m14.74 9-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 0 1-2.244 2.077H8.084a2.25 2.25 0 0 1-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 0 0-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 0 1 3.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 0 0-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 0 0-7.5 0" />
                     </svg>
                   </div>
-                </div>
+                </div> */}
                 
               </div>
               
@@ -1023,12 +1023,6 @@ function ProductDetailContent() {
                 ) : (
                   <div className="text-sm text-gray-600 space-y-2">
                     <p>No saved address yet. Add one in settings to see it here.</p>
-                    <Link
-                      href="/address-book?add=1"
-                      className="inline-flex text-blue-600 hover:text-blue-800 font-medium"
-                    >
-                      Add address
-                    </Link>
                   </div>
                 )}
               </div>
@@ -1093,12 +1087,12 @@ function ProductDetailContent() {
               <button 
                 onClick={handleAddToCart}
                 disabled={addingToCart}
-                className="w-full bg-blue-600 hover:bg-blue-700 disabled:bg-blue-400 disabled:cursor-not-allowed text-white font-medium px-6 py-3 rounded-lg transition-colors"
+                className="w-full bg-blue-500 hover:bg-blue-700 disabled:bg-blue-400 disabled:cursor-not-allowed text-white font-medium px-6 py-3 rounded-lg transition-colors"
               >
                 {addingToCart ? "Adding to Cart..." : "Add to Cart"}
               </button>
               <div className="flex items-center justify-between text-sm">
-                <a href="#" className="text-blue-600 hover:text-blue-800 flex items-center gap-1">
+                <a href="#" className="text-blue-500 hover:text-blue-800 flex items-center gap-1">
                   Or save for later?
                   <svg
                     className="w-4 h-4 text-gray-500"
@@ -1522,7 +1516,7 @@ function ProductDetailContent() {
                       <div className="mt-3 pt-3 border-t border-gray-200">
                         <button
                           onClick={(e) => handleSelectProduct(e)}
-                          className="w-full bg-blue-600 hover:bg-blue-700 text-white font-medium px-4 py-2 rounded-lg transition-colors text-sm"
+                          className="w-full bg-blue-500 hover:bg-blue-700 text-white font-medium px-4 py-2 rounded-lg transition-colors text-sm"
                         >
                           Select Product
                         </button>

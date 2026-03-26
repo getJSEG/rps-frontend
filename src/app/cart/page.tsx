@@ -7,6 +7,7 @@ import Image from "next/image";
 import Navbar from "../components/Navbar";
 import Footer from "../components/Footer";
 import { getProductImageUrl, cartAPI } from "../../utils/api";
+import { FiTrash2, FiBookmark, FiHeart, FiCopy } from "react-icons/fi";
 
 interface CartItem {
   id: string;
@@ -231,21 +232,37 @@ export default function CartPage() {
                       </div>
                       <div className="flex flex-wrap items-center gap-4 pt-2">
                         <div className="flex items-center gap-2">
-                          <button onClick={() => updateQuantity(item.id, (item.quantity || 1) - 1)} className="px-3 py-1.5 border border-gray-300 rounded hover:bg-gray-50">−</button>
-                          <span className="w-10 text-center font-medium">{item.quantity || 1}</span>
-                          <button onClick={() => updateQuantity(item.id, (item.quantity || 1) + 1)} className="px-3 py-1.5 border border-gray-300 rounded hover:bg-gray-50">+</button>
+                          <button onClick={() => updateQuantity(item.id, (item.quantity || 1) - 1)} className="px-2  text-gray-600 border border-gray-600 rounded hover:bg-gray-50">−</button>
+                          <span className="w-6 text-center text-gray-600  text-sm">{item.quantity || 1}</span>
+                          <button onClick={() => updateQuantity(item.id, (item.quantity || 1) + 1)} className="px-2  text-gray-600 border border-gray-600 rounded hover:bg-gray-50">+</button>
                         </div>
                         <span className="text-gray-700 font-medium">${(item.subtotal != null ? item.subtotal : (item.unitPrice || 0) * (item.quantity || 1)).toFixed(2)}</span>
                         {item.tax != null && <span className="text-gray-600 text-sm">Tax: ${item.tax.toFixed(2)}</span>}
                       </div>
-                      <div className="flex flex-wrap gap-3 text-sm">
-                        <button onClick={() => removeFromCart(item.id)} className="text-red-600 hover:underline">Delete</button>
-                        <span className="text-gray-400">|</span>
-                        <button type="button" className="text-gray-600 hover:underline">Save For Later</button>
-                        <span className="text-gray-400">|</span>
-                        <button type="button" className="text-gray-600 hover:underline">Favorite</button>
-                        <span className="text-gray-400">|</span>
-                        <button type="button" className="text-gray-600 hover:underline">Duplicate</button>
+                      <div className="flex flex-wrap items-center gap-3 text-sm">
+                        <button
+                          type="button"
+                          onClick={() => removeFromCart(item.id)}
+                          className="inline-flex items-center gap-1.5 text-red-600 hover:underline"
+                        >
+                          <FiTrash2 className="h-4 w-4 shrink-0" aria-hidden />
+                          Delete
+                        </button>
+                        <span className="text-gray-400" aria-hidden>|</span>
+                        <button type="button" className="inline-flex items-center gap-1.5 text-gray-600 hover:underline">
+                          <FiBookmark className="h-4 w-4 shrink-0" aria-hidden />
+                          Save For Later
+                        </button>
+                        <span className="text-gray-400" aria-hidden>|</span>
+                        <button type="button" className="inline-flex items-center gap-1.5 text-gray-600 hover:underline">
+                          <FiHeart className="h-4 w-4 shrink-0" aria-hidden />
+                          Favorite
+                        </button>
+                        <span className="text-gray-400" aria-hidden>|</span>
+                        <button type="button" className="inline-flex items-center gap-1.5 text-gray-600 hover:underline">
+                          <FiCopy className="h-4 w-4 shrink-0" aria-hidden />
+                          Duplicate
+                        </button>
                       </div>
                     </div>
 
@@ -289,7 +306,7 @@ export default function CartPage() {
                   <Link href="#" className="block text-sm text-blue-600 hover:underline mb-3">Have a Coupon Code?</Link>
                   <button
                     onClick={() => router.push("/checkout")}
-                    className="w-full bg-blue-600 hover:bg-blue-700 text-white font-medium px-6 py-3 rounded-lg transition-colors"
+                    className="w-full bg-blue-500 hover:bg-blue-700 text-white font-medium px-6 py-3 rounded-lg transition-colors"
                   >
                     Checkout
                   </button>

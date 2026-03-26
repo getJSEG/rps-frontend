@@ -417,7 +417,7 @@ export default function CheckoutPage() {
               <div className="space-y-6">
                 <div>
                   <div className="flex items-center justify-between mb-3">
-                    <h2 className="text-lg font-bold text-blue-600">Billing Address</h2>
+                    <h2 className="text-lg font-bold text-gray-900">Billing Address</h2>
                     {isAuthenticated() && billingAddress && (
                       <Link href="/address-book" className="text-sm text-gray-500 hover:text-gray-700 flex items-center gap-1">
                         <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" /></svg>
@@ -512,31 +512,31 @@ export default function CheckoutPage() {
                     </div>
                   ) : showAddBilling ? (
                     <form onSubmit={handleAddBillingAddress} className="p-4 bg-gray-50 rounded-lg border border-gray-200 space-y-3">
-                      <input type="text" name="streetAddress" placeholder="Street address *" value={billingForm.streetAddress} onChange={handleBillingFormChange} className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm" required />
-                      <input type="text" name="addressLine2" placeholder="Apartment, suite, etc. (optional)" value={billingForm.addressLine2} onChange={handleBillingFormChange} className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm" />
+                      <input type="text" name="streetAddress" placeholder="Street address *" value={billingForm.streetAddress} onChange={handleBillingFormChange} className="w-full px-3 py-2 text-gray-500 border border-gray-400 rounded-md text-sm" required />
+                      <input type="text" name="addressLine2" placeholder="Apartment, suite, etc. (optional)" value={billingForm.addressLine2} onChange={handleBillingFormChange} className="w-full px-3 py-2 text-gray-500 border border-gray-400 rounded-md text-sm" />
                       <div className="grid grid-cols-2 gap-2">
-                        <input type="text" name="city" placeholder="City *" value={billingForm.city} onChange={handleBillingFormChange} className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm" required />
-                        <select name="state" value={billingForm.state} onChange={handleBillingFormChange} className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm" required>
+                        <input type="text" name="city" placeholder="City *" value={billingForm.city} onChange={handleBillingFormChange} className="w-full px-3 py-2 text-gray-500 border border-gray-400 rounded-md text-sm" required />
+                        <select name="state" value={billingForm.state} onChange={handleBillingFormChange} className="w-full px-3 py-2 text-gray-500 border border-gray-400 rounded-md text-sm" required>
                           <option value="">State</option>
                           {STATES.map((s) => <option key={s} value={s}>{s}</option>)}
                         </select>
                       </div>
-                      <input type="text" name="postcode" placeholder="Postcode *" value={billingForm.postcode} onChange={handleBillingFormChange} className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm" required />
-                      <input type="text" name="country" placeholder="Country" value={billingForm.country} onChange={handleBillingFormChange} className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm" />
+                      <input type="text" name="postcode" placeholder="Postcode *" value={billingForm.postcode} onChange={handleBillingFormChange} className="w-full px-3 py-2 text-gray-500 border border-gray-400 rounded-md text-sm" required />
+                      <input type="text" name="country" placeholder="Country" value={billingForm.country} onChange={handleBillingFormChange} className="w-full px-3 py-2 text-gray-500 border border-gray-400 rounded-md text-sm" />
                       <div className="flex gap-2">
-                        <button type="submit" disabled={savingAddress} className="px-4 py-2 bg-blue-600 text-white text-sm rounded-md hover:bg-blue-700 disabled:opacity-70">Save address</button>
-                        <button type="button" onClick={() => setShowAddBilling(false)} className="px-4 py-2 border border-gray-300 rounded-md text-sm hover:bg-gray-50">Cancel</button>
+                        <button type="submit" disabled={savingAddress} className="px-4 py-2 bg-blue-500 text-white text-sm rounded-md hover:bg-blue-700 disabled:opacity-70">Save address</button>
+                        <button type="button" onClick={() => setShowAddBilling(false)} className="px-4 py-2 border border-gray-400 text-gray-800 rounded-md text-sm hover:bg-gray-200">Cancel</button>
                       </div>
                     </form>
                   ) : (
                     <div className="p-4 bg-gray-50 rounded-lg border border-gray-200">
                       <p className="text-gray-600 text-sm mb-2">No billing address saved. Add one to continue.</p>
-                      <button type="button" onClick={() => setShowAddBilling(true)} className="text-sm text-blue-600 hover:underline">Add billing address</button>
+                      <button type="button" onClick={() => setShowAddBilling(true)} className="text-sm text-blue-500 hover:underline">Add billing address</button>
                     </div>
                   )}
                 </div>
                 <div>
-                  <h2 className="text-lg font-bold text-gray-900 mb-3">Shipping Address</h2>
+                  <h2 className="text-lg font-bold text-gray-700 mb-3">Shipping Address</h2>
                   {addressLoading ? (
                     <p className="text-gray-500 text-sm">Loading...</p>
                   ) : !isAuthenticated() ? (
@@ -553,7 +553,7 @@ export default function CheckoutPage() {
                     <p className="text-gray-500 text-sm">Same as billing (add a billing address above).</p>
                   )}
                   {isAuthenticated() && shippingAddress && (
-                    <Link href="/address-book" className="text-sm text-gray-500 hover:text-gray-700 mt-1 inline-block">Change</Link>
+                    <Link href="/address-book" className="text-sm text-gray-600 hover:text-gray-700 mt-1 inline-block">Change</Link>
                   )}
                 </div>
               </div>
@@ -575,7 +575,7 @@ export default function CheckoutPage() {
                   </div>
                 </div>
                 <div className="border-t border-gray-300 pt-3 mb-4">
-                  <div className="flex justify-between text-xl font-bold text-blue-600">
+                  <div className="flex justify-between text-xl font-bold text-gray-700">
                     <span>Total:</span>
                     <span>${total.toFixed(2)}</span>
                   </div>
