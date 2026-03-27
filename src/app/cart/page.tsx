@@ -34,7 +34,7 @@ export default function CartPage() {
   const router = useRouter();
   const [cartItems, setCartItems] = useState<CartItem[]>([]);
   const [loading, setLoading] = useState(true);
-  const [isAdminView, setIsAdminView] = useState(false);
+  // const [isAdminView, setIsAdminView] = useState(false);
   const hasInitializedRef = useRef(false);
 
   const loadCart = async (silent = false) => {
@@ -42,7 +42,8 @@ export default function CartPage() {
     try {
       const res = await cartAPI.get();
       setCartItems(Array.isArray(res?.cartItems) ? res.cartItems : []);
-      setIsAdminView(!!res?.isAdminView);
+      // Admin cart view disabled on this page.
+      // setIsAdminView(!!res?.isAdminView);
     } catch (error) {
       console.error("Error loading cart:", error);
       setCartItems([]);
@@ -120,18 +121,16 @@ export default function CartPage() {
   return (
     <>
       <Navbar cartCountOverride={cartItems.length} skipCartCountFetch />
-      <div className="min-h-screen bg-gray-50 pt-12 pb-16">
+      <div className="min-h-screen bg-gray-50 pt-25 pb-16">
         <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
           {cartItems.length === 0 ? (
             <>
-              <div className="flex flex-wrap items-center justify-between gap-4 mb-6">
-                <h1 className="text-2xl font-bold text-gray-900">{isAdminView ? "All Carts (Admin)" : "Shopping Cart"}</h1>
-              </div>
+              {/* Cart title hidden */}
               <div className="text-center py-16 bg-white border border-gray-200 rounded-lg">
                 <svg className="w-24 h-24 text-gray-400 mx-auto mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H17m0 0a2 2 0 100 4 2 2 0 000-4zm-8 2a2 2 0 11-4 0 2 2 0 014 0z" />
                 </svg>
-                <p className="text-gray-600 text-lg mb-4">{isAdminView ? "No cart items from any user yet." : "Your cart is empty"}</p>
+                <p className="text-gray-600 text-lg mb-4">Your cart is empty</p>
                 <Link href="/products" className="inline-block bg-blue-600 hover:bg-blue-700 text-white font-medium px-6 py-3 rounded-lg transition-colors">
                   Continue Shopping
                 </Link>
@@ -139,45 +138,10 @@ export default function CartPage() {
             </>
           ) : (
             <>
-              {/* Top: Shopping Cart + Empty Cart + Total + Checkout */}
-              <div className="flex flex-wrap items-center justify-between gap-4 mb-6 p-4 bg-white border border-gray-200 rounded-lg">
-                <div className="flex items-center gap-4">
-                  <h1 className="text-2xl font-bold text-gray-900">
-                    {isAdminView ? "All Carts (Admin)" : "Shopping Cart"}
-                  </h1>
-                  {!isAdminView && (
-                    <button
-                      onClick={async () => {
-                        if (!cartItems.length || !window.confirm("Empty cart?")) return;
-                        try {
-                          await cartAPI.clear();
-                          setCartItems([]);
-                          window.dispatchEvent(new Event("cartUpdated"));
-                        } catch (e) {
-                          console.error(e);
-                        }
-                      }}
-                      className="text-sm text-gray-500 hover:text-gray-700 underline"
-                    >
-                      Empty Cart
-                    </button>
-                  )}
-                </div>
-                <div className="flex items-center gap-4">
-                  <p className="text-lg font-bold text-gray-900">
-                    Total ({cartItems.length} {cartItems.length === 1 ? 'job' : 'jobs'}): ${calculateTotal().toFixed(2)}
-                  </p>
-                  <button
-                    onClick={() => router.push("/checkout")}
-                    className="bg-blue-600 hover:bg-blue-700 text-white font-medium px-6 py-2.5 rounded-lg transition-colors"
-                  >
-                    Checkout
-                  </button>
-                </div>
-              </div>
+              {/* Top summary card hidden */}
 
               {/* Full-width product cards */}
-              <div className="space-y-4 mb-8">
+              <div className="space-y-4 mb-4">
                 {cartItems.map((item, index) => (
                   <div
                     key={item.id}
@@ -206,11 +170,12 @@ export default function CartPage() {
 
                     {/* Product details + config (center) */}
                     <div className="flex-1 min-w-0 space-y-2">
-                      {isAdminView && (item.userEmail || item.userName) && (
+                      {/* Admin user badge disabled */}
+                      {/* {isAdminView && (item.userEmail || item.userName) && (
                         <div className="text-xs font-medium text-blue-700 bg-blue-50 px-2 py-1 rounded inline-block">
                           {item.userName || "User"} {item.userEmail && `(${item.userEmail})`}
                         </div>
-                      )}
+                      )} */}
                       <div className="flex items-start justify-between gap-2">
                         <div>
                           <h3 className="text-lg font-semibold text-gray-900">{item.productName}</h3>
