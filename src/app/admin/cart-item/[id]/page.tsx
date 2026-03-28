@@ -233,7 +233,6 @@ export default function CartItemDetailPage() {
   const qty = item.quantity ?? 1;
   const total = item.total ?? item.subtotal ?? item.unitPrice ?? 0;
   const unitPrice = item.unitPrice ?? (typeof total === "number" && qty ? total / qty : 0);
-  const tax = total * 0.08;
   const sizeStr = item.width != null && item.height != null ? `${item.width}" x ${item.height}"` : "—";
 
   return (
@@ -339,7 +338,6 @@ export default function CartItemDetailPage() {
                 </div>
                 <div className="text-right">
                   <p className="text-lg font-semibold text-slate-900">${Number(total).toFixed(2)}</p>
-                  <p className="text-sm text-slate-500">Tax: ${tax.toFixed(2)}</p>
                 </div>
               </div>
             </div>

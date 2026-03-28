@@ -7,7 +7,15 @@ import Link from "next/link";
 import Navbar from "../../components/Navbar";
 import Footer from "../../components/Footer";
 import { toast } from "react-toastify";
-import { productsAPI, getProductImageUrl, cartAPI, addressesAPI } from "../../../utils/api";
+import {
+  productsAPI,
+  getProductImageUrl,
+  cartAPI,
+  addressesAPI,
+  shippingRatesAPI,
+  shippingAmountForService,
+  type ShippingRates,
+} from "../../../utils/api";
 import { isAuthenticated } from "../../../utils/roles";
 
 interface ProductProperty {
@@ -120,19 +128,15 @@ function ProductDetailContent() {
   const [height, setHeight] = useState("0");
   const [jobName, setJobName] = useState("");
   const [quantity, setQuantity] = useState("1");
-  const [totalJobs, setTotalJobs] = useState(1);
-  const [oneArtworkPerJob, setOneArtworkPerJob] = useState(false);
   const [productType, setProductType] = useState("canopy-frame"); // "canopy-frame" or "canopy-only"
   const [reinforcedStrip, setReinforcedStrip] = useState("White");
   const [carryBag, setCarryBag] = useState("Standard Bag");
   const [sandbag, setSandbag] = useState("No");
   const [fullWall, setFullWall] = useState("1 Full Wall");
   const [halfWall, setHalfWall] = useState("1 Half Wall (Single Sided)");
-  const [turnaround, setTurnaround] = useState("free-same-day");
   const [shipping, setShipping] = useState("blind-drop");
   const [shippingService, setShippingService] = useState("Ground");
   const [activeTab, setActiveTab] = useState("description");
-  const [emailProof, setEmailProof] = useState(false);
   const [selectedImageIndex, setSelectedImageIndex] = useState(0);
   const [expandedFAQ, setExpandedFAQ] = useState<number | null>(null);
   const [relatedProducts, setRelatedProducts] = useState<Product[]>([]);
@@ -147,6 +151,7 @@ function ProductDetailContent() {
   const [shippingUserLoggedIn, setShippingUserLoggedIn] = useState(false);
   const [savedAddresses, setSavedAddresses] = useState<SavedAddress[]>([]);
   const [addressesLoading, setAddressesLoading] = useState(false);
+  const [shippingRates, setShippingRates] = useState<ShippingRates | null>(null);
   const fetchedProductForRef = useRef<string | null>(null);
   const fetchedRelatedForRef = useRef<string | null>(null);
   const fetchedAddressesOnceRef = useRef(false);
@@ -189,6 +194,21 @@ function ProductDetailContent() {
 
     fetchProduct();
   }, [productId]);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await shippingRatesAPI.get();
+        if (!cancelled && res?.rates) setShippingRates(res.rates);
+      } catch {
+        if (!cancelled) setShippingRates(null);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   // Fetch related products from different categories
   useEffect(() => {
@@ -307,9 +327,8 @@ function ProductDetailContent() {
   const qty = parseFloat(quantity) || 1;
   const unitPrice = basePrice;
   const subtotal = unitPrice * qty;
-  const shippingCost = shippingService === "Ground" ? 120.07 : 0;
-  const tax = subtotal * 0.08; // 8% tax
-  const total = subtotal + shippingCost + tax;
+  const shippingCost = shippingAmountForService(shippingRates, shippingService);
+  const total = subtotal + shippingCost;
 
   // Handle Add to Cart (logged-in or guest via X-Guest-Session-Id from api.ts)
   const handleAddToCart = async () => {
@@ -344,13 +363,13 @@ function ProductDetailContent() {
         areaSqFt: parseFloat(areaSqFt.toFixed(2)),
         quantity: qty,
         jobName: jobName.trim(),
-        turnaround: turnaround,
+        turnaround: "free-same-day",
         shipping: shipping,
         shippingService: shippingService,
-        emailProof: emailProof,
+        emailProof: false,
         fullWall: fullWallQty,
         halfWall: halfWallQty,
-        totalJobs: totalJobs,
+        totalJobs: 1,
         productType: productType,
         reinforcedStrip: reinforcedStrip,
         carryBag: carryBag,
@@ -358,7 +377,6 @@ function ProductDetailContent() {
         unitPrice: parseFloat(unitPrice.toFixed(2)),
         subtotal: parseFloat(subtotal.toFixed(2)),
         shippingCost: parseFloat(shippingCost.toFixed(2)),
-        tax: parseFloat(tax.toFixed(2)),
         total: parseFloat(total.toFixed(2)),
         pricePerSqFt: pricePerSqFt,
         minCharge: minCharge,
@@ -891,144 +909,61 @@ function ProductDetailContent() {
                 </div> */}
                 
               </div>
-              
-             
-              {/* add more jobs */}
-              <div className="py-1 grid grid-cols-2 gap-1">
-        
-                
-                {/* add and remove buttons */}
-                { totalJobs >= 2 
-                  ? <div className="flex flex-wrap gap-4">
-                      <label className="item-center block text-sm font-medium py-2 text-gray-700">Total Jobs</label>
-                      
-                      <div className="flex items-center gap-2">
-                        <button onClick={() => setTotalJobs(Math.max(1, totalJobs - 1))}
-                          className="px-3 py-1 border border-gray-300  text-black rounded-lg hover:bg-gray-50"
-                        > - </button>
-
-                        <input
-                          type="number"
-                          value={totalJobs}
-                          onChange={(e) => setTotalJobs(Math.max(1, parseInt(e.target.value) || 1))}
-                          className="w-15 px-2 py-1 border border-gray-300 rounded-lg text-black  text-center focus:outline-none focus:ring-2 focus:ring-blue-500"
-                          min="1"
-                        />
-
-                        <button
-                          onClick={() => setTotalJobs(totalJobs + 1)}
-                          className="px-3 py-1 border border-gray-300 rounded-lg text-black  hover:bg-gray-50"
-                        > + </button>
-                      </div>
-                    </div>
-                  : <div className="item-center" onClick={() => setTotalJobs(totalJobs + 1)}>
-                      <a href="#" className="text-blue-600 hover:text-blue-800 text-sm flex items-center">
-                        + Add Another Job
-                      </a>
-                    </div> 
-                }
-
-                {/*  One Artwork Info */}
-                <div className="flex items-center gap-2">
-                  <label className="flex items-center cursor-pointer text-sm text-gray-700">
-                    One Artwork Per Job
-                  </label>
-
-                  <svg className="w-4 h-4 text-gray-500"
-                       fill="none" stroke="currentColor" viewBox="0 0 24 24" >
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
-                          d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
-                    />
-                </svg>
-              </div>
-
-              </div>              
             </div>
 
-
-            {/* Turnaround Section */}
-            <div className="mb-6 p-4 border border-gray-200 rounded-lg">
-              <h2 className="text-lg font-semibold text-gray-900 mb-4">Turnaround</h2>
-              <div className="space-y-3">
-                <label className="flex items-start cursor-pointer">
-                  <input
-                    type="radio"
-                    name="turnaround"
-                    value="free-same-day"
-                    checked={turnaround === "free-same-day"}
-                    onChange={(e) => setTurnaround(e.target.value)}
-                    className="mt-1 mr-3"
-                  />
-                  <div className="flex-1">
-                    <div className="font-medium text-gray-900">Free Same Day</div>
-                    <div className="text-sm text-gray-600">
-                      Cut-off time 6am PST <span className="text-green-600">Free</span>
-                    </div>
-                  </div>
-                </label>
-                <label className="flex items-start cursor-pointer">
-                  <input
-                    type="radio"
-                    name="turnaround"
-                    value="next-day"
-                    checked={turnaround === "next-day"}
-                    onChange={(e) => setTurnaround(e.target.value)}
-                    className="mt-1 mr-3"
-                  />
-                  <div className="flex-1">
-                    <div className="font-medium text-gray-900">Next Day</div>
-                    <div className="text-sm text-gray-600">
-                      Cut-off time 11:59pm PST <span className="text-green-600">Free</span>
-                    </div>
-                  </div>
-                </label>
-              </div>
-            </div>
-
-            {/* Shipping: logged-in only (guests enter address at checkout) */}
-            {shippingAuthReady && shippingUserLoggedIn && (
+            {/* Shipping: service & charges for everyone; saved “Ship to” only when logged in */}
+            {shippingAuthReady && (
             <div className="mb-6 p-4 border border-gray-200 rounded-lg min-w-0">
               <div className="mb-4">
                 <h2 className="text-lg font-semibold text-gray-900 mb-4">Shipping</h2>
                 <div className="space-y-3" />
               </div>
 
-              {/* Ship to — from address book */}
-              <div className="mb-4 p-3 bg-gray-50 rounded-lg relative min-w-0 max-w-full">
-                <div className="flex justify-between items-start gap-2 mb-2">
-                  <h3 className="text-sm font-medium text-gray-700 shrink-0">Ship to</h3>
-                  {addressesLoading ? null : displayShipTo ? (
-                    <Link
-                      href={`/address-book?edit=${displayShipTo.id}`}
-                      className="text-sm text-blue-600 hover:text-blue-800 font-medium shrink-0"
-                    >
-                      Edit
-                    </Link>
+              {shippingUserLoggedIn ? (
+                /* Ship to — from address book */
+                <div className="mb-4 p-3 bg-gray-50 rounded-lg relative min-w-0 max-w-full">
+                  <div className="flex justify-between items-start gap-2 mb-2">
+                    <h3 className="text-sm font-medium text-gray-700 shrink-0">Ship to</h3>
+                    {addressesLoading ? null : displayShipTo ? (
+                      <Link
+                        href={`/address-book?edit=${displayShipTo.id}`}
+                        className="text-sm text-blue-600 hover:text-blue-800 font-medium shrink-0"
+                      >
+                        Edit
+                      </Link>
+                    ) : (
+                      <Link
+                        href="/address-book?add=1"
+                        className="text-sm text-blue-600 hover:text-blue-800 font-medium shrink-0"
+                      >
+                        Add address
+                      </Link>
+                    )}
+                  </div>
+                  {addressesLoading ? (
+                    <p className="text-sm text-gray-500">Loading your address…</p>
+                  ) : displayShipTo ? (
+                    <div className="text-sm text-gray-900 space-y-0.5 min-w-0 break-words [overflow-wrap:anywhere]">
+                      <p className="text-xs text-gray-500 capitalize">{displayShipTo.address_type}</p>
+                      <p>{displayShipTo.street_address}</p>
+                      {displayShipTo.address_line2 ? <p>{displayShipTo.address_line2}</p> : null}
+                      <p>{displayShipTo.city}, {displayShipTo.state} {displayShipTo.postcode}</p>
+                      <p>{displayShipTo.country}</p>
+                    </div>
                   ) : (
-                    <Link
-                      href="/address-book?add=1"
-                      className="text-sm text-blue-600 hover:text-blue-800 font-medium shrink-0"
-                    >
-                      Add address
-                    </Link>
+                    <div className="text-sm text-gray-600 space-y-2">
+                      <p>No saved address yet. Add one in settings to see it here.</p>
+                    </div>
                   )}
                 </div>
-                {addressesLoading ? (
-                  <p className="text-sm text-gray-500">Loading your address…</p>
-                ) : displayShipTo ? (
-                  <div className="text-sm text-gray-900 space-y-0.5 min-w-0 break-words [overflow-wrap:anywhere]">
-                    <p className="text-xs text-gray-500 capitalize">{displayShipTo.address_type}</p>
-                    <p>{displayShipTo.street_address}</p>
-                    {displayShipTo.address_line2 ? <p>{displayShipTo.address_line2}</p> : null}
-                    <p>{displayShipTo.city}, {displayShipTo.state} {displayShipTo.postcode}</p>
-                    <p>{displayShipTo.country}</p>
-                  </div>
-                ) : (
-                  <div className="text-sm text-gray-600 space-y-2">
-                    <p>No saved address yet. Add one in settings to see it here.</p>
-                  </div>
-                )}
-              </div>
+              ) : (
+                <div className="mb-4 rounded-lg border border-dashed border-gray-200 bg-gray-50/80 px-3 py-3">
+                  <p className="text-sm text-gray-700">
+                    You’ll enter your full shipping address at checkout. Choose a service below to see the estimated
+                    shipping charge for this item.
+                  </p>
+                </div>
+              )}
 
               {/* Shipping Service */}
               <div className="mb-4">
@@ -1063,12 +998,8 @@ function ProductDetailContent() {
                 <span className="text-gray-900 font-medium">${subtotal.toFixed(2)}</span>
               </div>
               <div className="flex justify-between mb-2">
-                <span className="text-gray-700">Shipping</span>
+                <span className="text-gray-700">Shipping ({shippingService})</span>
                 <span className="text-gray-900 font-medium">${shippingCost.toFixed(2)}</span>
-              </div>
-              <div className="flex justify-between mb-2">
-                <span className="text-gray-700">Tax</span>
-                <span className="text-gray-900 font-medium">${tax.toFixed(2)}</span>
               </div>
               <div className="flex justify-between pt-2 border-t border-gray-300">
                 <span className="text-gray-900 font-bold">Total</span>
@@ -1094,46 +1025,6 @@ function ProductDetailContent() {
               >
                 {addingToCart ? "Adding to Cart..." : "Add to Cart"}
               </button>
-              <div className="flex items-center justify-between text-sm">
-                <a href="#" className="text-blue-500 hover:text-blue-800 flex items-center gap-1">
-                  Or save for later?
-                  <svg
-                    className="w-4 h-4 text-gray-500"
-                    fill="none"
-                    stroke="currentColor"
-                    viewBox="0 0 24 24"
-                  >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth={2}
-                      d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
-                    />
-                  </svg>
-                </a>
-                <label className="flex items-center cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={emailProof}
-                    onChange={(e) => setEmailProof(e.target.checked)}
-                    className="mr-2"
-                  />
-                  <span className="text-gray-700">Email Proof?</span>
-                  <svg
-                    className="w-4 h-4 text-gray-500 ml-1"
-                    fill="none"
-                    stroke="currentColor"
-                    viewBox="0 0 24 24"
-                  >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth={2}
-                      d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
-                    />
-                  </svg>
-                </label>
-              </div>
             </div>
           </div>
         </div>
@@ -1439,7 +1330,6 @@ function ProductDetailContent() {
                     setWidth("0");
                     setHeight("0");
                     setQuantity("1");
-                    setTotalJobs(1);
                     setJobName("");
                     
                     // Scroll to top to show new product

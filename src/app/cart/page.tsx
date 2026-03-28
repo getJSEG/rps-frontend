@@ -6,7 +6,13 @@ import Link from "next/link";
 import Image from "next/image";
 import Navbar from "../components/Navbar";
 import Footer from "../components/Footer";
-import { getProductImageUrl, cartAPI } from "../../utils/api";
+import {
+  getProductImageUrl,
+  cartAPI,
+  shippingRatesAPI,
+  shippingAmountForService,
+  type ShippingRates,
+} from "../../utils/api";
 import { FiTrash2 } from "react-icons/fi";
 
 interface CartItem {
@@ -34,6 +40,7 @@ export default function CartPage() {
   const router = useRouter();
   const [cartItems, setCartItems] = useState<CartItem[]>([]);
   const [loading, setLoading] = useState(true);
+  const [shippingRates, setShippingRates] = useState<ShippingRates | null>(null);
   // const [isAdminView, setIsAdminView] = useState(false);
   const hasInitializedRef = useRef(false);
 
@@ -65,6 +72,21 @@ export default function CartPage() {
     };
   }, []);
 
+  useEffect(() => {
+    let c = false;
+    (async () => {
+      try {
+        const res = await shippingRatesAPI.get();
+        if (!c && res?.rates) setShippingRates(res.rates);
+      } catch {
+        /* keep null → defaults in shippingAmountForService */
+      }
+    })();
+    return () => {
+      c = true;
+    };
+  }, []);
+
   const removeFromCart = async (itemId: string) => {
     try {
       await cartAPI.remove(itemId);
@@ -83,8 +105,9 @@ export default function CartPage() {
       const updatedItem = { ...item, quantity: newQuantity };
       if (updatedItem.unitPrice) {
         updatedItem.subtotal = updatedItem.unitPrice * newQuantity;
-        updatedItem.tax = (updatedItem.subtotal || 0) * 0.08;
-        updatedItem.total = (updatedItem.subtotal || 0) + (updatedItem.shippingCost || 0) + (updatedItem.tax || 0);
+        const ship = shippingAmountForService(shippingRates, updatedItem.shippingService);
+        updatedItem.shippingCost = ship;
+        updatedItem.total = (updatedItem.subtotal || 0) + ship;
       }
       await cartAPI.update(itemId, updatedItem);
       setCartItems((prev) => prev.map((i) => (i.id === itemId ? updatedItem : i)));
@@ -95,7 +118,13 @@ export default function CartPage() {
   };
 
   const calculateTotal = () => {
-    return cartItems.reduce((sum, item) => sum + (item.total || 0), 0);
+    return cartItems.reduce((sum, item) => {
+      const sub =
+        item.subtotal != null
+          ? Number(item.subtotal)
+          : (Number(item.unitPrice) || 0) * (Number(item.quantity) || 1);
+      return sum + sub + shippingAmountForService(shippingRates, item.shippingService);
+    }, 0);
   };
 
   if (loading) {
@@ -114,9 +143,14 @@ export default function CartPage() {
     );
   }
 
-  const subtotalSum = cartItems.reduce((sum, item) => sum + (item.subtotal || item.unitPrice ? (item.unitPrice || 0) * (item.quantity || 1) : item.total || 0), 0);
-  const shippingSum = cartItems.reduce((sum, item) => sum + (item.shippingCost || 0), 0);
-  const taxSum = cartItems.reduce((sum, item) => sum + (item.tax || 0), 0);
+  const subtotalSum = cartItems.reduce((sum, item) => {
+    if (item.subtotal != null) return sum + Number(item.subtotal);
+    return sum + (Number(item.unitPrice) || 0) * (Number(item.quantity) || 1);
+  }, 0);
+  const shippingSum = cartItems.reduce(
+    (sum, item) => sum + shippingAmountForService(shippingRates, item.shippingService),
+    0
+  );
 
   return (
     <>
@@ -187,10 +221,6 @@ export default function CartPage() {
                       </div>
                       <div className="text-sm text-gray-600 space-y-1">
                         {item.jobName && <p><span className="font-medium text-gray-700">Job Name:</span> {item.jobName}</p>}
-                        {item.productType && <p>{item.productType === 'canopy-frame' ? 'Canopy Graphic + Frame' : 'Canopy Graphic Only'}</p>}
-                        {item.reinforcedStrip && <p>Reinforced Strip: {item.reinforcedStrip}</p>}
-                        {item.carryBag && <p>Carry Bag: {item.carryBag}</p>}
-                        {item.turnaround && <p>Turnaround: {item.turnaround}</p>}
                         {item.width > 0 && item.height > 0 && (
                           <p>Size: {item.width}" × {item.height}" ({item.areaSqFt.toFixed(2)} sq ft)</p>
                         )}
@@ -202,7 +232,6 @@ export default function CartPage() {
                           <button onClick={() => updateQuantity(item.id, (item.quantity || 1) + 1)} className="px-2  text-gray-600 border border-gray-600 rounded hover:bg-gray-50">+</button>
                         </div>
                         <span className="text-gray-700 font-medium">${(item.subtotal != null ? item.subtotal : (item.unitPrice || 0) * (item.quantity || 1)).toFixed(2)}</span>
-                        {item.tax != null && <span className="text-gray-600 text-sm">Tax: ${item.tax.toFixed(2)}</span>}
                       </div>
                       <div className="flex flex-wrap items-center gap-3 text-sm">
                         <button
@@ -218,9 +247,11 @@ export default function CartPage() {
 
                     {/* Shipping + item total (right) */}
                     <div className="lg:w-56 shrink-0 space-y-2 text-sm">
-                      {item.shippingService && <p className="text-gray-700">{item.shippingService} ${(item.shippingCost || 0).toFixed(2)}</p>}
-                      {item.shipping === 'blind-drop' && <p className="text-gray-600">Blind Drop Ship</p>}
-                      <p className="text-gray-600">Estimated Delivery: Tomorrow</p>
+                      {item.shippingService && (
+                        <p className="text-gray-700">
+                          {item.shippingService} ${shippingAmountForService(shippingRates, item.shippingService).toFixed(2)}
+                        </p>
+                      )}
                       <div className="pt-2 border-t border-gray-200">
                         <p className="text-lg font-bold text-gray-900">${(item.total || 0).toFixed(2)}</p>
                       </div>
@@ -241,10 +272,6 @@ export default function CartPage() {
                     <div className="flex justify-between text-gray-700">
                       <span>Shipping:</span>
                       <span>${shippingSum.toFixed(2)}</span>
-                    </div>
-                    <div className="flex justify-between text-gray-700">
-                      <span>Tax:</span>
-                      <span>${taxSum.toFixed(2)}</span>
                     </div>
                   </div>
                   <div className="border-t border-gray-300 pt-3 mb-4">

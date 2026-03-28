@@ -60,6 +60,8 @@ type OrderRow = {
   billing_state?: string | null;
   billing_postcode?: string | null;
   billing_country?: string | null;
+  shipping_method?: string | null;
+  shipping_charge?: number | string | null;
 };
 
 function parseGuestCheckout(raw: OrderRow["guest_checkout"]): GuestCheckout | null {
@@ -338,58 +340,108 @@ export default function Orders() {
     setExpanded((prev) => ({ ...prev, [id]: !prev[id] }));
   };
 
+  /** Guest just paid: URL has placed=1&order=… — show confirmation only, not the full orders UI. */
+  const guestCheckoutSuccessOnly = !!(placed && placedOrderId && (!authReady || !loggedIn));
+
   return (
     <div className="min-h-screen bg-gray-50 pb-16 pt-20">
       <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
         {placed && placedOrderId && (
           <div
-            className="mb-6 rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-emerald-900"
+            className="mb-6 rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-4 text-emerald-900"
             role="status"
           >
-            <p className="font-semibold">Your order was placed.</p>
-            <p className="text-sm mt-1">
-              Order #{placedOrderId}
-              {loggedIn ? " — details are expanded below." : " — thank you! Sign in to track all your orders."}
-            </p>
+            {loggedIn ? (
+              <>
+                <p className="font-semibold">Your order was placed.</p>
+                <p className="text-sm mt-1">
+                  Order #{placedOrderId} — details are expanded below. A confirmation email will be sent to you shortly.
+                </p>
+              </>
+            ) : (
+              <>
+                <p className="font-semibold text-lg">Thank you for your order!</p>
+                <p className="text-sm mt-2">
+                  Your order was placed successfully. <span className="font-medium">Order #{placedOrderId}</span>
+                </p>
+                <p className="text-sm mt-2">A confirmation email will be sent to you shortly.</p>
+              </>
+            )}
           </div>
         )}
 
-        <div className="bg-white border border-gray-200 rounded-lg shadow-sm mb-6 p-4 sm:p-6">
-          <div className="flex flex-col gap-4">
-            <div>
-              <h1 className="text-2xl font-semibold text-gray-900">My orders</h1>
-              <p className="text-sm text-gray-500 mt-1">Order number, items, delivery address, payment, and status</p>
-            </div>
-            <div className="flex flex-col sm:flex-row gap-3">
-              <div className="relative flex-1 min-w-0">
-                <select
-                  value={filterOption}
-                  onChange={(e) => setFilterOption(e.target.value)}
-                  className="w-full sm:w-44 appearance-none bg-gray-50 border border-gray-300 rounded-lg px-3 py-2 text-sm text-gray-800 focus:outline-none focus:ring-2 focus:ring-[#0B6BCB] pr-8"
-                >
-                  <option value="All">All statuses</option>
-                  <option value="Pending">Pending</option>
-                  <option value="Processing">Processing</option>
-                  <option value="Shipped">Shipped</option>
-                  <option value="Delivered">Delivered</option>
-                </select>
-                <div className="absolute inset-y-0 right-2 flex items-center pointer-events-none text-gray-500">▾</div>
+        {!guestCheckoutSuccessOnly && (
+          <div className="bg-white border border-gray-200 rounded-lg shadow-sm mb-6 p-4 sm:p-6">
+            <div className="flex flex-col gap-4">
+              <div>
+                <h1 className="text-2xl font-semibold text-gray-900">My orders</h1>
+                <p className="text-sm text-gray-500 mt-1">Order number, items, delivery address, payment, and status</p>
               </div>
-              <input
-                type="search"
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                placeholder="Search order #, product, job name…"
-                className="flex-1 min-w-0 px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#0B6BCB]"
-              />
+              <div className="flex flex-col sm:flex-row gap-3">
+                <div className="relative flex-1 min-w-0">
+                  <select
+                    value={filterOption}
+                    onChange={(e) => setFilterOption(e.target.value)}
+                    className="w-full sm:w-44 appearance-none bg-gray-50 border border-gray-300 rounded-lg px-3 py-2 text-sm text-gray-800 focus:outline-none focus:ring-2 focus:ring-[#0B6BCB] pr-8"
+                  >
+                    <option value="All">All statuses</option>
+                    <option value="Pending">Pending</option>
+                    <option value="Processing">Processing</option>
+                    <option value="Shipped">Shipped</option>
+                    <option value="Delivered">Delivered</option>
+                  </select>
+                  <div className="absolute inset-y-0 right-2 flex items-center pointer-events-none text-gray-500">▾</div>
+                </div>
+                <input
+                  type="search"
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  placeholder="Search order #, product, job name…"
+                  className="flex-1 min-w-0 px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#0B6BCB]"
+                />
+              </div>
+              <Link href="/cart" className="text-sm text-[#0B6BCB] hover:underline w-fit">
+                View shopping cart
+              </Link>
             </div>
-            <Link href="/cart" className="text-sm text-[#0B6BCB] hover:underline w-fit">
-              View shopping cart
-            </Link>
           </div>
-        </div>
+        )}
 
-        {!authReady ? (
+        {guestCheckoutSuccessOnly ? (
+          !authReady ? (
+            <div
+              className="mt-2 rounded-2xl border border-gray-200 bg-white p-10 shadow-sm"
+              aria-busy="true"
+              aria-label="Loading"
+            >
+              <div className="mx-auto h-9 w-9 rounded-full border-2 border-gray-200 border-t-[#0B6BCB] animate-spin" />
+              <p className="mt-4 text-center text-sm text-gray-500">Almost there…</p>
+            </div>
+          ) : (
+            <div className="mt-2 rounded-2xl border border-gray-200/90 bg-white p-6 sm:p-8 shadow-sm">
+              <p className="text-center text-sm font-medium text-gray-900">What would you like to do next?</p>
+              <p className="text-center text-xs text-gray-500 mt-1 max-w-sm mx-auto">
+                Browse more products whenever you’re ready.
+              </p>
+              <div className="mt-6 flex justify-center">
+                <Link
+                  href="/products"
+                  className="inline-flex items-center justify-center gap-2 rounded-xl bg-[#0B6BCB] px-5 py-3.5 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-[#0959a8] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#0B6BCB] focus-visible:ring-offset-2"
+                >
+                  <svg className="h-5 w-5 shrink-0 opacity-95" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden>
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                      d="M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z"
+                    />
+                  </svg>
+                  Continue shopping
+                </Link>
+              </div>
+            </div>
+          )
+        ) : !authReady ? (
           <div className="bg-white border border-gray-200 rounded-lg p-8 text-center">
             <p className="text-gray-600">Loading…</p>
           </div>
@@ -424,7 +476,8 @@ export default function Orders() {
               const items = normalizeItems(order.items);
               const subtotal = items.reduce((sum, it) => sum + Number(it.total_price ?? 0), 0);
               const orderTotal = Number(order.total_amount ?? 0);
-              const hasAdjust = Math.abs(subtotal - orderTotal) > 0.02;
+              const shippingChargeNum = Number(order.shipping_charge ?? 0);
+              const hasAdjust = Math.abs(subtotal + shippingChargeNum - orderTotal) > 0.02;
               const isOpen = !!expanded[order.id];
               const whenPlaced = order.created_at
                 ? new Date(order.created_at).toLocaleString(undefined, {
@@ -441,6 +494,7 @@ export default function Orders() {
               const ship = shippingLines(order);
               const bill = billingLines(order);
               const contact = contactLines(order);
+              const shippingMethodLabel = order.shipping_method?.trim() || null;
 
               return (
                 <li
@@ -492,6 +546,17 @@ export default function Orders() {
                           <span className="text-gray-500">Payment method</span>
                           <p className="font-medium text-gray-900">{formatPaymentMethod(order.payment_method)}</p>
                         </div>
+                        {(shippingMethodLabel || shippingChargeNum > 0) && (
+                          <div>
+                            <span className="text-gray-500">Shipping service</span>
+                            <p className="font-medium text-gray-900">
+                              {shippingMethodLabel || "—"}
+                              {shippingChargeNum > 0 && (
+                                <span className="text-gray-600 font-normal"> (${formatMoney(shippingChargeNum)})</span>
+                              )}
+                            </p>
+                          </div>
+                        )}
                         <div>
                           <span className="text-gray-500">Order ID</span>
                           <p className="font-medium text-gray-900">{order.id}</p>
@@ -586,9 +651,15 @@ export default function Orders() {
                             <span>Items subtotal</span>
                             <span>${formatMoney(subtotal)}</span>
                           </div>
+                          {shippingChargeNum > 0 && (
+                            <div className="flex justify-between text-gray-600">
+                              <span>Shipping</span>
+                              <span>${formatMoney(shippingChargeNum)}</span>
+                            </div>
+                          )}
                           {hasAdjust && (
                             <p className="text-xs text-gray-500 text-right">
-                              Order total may include tax, shipping, or fees charged at checkout.
+                              Totals may differ slightly from line items due to rounding or adjustments.
                             </p>
                           )}
                           <div className="flex justify-between text-base font-bold text-gray-900 pt-2 border-t border-gray-200">

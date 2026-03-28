@@ -171,7 +171,7 @@ export default function Products() {
                     ? `Products: ${subcategoryParam}`
                     : selectedCategory
                       ? `Products: ${selectedCategory.replace(/-/g, " ")}`
-                      : "All Prosssducts"}
+                      : "All Products"}
               </h1>
               <p className="text-gray-600">
                 {searchParam

@@ -6,7 +6,16 @@ import Link from "next/link";
 import Navbar from "../components/Navbar";
 import Footer from "../components/Footer";
 import { loadStripe, type Stripe, type StripeElements, type StripePaymentElement } from "@stripe/stripe-js";
-import { ordersAPI, cartAPI, addressesAPI, authAPI, cardsAPI } from "../../utils/api";
+import {
+  ordersAPI,
+  cartAPI,
+  addressesAPI,
+  authAPI,
+  cardsAPI,
+  shippingRatesAPI,
+  shippingAmountForService,
+  type ShippingRates,
+} from "../../utils/api";
 import { isAuthenticated } from "../../utils/roles";
 
 interface Address {
@@ -48,20 +57,17 @@ interface SavedCard {
 interface CartItem {
   id: string;
   productId?: string;
-  productName: string;
-  total: number;
-  unitPrice?: number;
-  subtotal?: number;
-  shippingCost?: number;
-  tax?: number;
-  quantity?: number;
-  jobName?: string;
-  product_id?: string;
+  productName?: string;
   product_name?: string;
+  quantity?: number;
+  unitPrice?: number;
   unit_price?: number;
-  shipping_cost?: number;
-  image_url?: string;
+  subtotal?: number;
+  shippingService?: string;
+  product_id?: string;
+  jobName?: string;
   job_name?: string;
+  [key: string]: unknown;
 }
 
 interface StripeElementsRef {
@@ -100,6 +106,7 @@ export default function CheckoutPage() {
   const [guestFullName, setGuestFullName] = useState("");
   const [guestPhone, setGuestPhone] = useState("");
   const [savingAddress, setSavingAddress] = useState(false);
+  const [shippingRates, setShippingRates] = useState<ShippingRates | null>(null);
 
   const globalDefault = addresses.find((a) => a.is_default) ?? null;
   const billingAddress =
@@ -125,6 +132,21 @@ export default function CheckoutPage() {
       }
     })();
     return () => { cancelled = true; };
+  }, []);
+
+  useEffect(() => {
+    let c = false;
+    (async () => {
+      try {
+        const res = await shippingRatesAPI.get();
+        if (!c && res?.rates) setShippingRates(res.rates);
+      } catch {
+        /* defaults used */
+      }
+    })();
+    return () => {
+      c = true;
+    };
   }, []);
 
   useEffect(() => {
@@ -238,10 +260,15 @@ export default function CheckoutPage() {
     };
   }, [clientSecret]);
 
-  const subtotal = cartItems.reduce((sum, i) => sum + (i.subtotal ?? (i.unitPrice || 0) * (i.quantity || 1)), 0);
-  const shipping = cartItems.reduce((sum, i) => sum + (i.shippingCost || 0), 0);
-  const tax = cartItems.reduce((sum, i) => sum + (i.tax || 0), 0);
-  const total = subtotal + shipping + tax;
+  const subtotal = cartItems.reduce((sum, i) => {
+    if (i.subtotal != null) return sum + Number(i.subtotal);
+    return sum + (Number(i.unitPrice) || 0) * (Number(i.quantity) || 1);
+  }, 0);
+  const shipping = cartItems.reduce(
+    (sum, i) => sum + shippingAmountForService(shippingRates, i.shippingService),
+    0
+  );
+  const total = subtotal + shipping;
 
   const loggedInCheckout = isAuthenticated();
   const guestEmailOk = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(guestEmail.trim());
@@ -600,10 +627,6 @@ export default function CheckoutPage() {
                   <div className="flex justify-between text-gray-700">
                     <span>Subtotal:</span>
                     <span>${subtotal.toFixed(2)}</span>
-                  </div>
-                  <div className="flex justify-between text-gray-700">
-                    <span>Tax:</span>
-                    <span>${tax.toFixed(2)}</span>
                   </div>
                   <div className="flex justify-between text-gray-700">
                     <span>Shipping:</span>

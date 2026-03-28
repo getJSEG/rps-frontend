@@ -52,6 +52,23 @@ export function getProductImageUrl(url: string | null | undefined): string {
   return u;
 }
 
+export type ShippingRates = { ground: number; express: number; overnight: number };
+
+const DEFAULT_SHIPPING_RATES: ShippingRates = { ground: 120.07, express: 0, overnight: 0 };
+
+/** Match backend: Ground / Express / Overnight → admin-configured prices */
+export function shippingAmountForService(
+  rates: ShippingRates | null | undefined,
+  serviceLabel: string | undefined
+): number {
+  const r = rates ?? DEFAULT_SHIPPING_RATES;
+  const s = String(serviceLabel || "").trim().toLowerCase();
+  if (s === "ground") return Number(r.ground) || 0;
+  if (s === "express") return Number(r.express) || 0;
+  if (s === "overnight") return Number(r.overnight) || 0;
+  return 0;
+}
+
 // Helper function for API calls
 async function apiCall(endpoint: string, options: RequestInit = {}) {
   const url = `${API_BASE_URL}${endpoint}`;
@@ -302,6 +319,12 @@ export const cartAPI = {
   update: async (id: string, itemData: Record<string, unknown>) =>
     apiCall(`/cart/${id}`, { method: 'PUT', body: JSON.stringify(itemData) }),
   clear: async () => apiCall('/cart/clear', { method: 'DELETE' }),
+};
+
+export const shippingRatesAPI = {
+  get: async (): Promise<{ rates: ShippingRates }> => apiCall('/shipping-rates'),
+  update: async (rates: ShippingRates) =>
+    apiCall('/shipping-rates', { method: 'PUT', body: JSON.stringify(rates) }),
 };
 
 // Orders API

@@ -67,6 +67,8 @@ interface Order {
   user_name?: string;
   /** Guest checkout or merged display */
   customer_phone?: string;
+  shipping_method?: string | null;
+  shipping_charge?: number;
 }
 
 function parseGuest(raw: Order["guest_checkout"]): GuestCheckoutShape | null {
@@ -263,6 +265,11 @@ export default function OrderDetails() {
         user_email: mergedUserEmail,
         user_name: mergedUserName,
         customer_phone: mergedCustomerPhone,
+        shipping_method: d.shipping_method != null ? String(d.shipping_method) : undefined,
+        shipping_charge:
+          d.shipping_charge != null && d.shipping_charge !== ""
+            ? parseFloat(String(d.shipping_charge)) || 0
+            : 0,
       };
       setOrder(processedOrder);
     } catch (err: unknown) {
@@ -433,7 +440,8 @@ export default function OrderDetails() {
 
   const linesSubtotal = order.items.reduce((s, i) => s + (Number.isFinite(i.total_price) ? i.total_price : 0), 0);
   const totalCharged = order.total_amount;
-  const delta = Math.abs(linesSubtotal - totalCharged);
+  const shipStored = Number(order.shipping_charge ?? 0);
+  const delta = Math.abs(linesSubtotal + shipStored - totalCharged);
   const guest = parseGuest(order.guest_checkout);
 
   const shipDb = linesFromDbOrder(order, "shipping");
@@ -537,7 +545,12 @@ export default function OrderDetails() {
               <p className="mt-1 text-3xl font-bold tracking-tight">${formatMoney(totalCharged)}</p>
               <p className="mt-2 text-xs text-slate-400">Order total (stored)</p>
               <p className="mt-1 text-sm text-slate-300">Lines sum ${formatMoney(linesSubtotal)}</p>
-              {delta > 0.02 && <p className="mt-1 text-[11px] text-amber-200/90">Δ tax / shipping / rounding</p>}
+              {(order.shipping_method || shipStored > 0) && (
+                <p className="mt-1 text-sm text-slate-300">
+                  Shipping ({dash(order.shipping_method)}) ${formatMoney(shipStored)}
+                </p>
+              )}
+              {delta > 0.02 && <p className="mt-1 text-[11px] text-amber-200/90">Δ rounding or adjustments</p>}
             </div>
             <div className="bg-slate-900/90 p-5 sm:col-span-2 lg:col-span-1">
               <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400">Payment & fulfillment</p>
@@ -623,6 +636,8 @@ export default function OrderDetails() {
               <DetailCell label="Payment method" value={formatPaymentMethod(order.payment_method)} />
               <DetailCell label="Payment status" value={dash(order.payment_status)} />
               <DetailCell label="Total amount" value={`$${formatMoney(order.total_amount)}`} />
+              <DetailCell label="Shipping service" value={dash(order.shipping_method)} />
+              <DetailCell label="Shipping charge" value={`$${formatMoney(shipStored)}`} />
               {(hasDbAddressIds || order.user_id != null) && (
                 <>
                   <DetailCell label="Shipping address ID" value={dash(order.shipping_address_id)} />
@@ -754,6 +769,12 @@ export default function OrderDetails() {
             <p className="text-sm text-slate-600">
               Sum of lines <span className="font-semibold text-slate-900">${formatMoney(linesSubtotal)}</span>
             </p>
+            {(order.shipping_method || shipStored > 0) && (
+              <p className="text-sm text-slate-600">
+                Shipping ({dash(order.shipping_method)}){" "}
+                <span className="font-semibold text-slate-900">${formatMoney(shipStored)}</span>
+              </p>
+            )}
             <p className="text-base font-bold text-slate-900">
               Order total <span className="ml-2">${formatMoney(totalCharged)}</span>
             </p>
