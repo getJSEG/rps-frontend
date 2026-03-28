@@ -1,10 +1,10 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef, type ReactNode } from "react";
 import { useRouter, useParams } from "next/navigation";
 import Image from "next/image";
 import Link from "next/link";
-import { ordersAPI, productsAPI, getProductImageUrl } from "../../../../utils/api";
+import { ordersAPI, getProductImageUrl } from "../../../../utils/api";
 import AdminNavbar from "../../../components/AdminNavbar";
 import { canAccessAdminPanel, isAuthenticated, getUserRole } from "../../../../utils/roles";
 
@@ -26,22 +26,144 @@ interface OrderItem {
   product_sku?: string;
 }
 
+interface GuestCheckoutShape {
+  email?: string;
+  fullName?: string;
+  full_name?: string;
+  phone?: string;
+  telephone?: string;
+  shippingAddress?: Record<string, string | null | undefined>;
+  billingAddress?: Record<string, string | null | undefined>;
+}
+
 interface Order {
   id: string;
+  user_id?: string | null;
   order_number: string;
   status: string;
   total_amount: number;
   payment_method: string;
+  payment_status?: string;
   created_at: string;
+  updated_at?: string;
+  notes?: string | null;
+  guest_checkout?: GuestCheckoutShape | string | null;
+  shipping_address_id?: string | null;
+  billing_address_id?: string | null;
+  shipping_street_address?: string | null;
+  shipping_address_line2?: string | null;
+  shipping_city?: string | null;
+  shipping_state?: string | null;
+  shipping_postcode?: string | null;
+  shipping_country?: string | null;
+  billing_street_address?: string | null;
+  billing_address_line2?: string | null;
+  billing_city?: string | null;
+  billing_state?: string | null;
+  billing_postcode?: string | null;
+  billing_country?: string | null;
   items: OrderItem[];
   user_email?: string;
   user_name?: string;
+  /** Guest checkout or merged display */
+  customer_phone?: string;
+}
+
+function parseGuest(raw: Order["guest_checkout"]): GuestCheckoutShape | null {
+  if (!raw) return null;
+  if (typeof raw === "object") return raw as GuestCheckoutShape;
+  try {
+    return JSON.parse(String(raw)) as GuestCheckoutShape;
+  } catch {
+    return null;
+  }
+}
+
+function guestPhoneDisplay(g: GuestCheckoutShape | null): string | undefined {
+  if (!g) return undefined;
+  const p = g.phone ?? g.telephone;
+  if (p == null || String(p).trim() === "") return undefined;
+  return String(p).trim();
+}
+
+function formatMoney(n: number) {
+  return (Number.isFinite(n) ? n : 0).toFixed(2);
+}
+
+function formatStatus(status: string) {
+  return status
+    .split("_")
+    .map((w) => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase())
+    .join(" ");
+}
+
+function formatPaymentMethod(m: string) {
+  const x = (m || "").toLowerCase();
+  if (x === "stripe") return "Card (Stripe)";
+  if (x === "manual") return "Manual / test";
+  return m || "—";
+}
+
+function dash(v: unknown): string {
+  if (v === null || v === undefined || v === "") return "—";
+  return String(v);
+}
+
+function linesFromDbOrder(o: Order, kind: "shipping" | "billing"): string[] {
+  const pre = kind === "shipping" ? "shipping" : "billing";
+  const street = o[`${pre}_street_address` as keyof Order] as string | null | undefined;
+  if (!street) return [];
+  const line2 = o[`${pre}_address_line2` as keyof Order] as string | null | undefined;
+  const city = o[`${pre}_city` as keyof Order] as string | null | undefined;
+  const state = o[`${pre}_state` as keyof Order] as string | null | undefined;
+  const post = o[`${pre}_postcode` as keyof Order] as string | null | undefined;
+  const country = o[`${pre}_country` as keyof Order] as string | null | undefined;
+  const lines = [street, line2 || undefined, [city, state, post].filter(Boolean).join(", ") || undefined, country || undefined];
+  return lines.filter(Boolean) as string[];
+}
+
+function linesFromGuestAddr(a?: Record<string, string | null | undefined>): string[] {
+  if (!a) return [];
+  const street = a.street_address || a.streetAddress;
+  if (!street) return [];
+  const line2 = a.address_line2 || a.addressLine2;
+  const city = a.city;
+  const state = a.state;
+  const post = a.postcode || a.zip || a.postalCode;
+  const country = a.country;
+  return [street, line2 || undefined, [city, state, post].filter(Boolean).join(", ") || undefined, country || undefined].filter(
+    Boolean
+  ) as string[];
+}
+
+function DetailCell({ label, value }: { label: string; value: ReactNode }) {
+  return (
+    <div className="border-b border-slate-100 py-3 sm:py-2.5">
+      <dt className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">{label}</dt>
+      <dd className="mt-1 text-sm font-medium text-slate-900 break-words">{value}</dd>
+    </div>
+  );
+}
+
+function FormattedAddressCard({ title, lines }: { title: string; lines: string[] }) {
+  if (!lines.length) return null;
+  return (
+    <div className="rounded-xl border border-slate-200 bg-slate-50/90 p-4 shadow-sm">
+      <h3 className="text-[11px] font-bold uppercase tracking-wide text-slate-500">{title}</h3>
+      <div className="mt-2 space-y-0.5 text-sm text-slate-800">
+        {lines.map((line, i) => (
+          <p key={i}>{line}</p>
+        ))}
+      </div>
+    </div>
+  );
 }
 
 export default function OrderDetails() {
   const router = useRouter();
   const params = useParams();
   const orderId = params?.id ? String(params.id) : null;
+  const statusDropdownRef = useRef<HTMLDivElement>(null);
 
   const [order, setOrder] = useState<Order | null>(null);
   const [loading, setLoading] = useState(true);
@@ -49,7 +171,6 @@ export default function OrderDetails() {
   const [updatingStatus, setUpdatingStatus] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [showStatusDropdown, setShowStatusDropdown] = useState(false);
-  const [showItemStatusDropdown, setShowItemStatusDropdown] = useState<{ [key: string]: boolean }>({});
 
   const fetchOrder = useCallback(async () => {
     if (!orderId) {
@@ -58,8 +179,7 @@ export default function OrderDetails() {
       return;
     }
 
-    // Check token - if missing, API will handle it
-    const token = typeof window !== 'undefined' ? localStorage.getItem('token') : null;
+    const token = typeof window !== "undefined" ? localStorage.getItem("token") : null;
     if (!token) {
       setError("Authentication required. Please login as admin to view order details.");
       setLoading(false);
@@ -69,69 +189,97 @@ export default function OrderDetails() {
     try {
       setLoading(true);
       setError(null);
-      setOrder(null); // Reset order state
-      
-      const orderIdStr = String(orderId);
-      // Call backend API
-      const response = await ordersAPI.getByIdAdmin(orderIdStr);
-      
+      setOrder(null);
+
+      const response = await ordersAPI.getByIdAdmin(String(orderId));
+
       if (!response || !response.order) {
         throw new Error("Invalid response from server");
       }
-      
-      const orderData = response.order;
-      // Process order data - ensure all fields are properly formatted
+
+      const d = response.order as Record<string, unknown>;
+      const guestPreview = parseGuest((d.guest_checkout as Order["guest_checkout"]) ?? undefined);
+      const mergedUserEmail =
+        d.user_email != null && String(d.user_email).trim() !== ""
+          ? String(d.user_email)
+          : guestPreview?.email
+            ? String(guestPreview.email).trim()
+            : undefined;
+      const mergedUserName =
+        d.user_name != null && String(d.user_name).trim() !== ""
+          ? String(d.user_name)
+          : guestPreview?.fullName || guestPreview?.full_name
+            ? String(guestPreview.fullName || guestPreview.full_name).trim()
+            : undefined;
+      const mergedCustomerPhone = guestPhoneDisplay(guestPreview);
+
       const processedOrder: Order = {
-        id: String(orderData.id),
-        order_number: orderData.order_number || `ORD-${orderData.id}`,
-        status: orderData.status || "pending",
-        total_amount: parseFloat(orderData.total_amount) || 0,
-        payment_method: orderData.payment_method || "N/A",
-        created_at: orderData.created_at || new Date().toISOString(),
-        items: Array.isArray(orderData.items) 
-          ? orderData.items
-              .filter((item: any) => item !== null && item !== undefined)
-              .map((item: any) => ({
+        id: String(d.id),
+        user_id: d.user_id != null ? String(d.user_id) : null,
+        order_number: String(d.order_number || `ORD-${d.id}`),
+        status: String(d.status || "pending"),
+        total_amount: parseFloat(String(d.total_amount)) || 0,
+        payment_method: String(d.payment_method || "N/A"),
+        payment_status: d.payment_status != null ? String(d.payment_status) : undefined,
+        created_at: String(d.created_at || new Date().toISOString()),
+        updated_at: d.updated_at != null ? String(d.updated_at) : undefined,
+        notes: d.notes != null ? String(d.notes) : undefined,
+        guest_checkout: (d.guest_checkout as Order["guest_checkout"]) ?? undefined,
+        shipping_address_id: d.shipping_address_id != null ? String(d.shipping_address_id) : null,
+        billing_address_id: d.billing_address_id != null ? String(d.billing_address_id) : null,
+        shipping_street_address: d.shipping_street_address != null ? String(d.shipping_street_address) : null,
+        shipping_address_line2: d.shipping_address_line2 != null ? String(d.shipping_address_line2) : null,
+        shipping_city: d.shipping_city != null ? String(d.shipping_city) : null,
+        shipping_state: d.shipping_state != null ? String(d.shipping_state) : null,
+        shipping_postcode: d.shipping_postcode != null ? String(d.shipping_postcode) : null,
+        shipping_country: d.shipping_country != null ? String(d.shipping_country) : null,
+        billing_street_address: d.billing_street_address != null ? String(d.billing_street_address) : null,
+        billing_address_line2: d.billing_address_line2 != null ? String(d.billing_address_line2) : null,
+        billing_city: d.billing_city != null ? String(d.billing_city) : null,
+        billing_state: d.billing_state != null ? String(d.billing_state) : null,
+        billing_postcode: d.billing_postcode != null ? String(d.billing_postcode) : null,
+        billing_country: d.billing_country != null ? String(d.billing_country) : null,
+        items: Array.isArray(d.items)
+          ? (d.items as Record<string, unknown>[])
+              .filter((item) => item !== null && item !== undefined)
+              .map((item) => ({
                 id: String(item.id),
-                product_id: item.product_id ? String(item.product_id) : undefined,
-                product_name: item.product_name || "Unknown Product",
-                job_name: item.job_name || undefined,
-                quantity: parseInt(item.quantity) || 1,
-                unit_price: parseFloat(item.unit_price) || 0,
-                total_price: parseFloat(item.total_price) || 0,
-                product_image: item.product_image || undefined,
-                product_material: item.product_material || undefined,
-                product_description: item.product_description || undefined,
-                product_price_per_sqft: item.product_price_per_sqft ? parseFloat(item.product_price_per_sqft) : undefined,
-                product_min_charge: item.product_min_charge ? parseFloat(item.product_min_charge) : undefined,
-                product_category: item.product_category || undefined,
-                product_subcategory: item.product_subcategory || undefined,
-                product_sku: item.product_sku || undefined,
+                product_id: item.product_id != null ? String(item.product_id) : undefined,
+                product_name: String(item.product_name || "Unknown Product"),
+                job_name: item.job_name ? String(item.job_name) : undefined,
+                quantity: parseInt(String(item.quantity), 10) || 1,
+                unit_price: parseFloat(String(item.unit_price)) || 0,
+                total_price: parseFloat(String(item.total_price)) || 0,
+                product_image: item.product_image ? String(item.product_image) : undefined,
+                product_material: item.product_material ? String(item.product_material) : undefined,
+                product_description: item.product_description ? String(item.product_description) : undefined,
+                product_price_per_sqft: item.product_price_per_sqft != null ? parseFloat(String(item.product_price_per_sqft)) : undefined,
+                product_min_charge: item.product_min_charge != null ? parseFloat(String(item.product_min_charge)) : undefined,
+                product_category: item.product_category ? String(item.product_category) : undefined,
+                product_subcategory: item.product_subcategory ? String(item.product_subcategory) : undefined,
+                product_sku: item.product_sku ? String(item.product_sku) : undefined,
               }))
           : [],
-        user_email: orderData.user_email || undefined,
-        user_name: orderData.user_name || undefined,
+        user_email: mergedUserEmail,
+        user_name: mergedUserName,
+        customer_phone: mergedCustomerPhone,
       };
       setOrder(processedOrder);
-      
-    } catch (error: any) {
-      const errorMessage = error?.message || "Failed to load order details";
-      
-      // Handle authentication errors
-      if (errorMessage.includes("Access token required") || 
-          errorMessage.includes("Invalid token") || 
-          errorMessage.includes("Token expired") ||
-          errorMessage.includes("401")) {
+    } catch (err: unknown) {
+      const errorMessage = err instanceof Error ? err.message : "Failed to load order details";
+
+      if (
+        errorMessage.includes("Access token required") ||
+        errorMessage.includes("Invalid token") ||
+        errorMessage.includes("Token expired") ||
+        errorMessage.includes("401")
+      ) {
         setError("Authentication failed. Please login again as admin.");
-        // Clear invalid token
-        localStorage.removeItem('token');
-        localStorage.removeItem('isLoggedIn');
-        // Redirect to login after 2 seconds
-        setTimeout(() => {
-          router.push('/');
-        }, 2000);
+        localStorage.removeItem("token");
+        localStorage.removeItem("isLoggedIn");
+        setTimeout(() => router.push("/"), 2000);
       } else {
-        setError(`Error: ${errorMessage}. Please check if the order exists in the database.`);
+        setError(`${errorMessage}. Check that the order exists.`);
       }
       setOrder(null);
     } finally {
@@ -139,9 +287,8 @@ export default function OrderDetails() {
     }
   }, [orderId, router]);
 
-  // Check authentication and role before fetching order
   useEffect(() => {
-    if (typeof window === 'undefined') return;
+    if (typeof window === "undefined") return;
 
     const authenticated = isAuthenticated();
     const hasAccess = canAccessAdminPanel();
@@ -150,21 +297,15 @@ export default function OrderDetails() {
     if (!authenticated) {
       setError("Please login to view order details.");
       setLoading(false);
-      setTimeout(() => {
-        router.push('/');
-      }, 1500);
+      setTimeout(() => router.push("/"), 1500);
       return;
     }
 
     if (!hasAccess) {
-      setError(`Access denied. This page is only accessible to admin users. Your role: ${userRole || 'unknown'}`);
+      setError(`Access denied. Admin only. Your role: ${userRole || "unknown"}`);
       setLoading(false);
-      setTimeout(() => {
-        router.push('/');
-      }, 2000);
-      return;
+      setTimeout(() => router.push("/"), 2000);
     }
-
   }, [router]);
 
   useEffect(() => {
@@ -173,46 +314,49 @@ export default function OrderDetails() {
       setLoading(false);
       return;
     }
-
-    if (typeof window === 'undefined') return;
-
-    const authenticated = isAuthenticated();
-    const hasAccess = canAccessAdminPanel();
-    if (!authenticated || !hasAccess) return;
-
-    const token = localStorage.getItem('token');
-    if (!token) {
-      setError("Please login to view order details. This page is only accessible to admin users.");
+    if (typeof window === "undefined") return;
+    if (!isAuthenticated() || !canAccessAdminPanel()) return;
+    if (!localStorage.getItem("token")) {
+      setError("Please login as admin.");
       setLoading(false);
       return;
     }
     fetchOrder();
   }, [orderId, fetchOrder]);
 
-  // Main flow: Pending, In Process, Complete. Refund-tab statuses: Refund, Cancelled, Approval Needed, Shipped (show on Refunds page)
+  useEffect(() => {
+    if (!showStatusDropdown) return;
+    const onDown = (e: MouseEvent) => {
+      if (statusDropdownRef.current && !statusDropdownRef.current.contains(e.target as Node)) {
+        setShowStatusDropdown(false);
+      }
+    };
+    document.addEventListener("mousedown", onDown);
+    return () => document.removeEventListener("mousedown", onDown);
+  }, [showStatusDropdown]);
+
   const statusOptions = [
+    { value: "pending_payment", label: "Pending payment" },
     { value: "pending", label: "Pending" },
-    { value: "processing", label: "In Process" },
+    { value: "processing", label: "Processing" },
+    { value: "shipped", label: "Shipped" },
+    { value: "delivered", label: "Delivered" },
     { value: "complete", label: "Complete" },
+    { value: "approval_needed", label: "Approval needed" },
     { value: "refund", label: "Refund" },
     { value: "cancelled", label: "Cancelled" },
-    { value: "approval_needed", label: "Approval Needed" },
-    { value: "shipped", label: "Shipped" },
   ];
 
   const handleStatusUpdate = async (newStatus: string) => {
     if (!order) return;
-    
     try {
       setUpdatingStatus(true);
       const response = await ordersAPI.updateStatus(order.id, newStatus);
-      if (response && response.order) {
-        // Only update status – keep existing payment_method, items, images etc.
-        setOrder((prev) => prev ? { ...prev, status: response.order.status } : null);
+      if (response?.order) {
+        setOrder((prev) => (prev ? { ...prev, status: response.order.status } : null));
       }
       setShowStatusDropdown(false);
-    } catch (error) {
-      console.error("Error updating status:", error);
+    } catch {
       alert("Failed to update status. Please try again.");
     } finally {
       setUpdatingStatus(false);
@@ -225,103 +369,45 @@ export default function OrderDetails() {
       setDeleting(true);
       await ordersAPI.deleteAdmin(order.id);
       router.push("/admin");
-    } catch (error) {
-      console.error("Error deleting order:", error);
+    } catch {
       alert("Failed to delete order. Please try again.");
     } finally {
       setDeleting(false);
     }
   };
 
-  const getStatusColor = (status: string) => {
-    const statusLower = status.toLowerCase();
-    switch (statusLower) {
-      case "processing":
-      case "complete":
-      case "shipped":
-      case "delivered":
-        return "bg-emerald-50 text-emerald-800 ring-1 ring-emerald-200/80";
-      case "cancelled":
-      case "canceled":
-      case "refund":
-        return "bg-rose-50 text-rose-800 ring-1 ring-rose-200/80";
-      case "pending":
-      case "approval_needed":
-      case "approval needed":
-        return "bg-amber-50 text-amber-900 ring-1 ring-amber-200/80";
-      default:
-        return "bg-slate-100 text-slate-700 ring-1 ring-slate-200/80";
+  const getStatusStyles = (status: string) => {
+    const s = status.toLowerCase();
+    if (s === "processing" || s === "shipped") return "bg-sky-50 text-sky-900 ring-sky-200/80";
+    if (s === "complete" || s === "delivered") return "bg-emerald-50 text-emerald-900 ring-emerald-200/80";
+    if (s === "cancelled" || s === "canceled" || s === "refund") return "bg-rose-50 text-rose-900 ring-rose-200/80";
+    if (s === "pending" || s === "pending_payment" || s === "approval_needed")
+      return "bg-amber-50 text-amber-950 ring-amber-200/80";
+    return "bg-slate-100 text-slate-800 ring-slate-200/80";
+  };
+
+  const renderThumb = (item: OrderItem) => {
+    const imgSrc = getProductImageUrl(item.product_image);
+    const isBackend = item.product_image && String(item.product_image).startsWith("/uploads/");
+    if (!imgSrc) {
+      return <div className="h-12 w-12 rounded-lg bg-slate-200 text-[8px] leading-tight text-slate-500 flex items-center justify-center p-1 text-center">No img</div>;
     }
-  };
-
-  const formatStatus = (status: string) => {
-    const statusLower = status.toLowerCase();
-    switch (statusLower) {
-      case "processing":
-        return "Processing";
-      case "complete":
-        return "Complete";
-      case "pending":
-        return "Pending";
-      case "shipped":
-        return "Shipped";
-      case "delivered":
-        return "Delivered";
-      case "cancelled":
-      case "canceled":
-        return "Cancelled";
-      case "refund":
-        return "Refund";
-      case "approval_needed":
-      case "approval needed":
-        return "Approval Needed";
-      default:
-        return status.charAt(0).toUpperCase() + status.slice(1);
+    if (isBackend) {
+      return (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img src={imgSrc} alt="" className="h-12 w-12 rounded-lg object-cover border border-slate-200" />
+      );
     }
-  };
-
-  // Calculate tax (8% of total)
-  const calculateTax = (amount: number) => {
-    return amount * 0.08;
-  };
-
-  // Get specifications from order item - use data directly from backend
-  const getItemSpecifications = (item: OrderItem) => {
-    const material = item.product_material || "N/A";
-    const description = item.product_description || "";
-    const pricePerSqFt = item.product_price_per_sqft || null;
-    const minCharge = item.product_min_charge || null;
-    const category = item.product_category || "N/A";
-    const subcategory = item.product_subcategory || "N/A";
-    const sku = item.product_sku || "N/A";
-    const productName = item.product_name || "N/A";
-    const jobName = item.job_name || item.product_name || "—";
-    const size = "36\" x 13\"";
-    return {
-      productName,
-      jobName,
-      size,
-      material,
-      description,
-      pricePerSqFt,
-      minCharge,
-      category,
-      subcategory,
-      sku,
-      sides: "1 Side",
-      hem: "All Sides",
-      grommet: "Every 2' All Sides",
-      turnaround: "Next Day",
-    };
+    return <Image src={imgSrc} alt="" width={48} height={48} className="h-12 w-12 rounded-lg object-cover border border-slate-200" unoptimized />;
   };
 
   if (loading) {
     return (
-      <AdminNavbar title="Order details" subtitle="Review line items and update status">
-        <div className="rounded-xl border border-slate-200/60 bg-white p-8 shadow-sm shadow-slate-900/5">
-          <p className="flex items-center gap-2 text-slate-600">
-            <span className="h-5 w-5 animate-spin rounded-full border-2 border-slate-300 border-t-slate-600" />
-            Loading order details…
+      <AdminNavbar title="Order details" subtitle="Loading…">
+        <div className="flex min-h-[240px] items-center justify-center rounded-2xl border border-slate-200/80 bg-white shadow-sm">
+          <p className="flex items-center gap-3 text-slate-600">
+            <span className="h-6 w-6 animate-spin rounded-full border-2 border-slate-200 border-t-sky-600" />
+            Loading order…
           </p>
         </div>
       </AdminNavbar>
@@ -330,309 +416,360 @@ export default function OrderDetails() {
 
   if (error || !order) {
     return (
-      <AdminNavbar title="Order details" subtitle="Review line items and update status">
-        <div className="rounded-xl border border-rose-200/60 bg-rose-50/50 p-8 shadow-sm">
-          <p className="mb-2 font-semibold text-rose-800">{error || "Order not found"}</p>
-          <p className="mb-6 text-sm text-slate-600">
-            {error
-              ? "There was an error loading the order details. Check the console for more information."
-              : "The order you are looking for does not exist or was removed."}
-          </p>
+      <AdminNavbar title="Order details" subtitle="Error">
+        <div className="rounded-2xl border border-rose-200 bg-rose-50/50 p-8 shadow-sm">
+          <p className="text-lg font-semibold text-rose-900">{error || "Order not found"}</p>
           <button
             type="button"
             onClick={() => router.push("/admin")}
-            className="rounded-lg bg-slate-900 px-4 py-2.5 text-sm font-medium text-white shadow-sm hover:bg-slate-800"
+            className="mt-6 rounded-xl bg-slate-900 px-5 py-2.5 text-sm font-semibold text-white hover:bg-slate-800"
           >
-            Back to orders
+            Back to admin
           </button>
         </div>
       </AdminNavbar>
     );
   }
 
-  const tax = calculateTax(order.total_amount);
-  const totalWithTax = order.total_amount + tax;
+  const linesSubtotal = order.items.reduce((s, i) => s + (Number.isFinite(i.total_price) ? i.total_price : 0), 0);
+  const totalCharged = order.total_amount;
+  const delta = Math.abs(linesSubtotal - totalCharged);
+  const guest = parseGuest(order.guest_checkout);
+
+  const shipDb = linesFromDbOrder(order, "shipping");
+  const billDb = linesFromDbOrder(order, "billing");
+  const shipGuest = linesFromGuestAddr(guest?.shippingAddress);
+  const billGuest = linesFromGuestAddr(guest?.billingAddress);
+  const shipLines = shipDb.length ? shipDb : shipGuest;
+  const billLines = billDb.length ? billDb : billGuest.length ? billGuest : shipGuest;
+
+  const hasDbAddressIds = Boolean(order.shipping_address_id || order.billing_address_id);
+  const guestOnlyAddresses = !hasDbAddressIds && guest && (shipGuest.length > 0 || billGuest.length > 0);
+  const billingDiffersFromShipping =
+    guestOnlyAddresses &&
+    billGuest.length > 0 &&
+    JSON.stringify(shipGuest) !== JSON.stringify(billGuest);
+
+  const placedStr = order.created_at
+    ? new Date(order.created_at).toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" })
+    : "—";
+  const updatedStr = order.updated_at
+    ? new Date(order.updated_at).toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" })
+    : "—";
 
   return (
     <AdminNavbar title="Order details" subtitle={order.order_number}>
-      <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-        <button
-          type="button"
-          onClick={() => router.push("/admin")}
-          className="inline-flex w-fit items-center gap-2 text-sm font-medium text-slate-600 transition-colors hover:text-slate-900"
-        >
-          <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
-          </svg>
-          Back to orders
-        </button>
-        <div className="relative">
-          <button
-            type="button"
-            onClick={() => setShowStatusDropdown(!showStatusDropdown)}
-            disabled={updatingStatus}
-            className={`inline-flex items-center gap-2 rounded-xl px-4 py-2.5 text-sm font-semibold shadow-sm transition ${
-              getStatusColor(order.status)
-            } ${updatingStatus ? "cursor-not-allowed opacity-50" : "hover:brightness-[0.98]"}`}
-          >
-            {formatStatus(order.status)}
-            <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-            </svg>
-          </button>
-          {showStatusDropdown && (
-            <div className="absolute right-0 z-20 mt-2 w-52 overflow-hidden rounded-xl border border-slate-200/80 bg-white py-1 shadow-lg shadow-slate-900/10">
-              {statusOptions.map((option) => (
-                <button
-                  key={option.value}
-                  type="button"
-                  onClick={() => handleStatusUpdate(option.value)}
-                  className="w-full px-4 py-2.5 text-left text-sm text-slate-700 transition hover:bg-slate-50"
-                >
-                  {option.label}
-                </button>
-              ))}
-            </div>
-          )}
-        </div>
-      </div>
-
-      <div className="mb-6 rounded-xl border border-slate-200/60 bg-white p-6 shadow-sm shadow-slate-900/5 sm:p-8">
-        <h2 className="mb-5 text-base font-semibold text-slate-900">Order information</h2>
-        <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
-            <div>
-              <p className="text-xs font-medium uppercase tracking-wide text-slate-500">Order number</p>
-              <p className="mt-1 text-base font-medium text-slate-900">{order.order_number}</p>
-            </div>
-            <div>
-              <p className="text-xs font-medium uppercase tracking-wide text-slate-500">Order date</p>
-              <p className="mt-1 text-base font-medium text-slate-900">
-                {order.created_at 
-                  ? new Date(order.created_at).toLocaleString("en-US", {
-                      year: "numeric",
-                      month: "long",
-                      day: "numeric",
-                      hour: "2-digit",
-                      minute: "2-digit",
-                    })
-                  : "N/A"}
-              </p>
-            </div>
-            <div>
-              <p className="text-xs font-medium uppercase tracking-wide text-slate-500">Payment method</p>
-              <p className="mt-1 text-base font-medium text-slate-900">{order.payment_method || "N/A"}</p>
-            </div>
-            {order.user_email && (
-              <div>
-                <p className="text-xs font-medium uppercase tracking-wide text-slate-500">Customer email</p>
-                <p className="mt-1 text-base font-medium text-slate-900">{order.user_email}</p>
-              </div>
-            )}
-            {order.user_name && (
-              <div>
-                <p className="text-xs font-medium uppercase tracking-wide text-slate-500">Customer name</p>
-                <p className="mt-1 text-base font-medium text-slate-900">{order.user_name}</p>
-              </div>
-            )}
-        </div>
-      </div>
-
-        <div className="space-y-4">
-          {order.items && order.items.length > 0 ? (
-            order.items.map((item, index) => {
-              const specs = getItemSpecifications(item);
-              const itemTax = calculateTax(item.total_price);
-              const isItemStatusOpen = showItemStatusDropdown[item.id] || false;
-
-              return (
-                <div
-                  key={item.id}
-                  className="rounded-xl border border-slate-200/60 bg-white p-6 shadow-sm shadow-slate-900/5 sm:p-8"
-                >
-                  <div className="flex flex-col gap-6 sm:flex-row">
-                    {/* Product Image - Left */}
-                    {item.product_id ? (
-                      <Link
-                        href={`/products/product-detail?productId=${String(item.product_id)}`}
-                        onClick={(e) => {
-                          e.preventDefault();
-                          router.push(`/products/product-detail?productId=${String(item.product_id)}`);
-                        }}
-                        className="flex h-40 w-32 shrink-0 cursor-pointer items-center justify-center overflow-hidden rounded-xl border border-slate-200 bg-slate-100 transition-colors hover:border-sky-400"
-                      >
-                        {(() => {
-                          const imgSrc = getProductImageUrl(item.product_image);
-                          const isBackend = item.product_image && String(item.product_image).startsWith("/uploads/");
-                          if (!imgSrc) return (
-                            <div className="w-full h-full bg-red-600 flex flex-col items-center justify-center text-white p-2">
-                              <p className="text-xs font-bold uppercase leading-tight text-center">ONE STOP SHOP & SERVICES COMING SOON</p>
-                            </div>
-                          );
-                          return isBackend ? (
-                            <img src={imgSrc} alt={item.product_name} className="w-full h-full object-cover" />
-                          ) : (
-                            <Image src={imgSrc} alt={item.product_name} width={128} height={160} className="w-full h-full object-cover" unoptimized />
-                          );
-                        })()}
-                      </Link>
-                    ) : (
-                      <div className="flex h-40 w-32 shrink-0 items-center justify-center overflow-hidden rounded-xl border border-slate-200 bg-slate-100">
-                        {(() => {
-                          const imgSrc = getProductImageUrl(item.product_image);
-                          const isBackend = item.product_image && String(item.product_image).startsWith("/uploads/");
-                          if (!imgSrc) return (
-                            <div className="w-full h-full bg-red-600 flex flex-col items-center justify-center text-white p-2">
-                              <p className="text-xs font-bold uppercase leading-tight text-center">ONE STOP SHOP & SERVICES COMING SOON</p>
-                            </div>
-                          );
-                          return isBackend ? (
-                            <img src={imgSrc} alt={item.product_name} className="w-full h-full object-cover" />
-                          ) : (
-                            <Image src={imgSrc} alt={item.product_name} width={128} height={160} className="w-full h-full object-cover" unoptimized />
-                          );
-                        })()}
-                      </div>
-                    )}
-
-                    {/* Content: Job Name, Product Name, Specs, Qty/Price - Design match */}
-                    <div className="flex-1 min-w-0">
-                      {/* Top row: Job Name (left) + Status dropdown (right) */}
-                      <div className="flex justify-between items-start gap-4 mb-2">
-                        <p className="text-sm text-slate-600">
-                          Job name: <span className="font-medium text-slate-800">{specs.jobName}</span>
-                        </p>
-                        <div className="relative shrink-0">
-                          <button
-                            type="button"
-                            onClick={() =>
-                              setShowItemStatusDropdown({
-                                ...showItemStatusDropdown,
-                                [item.id]: !isItemStatusOpen,
-                              })
-                            }
-                            className={`inline-flex items-center gap-2 rounded-xl px-4 py-2 text-sm font-semibold shadow-sm ${getStatusColor(order.status)} hover:brightness-[0.98]`}
-                          >
-                            {formatStatus(order.status)}
-                            <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                            </svg>
-                          </button>
-                          {isItemStatusOpen && (
-                            <div className="absolute right-0 z-20 mt-2 w-52 overflow-hidden rounded-xl border border-slate-200/80 bg-white py-1 shadow-lg shadow-slate-900/10">
-                              {statusOptions.map((option) => (
-                                <button
-                                  key={option.value}
-                                  type="button"
-                                  onClick={() => {
-                                    handleStatusUpdate(option.value);
-                                    setShowItemStatusDropdown({ ...showItemStatusDropdown, [item.id]: false });
-                                  }}
-                                  className="w-full px-4 py-2.5 text-left text-sm text-slate-700 transition hover:bg-slate-50"
-                                >
-                                  {option.label}
-                                </button>
-                              ))}
-                            </div>
-                          )}
-                        </div>
-                      </div>
-
-                      {item.product_id ? (
-                        <Link
-                          href={`/products/product-detail?productId=${String(item.product_id)}`}
-                          onClick={(e) => {
-                            e.preventDefault();
-                            router.push(`/products/product-detail?productId=${String(item.product_id)}`);
-                          }}
-                          className="mb-3 block text-xl font-bold text-slate-900 transition hover:text-sky-600"
-                        >
-                          {specs.productName}
-                        </Link>
-                      ) : (
-                        <p className="mb-3 text-xl font-bold text-slate-900">{specs.productName}</p>
-                      )}
-
-                      <div className="mb-4 space-y-1.5">
-                        <p className="text-sm text-slate-600">
-                          <span className="font-medium text-slate-800">Size:</span> {specs.size}
-                        </p>
-                        <p className="text-sm text-slate-600">
-                          <span className="font-medium text-slate-800">Material:</span> {specs.material}
-                        </p>
-                        <p className="text-sm text-slate-600">
-                          <span className="font-medium text-slate-800"># of sides:</span> {specs.sides}
-                        </p>
-                        <p className="text-sm text-slate-600">
-                          <span className="font-medium text-slate-800">Hem:</span> {specs.hem}
-                        </p>
-                        <p className="text-sm text-slate-600">
-                          <span className="font-medium text-slate-800">Grommet:</span> {specs.grommet}
-                        </p>
-                        <p className="text-sm text-slate-600">
-                          <span className="font-medium text-slate-800">Turnaround:</span> {specs.turnaround}
-                        </p>
-                      </div>
-
-                      <div className="flex items-center justify-between border-t border-slate-100 pt-4">
-                        <div className="flex items-center gap-2">
-                          <span className="text-sm text-slate-600">Qty</span>
-                          <input
-                            type="number"
-                            value={item.quantity}
-                            readOnly
-                            className="w-16 rounded-lg border border-slate-200 bg-slate-50 px-2 py-1.5 text-center text-sm text-slate-800"
-                          />
-                        </div>
-                        <div className="text-right">
-                          <p className="text-lg font-semibold text-slate-900">${item.total_price.toFixed(2)}</p>
-                          <p className="text-sm text-slate-500">Tax: ${itemTax.toFixed(2)}</p>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              );
-            })
-          ) : (
-            <div className="rounded-xl border border-slate-200/60 bg-white p-8 text-center text-slate-500 shadow-sm">
-              No items in this order.
-            </div>
-          )}
-        </div>
-
-        <div className="mt-6 rounded-xl border border-slate-200/60 bg-white p-6 shadow-sm shadow-slate-900/5 sm:p-8">
-          <div className="mb-2 flex items-center justify-between text-sm">
-            <span className="text-slate-600">Subtotal</span>
-            <span className="font-semibold text-slate-900">${order.total_amount.toFixed(2)}</span>
-          </div>
-          <div className="mb-2 flex items-center justify-between text-sm">
-            <span className="text-slate-600">Tax</span>
-            <span className="font-semibold text-slate-900">${tax.toFixed(2)}</span>
-          </div>
-          <div className="flex items-center justify-between border-t border-slate-100 pt-4">
-            <span className="text-lg font-bold text-slate-900">Total</span>
-            <span className="text-lg font-bold text-slate-900">${totalWithTax.toFixed(2)}</span>
-          </div>
-        </div>
-
-        <div className="mt-6 flex flex-wrap items-center gap-3">
+      <div className="mx-auto max-w-6xl space-y-5">
+        {/* Toolbar */}
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <button
             type="button"
             onClick={() => router.push("/admin")}
-            className="rounded-lg border border-slate-200 bg-white px-4 py-2.5 text-sm font-medium text-slate-700 shadow-sm hover:bg-slate-50"
+            className="inline-flex w-fit items-center gap-2 text-sm font-medium text-slate-600 hover:text-slate-900"
+          >
+            <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+            </svg>
+            Back to orders
+          </button>
+          <div className="flex flex-wrap gap-2">
+            <div className="relative" ref={statusDropdownRef}>
+              <button
+                type="button"
+                onClick={() => setShowStatusDropdown(!showStatusDropdown)}
+                disabled={updatingStatus}
+                className={`inline-flex items-center gap-2 rounded-xl px-4 py-2.5 text-sm font-semibold shadow-sm ring-1 transition ${getStatusStyles(
+                  order.status
+                )} ${updatingStatus ? "opacity-60" : ""}`}
+              >
+                {updatingStatus ? "Updating…" : formatStatus(order.status)}
+                <svg className="h-4 w-4 opacity-70" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                </svg>
+              </button>
+              {showStatusDropdown && (
+                <div className="absolute right-0 z-30 mt-2 max-h-72 w-56 overflow-auto rounded-xl border border-slate-200 bg-white py-1 shadow-xl">
+                  {statusOptions.map((option) => (
+                    <button
+                      key={option.value}
+                      type="button"
+                      onClick={() => handleStatusUpdate(option.value)}
+                      className="w-full px-4 py-2.5 text-left text-sm text-slate-700 hover:bg-slate-50"
+                    >
+                      {option.label}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+            <button
+              type="button"
+              onClick={handleDeleteOrder}
+              disabled={deleting}
+              className="rounded-xl border border-rose-200 bg-white px-4 py-2.5 text-sm font-semibold text-rose-700 hover:bg-rose-50 disabled:opacity-50"
+            >
+              {deleting ? "Deleting…" : "Delete order"}
+            </button>
+          </div>
+        </div>
+
+        {/* Top summary — dense, all key facts */}
+        <div className="overflow-hidden rounded-2xl border border-slate-800/20 bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 text-white shadow-xl shadow-slate-900/25">
+          <div className="grid gap-px bg-slate-700/50 sm:grid-cols-2 lg:grid-cols-3">
+            <div className="bg-slate-900/90 p-5 lg:col-span-1">
+              <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400">Order</p>
+              <p className="mt-1 font-mono text-xl font-bold tracking-tight">{order.order_number}</p>
+              <p className="mt-2 text-xs text-slate-400">
+                Internal ID <span className="font-mono text-slate-200">{order.id}</span>
+                {order.user_id != null && (
+                  <>
+                    {" · "}
+                    User <span className="font-mono text-slate-200">#{order.user_id}</span>
+                  </>
+                )}
+              </p>
+              <p className="mt-3 text-xs text-slate-400">
+                Line items: <span className="font-semibold text-white">{order.items.length}</span>
+              </p>
+            </div>
+            <div className="bg-slate-900/90 p-5">
+              <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400">Amounts</p>
+              <p className="mt-1 text-3xl font-bold tracking-tight">${formatMoney(totalCharged)}</p>
+              <p className="mt-2 text-xs text-slate-400">Order total (stored)</p>
+              <p className="mt-1 text-sm text-slate-300">Lines sum ${formatMoney(linesSubtotal)}</p>
+              {delta > 0.02 && <p className="mt-1 text-[11px] text-amber-200/90">Δ tax / shipping / rounding</p>}
+            </div>
+            <div className="bg-slate-900/90 p-5 sm:col-span-2 lg:col-span-1">
+              <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400">Payment & fulfillment</p>
+              <p className="mt-2 text-sm font-medium">{formatPaymentMethod(order.payment_method)}</p>
+              <p className="mt-1 text-sm text-slate-300">Payment: {dash(order.payment_status)}</p>
+              <p className="mt-1 text-sm text-slate-300">Fulfillment: {formatStatus(order.status)}</p>
+            </div>
+            <div className="bg-slate-900/90 p-5 lg:col-span-1">
+              <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400">Customer</p>
+              {order.user_name || order.user_email ? (
+                <>
+                  {!order.user_id && <p className="mt-2 text-[10px] font-semibold uppercase tracking-wide text-slate-500">Guest checkout</p>}
+                  <p className="mt-2 text-sm font-semibold text-white">{dash(order.user_name)}</p>
+                  {order.user_email && (
+                    <a href={`mailto:${order.user_email}`} className="mt-1 block text-sm text-sky-300 hover:underline">
+                      {order.user_email}
+                    </a>
+                  )}
+                  {order.customer_phone && (
+                    <a href={`tel:${order.customer_phone.replace(/\s/g, "")}`} className="mt-1 block text-sm text-slate-300 hover:text-white">
+                      {order.customer_phone}
+                    </a>
+                  )}
+                </>
+              ) : (
+                <p className="mt-2 text-sm text-slate-400">No customer record</p>
+              )}
+            </div>
+            <div className="bg-slate-900/90 p-5 sm:col-span-2 lg:col-span-2">
+              <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400">Timeline</p>
+              <div className="mt-2 grid gap-2 text-sm sm:grid-cols-2">
+                <p>
+                  <span className="text-slate-500">Created</span>{" "}
+                  <span className="font-medium text-white">{placedStr}</span>
+                </p>
+                <p>
+                  <span className="text-slate-500">Updated</span>{" "}
+                  <span className="font-medium text-white">{updatedStr}</span>
+                </p>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Single panel: full record + addresses + notes + line-item table */}
+        <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+          <div className="border-b border-slate-200 bg-slate-50/90 px-5 py-3">
+            <h2 className="text-sm font-bold text-slate-800">Complete order record</h2>
+            <p className="text-xs text-slate-500">All database fields, addresses, notes, and products in one view</p>
+          </div>
+
+          <div className="px-5 py-4">
+            <dl className="grid grid-cols-1 gap-0 sm:grid-cols-2 lg:grid-cols-3">
+              <DetailCell label="Order number" value={order.order_number} />
+              <DetailCell label="Order ID" value={order.id} />
+              {order.user_id != null && <DetailCell label="User ID" value={order.user_id} />}
+              <DetailCell label="Customer name" value={dash(order.user_name)} />
+              <DetailCell
+                label="Customer email"
+                value={
+                  order.user_email ? (
+                    <a href={`mailto:${order.user_email}`} className="text-sky-700 hover:underline">
+                      {order.user_email}
+                    </a>
+                  ) : (
+                    "—"
+                  )
+                }
+              />
+              <DetailCell
+                label="Customer phone"
+                value={
+                  order.customer_phone ? (
+                    <a href={`tel:${order.customer_phone.replace(/\s/g, "")}`} className="text-sky-700 hover:underline">
+                      {order.customer_phone}
+                    </a>
+                  ) : (
+                    "—"
+                  )
+                }
+              />
+              <DetailCell label="Status" value={formatStatus(order.status)} />
+              <DetailCell label="Payment method" value={formatPaymentMethod(order.payment_method)} />
+              <DetailCell label="Payment status" value={dash(order.payment_status)} />
+              <DetailCell label="Total amount" value={`$${formatMoney(order.total_amount)}`} />
+              {(hasDbAddressIds || order.user_id != null) && (
+                <>
+                  <DetailCell label="Shipping address ID" value={dash(order.shipping_address_id)} />
+                  <DetailCell label="Billing address ID" value={dash(order.billing_address_id)} />
+                </>
+              )}
+              <DetailCell label="Created at" value={placedStr} />
+              <DetailCell label="Updated at" value={updatedStr} />
+            </dl>
+          </div>
+
+          {guestOnlyAddresses ? (
+            <div className="border-t border-slate-200 p-5">
+              <h3 className="text-xs font-bold uppercase tracking-wide text-slate-500">Delivery address</h3>
+              <p className="mt-1 text-xs text-slate-500">From guest checkout (not linked to saved address IDs)</p>
+              <div className={`mt-4 grid gap-4 ${billingDiffersFromShipping ? "sm:grid-cols-2" : ""}`}>
+                <FormattedAddressCard title="Shipping" lines={shipGuest} />
+                {billingDiffersFromShipping ? <FormattedAddressCard title="Billing" lines={billGuest} /> : null}
+              </div>
+            </div>
+          ) : (
+            <div className="grid gap-0 border-t border-slate-200 sm:grid-cols-2">
+              <div className="border-b border-slate-200 p-5 sm:border-b-0 sm:border-r">
+                <h3 className="text-xs font-bold uppercase tracking-wide text-slate-500">Ship to</h3>
+                {shipLines.length ? (
+                  <div className="mt-2 space-y-0.5 text-sm text-slate-800">
+                    {shipLines.map((line, i) => (
+                      <p key={i}>{line}</p>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="mt-2 text-sm text-slate-400">—</p>
+                )}
+              </div>
+              <div className="border-b border-slate-200 p-5 sm:border-b-0">
+                <h3 className="text-xs font-bold uppercase tracking-wide text-slate-500">Bill to</h3>
+                {billLines.length ? (
+                  <div className="mt-2 space-y-0.5 text-sm text-slate-800">
+                    {billLines.map((line, i) => (
+                      <p key={i}>{line}</p>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="mt-2 text-sm text-slate-400">—</p>
+                )}
+              </div>
+            </div>
+          )}
+
+          <div className="border-t border-slate-200 px-5 py-4">
+            <h3 className="text-xs font-bold uppercase tracking-wide text-slate-500">Notes</h3>
+            <p className="mt-2 whitespace-pre-wrap text-sm text-slate-800">{order.notes && String(order.notes).trim() ? order.notes : "—"}</p>
+          </div>
+
+          <div className="border-t border-slate-200">
+            <div className="flex items-center justify-between border-b border-slate-100 bg-slate-50/80 px-5 py-2.5">
+              <h3 className="text-xs font-bold uppercase tracking-wide text-slate-600">Products / line items</h3>
+              <span className="text-xs text-slate-500">{order.items.length} row(s)</span>
+            </div>
+            <div className="overflow-x-auto">
+              {order.items.length === 0 ? (
+                <p className="p-8 text-center text-sm text-slate-500">No line items.</p>
+              ) : (
+                <table className="w-full min-w-[900px] border-collapse text-left text-sm">
+                  <thead>
+                    <tr className="border-b border-slate-200 bg-white text-[11px] font-bold uppercase tracking-wide text-slate-500">
+                      <th className="px-3 py-3 pl-5"> </th>
+                      <th className="px-3 py-3">Product</th>
+                      <th className="px-3 py-3">Job</th>
+                      <th className="px-3 py-3">SKU</th>
+                      <th className="px-3 py-3">Category</th>
+                      <th className="px-3 py-3">Material</th>
+                      <th className="px-3 py-3 text-right">Qty</th>
+                      <th className="px-3 py-3 text-right">Unit</th>
+                      <th className="px-3 py-3 text-right">Line total</th>
+                      <th className="px-3 py-3 pr-5">Description</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {order.items.map((item) => (
+                      <tr key={item.id} className="border-b border-slate-100 align-top hover:bg-slate-50/50">
+                        <td className="px-3 py-3 pl-5">{renderThumb(item)}</td>
+                        <td className="px-3 py-3 font-medium text-slate-900">
+                          {item.product_id ? (
+                            <Link href={`/products/product-detail?productId=${item.product_id}`} className="text-sky-700 hover:underline">
+                              {item.product_name}
+                            </Link>
+                          ) : (
+                            item.product_name
+                          )}
+                          {item.product_id && (
+                            <span className="mt-0.5 block text-xs font-normal text-slate-500">ID {item.product_id}</span>
+                          )}
+                        </td>
+                        <td className="px-3 py-3 text-slate-700">{dash(item.job_name)}</td>
+                        <td className="px-3 py-3 font-mono text-xs text-slate-600">{dash(item.product_sku)}</td>
+                        <td className="px-3 py-3 text-slate-600">
+                          {dash(item.product_category)}
+                          {item.product_subcategory && (
+                            <span className="block text-xs text-slate-400">{item.product_subcategory}</span>
+                          )}
+                        </td>
+                        <td className="px-3 py-3 text-slate-600">{dash(item.product_material)}</td>
+                        <td className="px-3 py-3 text-right tabular-nums">{item.quantity}</td>
+                        <td className="px-3 py-3 text-right tabular-nums">${formatMoney(item.unit_price)}</td>
+                        <td className="px-3 py-3 text-right font-semibold tabular-nums text-slate-900">${formatMoney(item.total_price)}</td>
+                        <td className="max-w-[220px] px-3 py-3 pr-5 text-xs text-slate-600">
+                          {item.product_description ? (
+                            <span className="line-clamp-4" title={item.product_description}>
+                              {item.product_description}
+                            </span>
+                          ) : (
+                            "—"
+                          )}
+                          <div className="mt-1 space-y-0.5 text-[10px] text-slate-400">
+                            {item.product_price_per_sqft != null && <span>${formatMoney(item.product_price_per_sqft)}/sq ft · </span>}
+                            {item.product_min_charge != null && <span>Min ${formatMoney(item.product_min_charge)}</span>}
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
+            </div>
+          </div>
+
+          <div className="flex flex-col gap-2 border-t border-slate-200 bg-slate-50/90 px-5 py-4 sm:flex-row sm:items-center sm:justify-end sm:gap-8">
+            <p className="text-sm text-slate-600">
+              Sum of lines <span className="font-semibold text-slate-900">${formatMoney(linesSubtotal)}</span>
+            </p>
+            <p className="text-base font-bold text-slate-900">
+              Order total <span className="ml-2">${formatMoney(totalCharged)}</span>
+            </p>
+          </div>
+        </div>
+
+        <div className="pb-8">
+          <button
+            type="button"
+            onClick={() => router.push("/admin")}
+            className="rounded-xl border border-slate-200 bg-white px-5 py-2.5 text-sm font-semibold text-slate-700 shadow-sm hover:bg-slate-50"
           >
             Back to orders
           </button>
-          <button
-            type="button"
-            onClick={handleDeleteOrder}
-            disabled={deleting}
-            className="rounded-lg bg-rose-600 px-4 py-2.5 text-sm font-medium text-white shadow-sm hover:bg-rose-700 disabled:opacity-50"
-          >
-            {deleting ? "Deleting…" : "Delete order"}
-          </button>
         </div>
+      </div>
     </AdminNavbar>
   );
 }
-

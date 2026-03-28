@@ -29,6 +29,11 @@ function isCartApiEndpoint(endpoint: string): boolean {
   return endpoint === '/cart' || endpoint.startsWith('/cart/');
 }
 
+/** Guest checkout must send X-Guest-Session-Id so the server can clear the guest cart after order. */
+function needsGuestSessionHeader(endpoint: string): boolean {
+  return isCartApiEndpoint(endpoint) || endpoint === '/orders/create-payment-intent';
+}
+
 /** Get backend base URL (no /api) for image URLs - works in browser */
 function getBackendBaseUrl(): string {
   const apiUrl = getApiBaseUrl();
@@ -66,7 +71,7 @@ async function apiCall(endpoint: string, options: RequestInit = {}) {
       ...config.headers,
       Authorization: `Bearer ${token}`,
     };
-  } else if (typeof window !== 'undefined' && isCartApiEndpoint(endpoint)) {
+  } else if (typeof window !== 'undefined' && needsGuestSessionHeader(endpoint)) {
     const sid = getOrCreateGuestSessionId();
     if (sid) {
       config.headers = {
@@ -308,8 +313,13 @@ export const ordersAPI = {
     });
   },
   
-  getAll: async () => {
-    return apiCall('/orders');
+  getAll: async (params?: { status?: string; page?: number; limit?: number }) => {
+    const q = new URLSearchParams();
+    if (params?.status) q.set('status', params.status);
+    if (params?.page != null) q.set('page', String(params.page));
+    if (params?.limit != null) q.set('limit', String(params.limit));
+    const qs = q.toString();
+    return apiCall(qs ? `/orders?${qs}` : '/orders');
   },
   
   getAllAdmin: async (params?: { status?: string; page?: number; limit?: number }) => {
@@ -344,14 +354,21 @@ export const ordersAPI = {
     });
   },
 
-  /** Create order + Stripe PaymentIntent from cart; returns { orderId, orderNumber, clientSecret } */
+  /** Create order + Stripe PaymentIntent from cart; returns { orderId, orderNumber, clientSecret, stripePaymentSkipped? } */
   createPaymentIntent: async (
     cartItems: Record<string, unknown>[],
-    guestCheckout?: Record<string, unknown>
+    guestCheckout?: Record<string, unknown>,
+    addressIds?: { shippingAddressId?: number; billingAddressId?: number }
   ) => {
     const body: Record<string, unknown> = { cartItems };
     if (guestCheckout && typeof guestCheckout === 'object') {
       body.guestCheckout = guestCheckout;
+    }
+    if (addressIds?.shippingAddressId != null) {
+      body.shippingAddressId = addressIds.shippingAddressId;
+    }
+    if (addressIds?.billingAddressId != null) {
+      body.billingAddressId = addressIds.billingAddressId;
     }
     return apiCall('/orders/create-payment-intent', {
       method: 'POST',

@@ -33,6 +33,23 @@ interface Order {
   isCartItem?: boolean; // Flag to identify cart items
 }
 
+type GuestCheckoutRow = {
+  email?: string;
+  fullName?: string;
+  full_name?: string;
+};
+
+function guestFromOrderRow(order: { guest_checkout?: unknown }): GuestCheckoutRow | null {
+  const raw = order.guest_checkout;
+  if (!raw) return null;
+  if (typeof raw === "object" && raw !== null) return raw as GuestCheckoutRow;
+  try {
+    return JSON.parse(String(raw)) as GuestCheckoutRow;
+  } catch {
+    return null;
+  }
+}
+
 interface CartItem {
   id: string;
   productId?: string;
@@ -160,6 +177,12 @@ export default function AdminPanel() {
               const productImage = firstItem?.product_image || firstItem?.image_url || null;
               const productId = firstItem?.product_id?.toString() || null;
 
+              const gc = guestFromOrderRow(order);
+              const guestName = gc?.fullName || gc?.full_name || "";
+              const guestEmail = gc?.email || "";
+              const user_name = order.user_name || guestName || undefined;
+              const user_email = order.user_email || guestEmail || undefined;
+
               return {
                 id: String(order.id || Math.random()),
                 order_number: order.order_number || `ORD-${order.id}`,
@@ -171,8 +194,8 @@ export default function AdminPanel() {
                 amount: parseFloat(order.total_amount || 0),
                 status: (order.status || "pending").toLowerCase(),
                 items: order.items || [],
-                user_email: order.user_email,
-                user_name: order.user_name,
+                user_email,
+                user_name,
               };
             });
             setAllOrders(formattedOrders);
@@ -357,12 +380,15 @@ export default function AdminPanel() {
 
     // Apply search filter
     if (searchQuery) {
-      filtered = filtered.filter(order =>
-        order.productName.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        order.orderDate.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        order.paymentType.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        order.order_number.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        (order.user_email && order.user_email.toLowerCase().includes(searchQuery.toLowerCase()))
+      const q = searchQuery.toLowerCase();
+      filtered = filtered.filter(
+        (order) =>
+          order.productName.toLowerCase().includes(q) ||
+          order.orderDate.toLowerCase().includes(q) ||
+          order.paymentType.toLowerCase().includes(q) ||
+          order.order_number.toLowerCase().includes(q) ||
+          (order.user_email && order.user_email.toLowerCase().includes(q)) ||
+          (order.user_name && order.user_name.toLowerCase().includes(q))
       );
     }
 

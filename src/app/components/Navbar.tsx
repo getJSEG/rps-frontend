@@ -17,7 +17,7 @@ import { toast } from "react-toastify";
 
 function shouldDisableScrollNavbar(pathname: string): boolean {
   if (!pathname) return false;
-  if (pathname === "/checkout" || pathname === "/cart" || pathname === "/products") return true;
+  if (pathname === "/checkout" || pathname === "/cart" || pathname === "/orders" || pathname === "/products") return true;
   if (pathname.startsWith("/products/product-detail") || pathname.startsWith("/products/product/")) return true;
   return false;
 }
@@ -549,8 +549,7 @@ export default function Navbar({ cartCountOverride, skipCartCountFetch = false }
                   )}
                 </div>
 
-                {/* Orders - shows cart products (items user added to cart) */}
-                <Link href="/cart" className="text-gray-700 hover:text-gray-900 text-sm font-medium transition-colors">
+                <Link href="/orders" className="text-gray-700 hover:text-gray-900 text-sm font-medium transition-colors">
                   Orders
                 </Link>
 

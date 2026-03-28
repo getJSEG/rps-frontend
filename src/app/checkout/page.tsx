@@ -98,6 +98,7 @@ export default function CheckoutPage() {
   });
   const [guestEmail, setGuestEmail] = useState("");
   const [guestFullName, setGuestFullName] = useState("");
+  const [guestPhone, setGuestPhone] = useState("");
   const [savingAddress, setSavingAddress] = useState(false);
 
   const globalDefault = addresses.find((a) => a.is_default) ?? null;
@@ -258,19 +259,24 @@ export default function CheckoutPage() {
       router.push("/");
       return;
     }
-    if (!stripePublishableKey) {
-      setError("Stripe is not configured. Set NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY in your .env (and STRIPE_SECRET_KEY on the backend).");
-      return;
-    }
     setCreating(true);
     setError(null);
     try {
       const items = cartItems as unknown as Record<string, unknown>[];
+      const shipAddrId = shippingAddress?.id ?? billingAddress?.id;
+      const billAddrId = billingAddress?.id ?? shippingAddress?.id;
       const res = loggedInCheckout
-        ? await ordersAPI.createPaymentIntent(items)
+        ? await ordersAPI.createPaymentIntent(
+            items,
+            undefined,
+            shipAddrId != null && billAddrId != null
+              ? { shippingAddressId: Number(shipAddrId), billingAddressId: Number(billAddrId) }
+              : undefined
+          )
         : await ordersAPI.createPaymentIntent(items, {
             email: guestEmail.trim(),
             fullName: guestFullName.trim() || undefined,
+            phone: guestPhone.trim() || undefined,
             shippingAddress: {
               streetAddress: billingForm.streetAddress.trim(),
               addressLine2: billingForm.addressLine2.trim() || undefined,
@@ -279,7 +285,29 @@ export default function CheckoutPage() {
               postcode: billingForm.postcode.trim(),
               country: billingForm.country || "United States",
             },
-          });
+          }) as {
+            orderId: number;
+            orderNumber?: string;
+            clientSecret: string | null;
+            stripePaymentSkipped?: boolean;
+          };
+      if (res.stripePaymentSkipped) {
+        try {
+          await cartAPI.clear();
+        } catch (_) {}
+        localStorage.removeItem("cart");
+        window.dispatchEvent(new Event("cartUpdated"));
+        router.push(`/orders?placed=1&order=${res.orderId}`);
+        return;
+      }
+      if (!res.clientSecret) {
+        setError("No payment session returned from server.");
+        return;
+      }
+      if (!stripePublishableKey) {
+        setError("Stripe is not configured. Set NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY in your .env (and STRIPE_SECRET_KEY on the backend).");
+        return;
+      }
       setClientSecret(res.clientSecret);
       setOrderId(res.orderId);
     } catch (e: unknown) {
@@ -308,7 +336,7 @@ export default function CheckoutPage() {
       const { error: err } = await stripe.confirmPayment({
         elements: elementsRef.current.elements,
         confirmParams: {
-          return_url: `${typeof window !== "undefined" ? window.location.origin : ""}/?order=${orderId}&paid=1`,
+          return_url: `${typeof window !== "undefined" ? window.location.origin : ""}/orders?placed=1&order=${orderId}`,
         },
       });
       if (err) setError(err.message || "Payment failed");
@@ -429,7 +457,7 @@ export default function CheckoutPage() {
                     <p className="text-gray-500 text-sm">Loading addresses...</p>
                   ) : !isAuthenticated() ? (
                     <div className="p-4 bg-gray-50 rounded-lg border border-gray-200 space-y-3">
-                      <p className="text-sm text-gray-600">Checkout as guest — enter email and shipping address.</p>
+                      <p className="text-sm text-gray-600">Checkout as guest — enter email, phone (optional), and shipping address.</p>
                       <input
                         type="email"
                         placeholder="Email *"
@@ -445,6 +473,14 @@ export default function CheckoutPage() {
                         onChange={(e) => setGuestFullName(e.target.value)}
                         className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm"
                         autoComplete="name"
+                      />
+                      <input
+                        type="tel"
+                        placeholder="Phone (optional)"
+                        value={guestPhone}
+                        onChange={(e) => setGuestPhone(e.target.value)}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm"
+                        autoComplete="tel"
                       />
                       <input
                         type="text"
@@ -621,9 +657,6 @@ export default function CheckoutPage() {
                     </button>
                   </>
                 )}
-                <Link href="#" className="block text-blue-600 hover:underline text-sm mt-3">
-                  Have a Coupon Code?
-                </Link>
               </div>
             </div>
           </div>
