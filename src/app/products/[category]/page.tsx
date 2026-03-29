@@ -204,7 +204,7 @@ export default function CategoryProductsPage({ params }: { params: Promise<{ cat
                 <>
                   <div className="mb-10">
                     <h1 className="text-3xl font-bold text-gray-900 mb-2">{parentName}</h1>
-                    <p className="text-gray-600">Browse by subcategory</p>
+                    <p className="text-gray-600">Subcategories</p>
                   </div>
                   <div className="space-y-12">
                     {carouselProducts.map((section) => (

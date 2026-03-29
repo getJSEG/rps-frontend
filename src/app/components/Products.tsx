@@ -39,6 +39,9 @@ function parseProductMoney(value: string | number | null | undefined): number | 
   return Number.isNaN(n) ? null : n;
 }
 
+/** Grid: 5 per row × 4 rows = 20 products per page (on xl screens). */
+const PRODUCTS_PER_PAGE = 20;
+
 export default function Products() {
   const searchParams = useSearchParams();
   const router = useRouter();
@@ -48,8 +51,18 @@ export default function Products() {
 
   const [products, setProducts] = useState<Product[]>([]);
   const [loading, setLoading] = useState(true);
+  const [page, setPage] = useState(1);
   const [selectedCategory, setSelectedCategory] = useState<string | null>(categoryParam);
   const lastFetchedKeyRef = useRef<string>("");
+
+  useEffect(() => {
+    setPage(1);
+  }, [selectedCategory, searchParam, subcategoryParam]);
+
+  useEffect(() => {
+    const tp = Math.max(1, Math.ceil(products.length / PRODUCTS_PER_PAGE));
+    setPage((p) => (p > tp ? tp : p));
+  }, [products.length]);
 
   useEffect(() => {
     setSelectedCategory(categoryParam);
@@ -159,6 +172,11 @@ export default function Products() {
     );
   };
 
+  const totalPages = Math.max(1, Math.ceil(products.length / PRODUCTS_PER_PAGE));
+  const currentPage = Math.min(page, totalPages);
+  const pageStart = (currentPage - 1) * PRODUCTS_PER_PAGE;
+  const paginatedProducts = products.slice(pageStart, pageStart + PRODUCTS_PER_PAGE);
+
   return (
     <section className="min-h-screen bg-white px-4 py-8 pt-24 sm:px-6 lg:px-8">
       <div className="mx-auto w-full max-w-none">
@@ -183,7 +201,7 @@ export default function Products() {
                     ? "Showing products in this subcategory"
                     : selectedCategory
                       ? "Showing products in selected category"
-                      : "Browse our complete product catalog. Products and categories are managed by admin."}
+                      : "Browse our All Products Catalog"}
               </p>
             </div>
 
@@ -202,11 +220,39 @@ export default function Products() {
                 </p>
               </div>
             ) : (
-              <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
-                {products.map((product) => (
-                  <ProductCard key={product.id} product={product} />
-                ))}
-              </div>
+              <>
+                <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
+                  {paginatedProducts.map((product) => (
+                    <ProductCard key={product.id} product={product} />
+                  ))}
+                </div>
+                {totalPages > 1 ? (
+                  <div className="mt-8 flex flex-wrap items-center justify-center gap-3 border-t border-gray-200 pt-6">
+                    <button
+                      type="button"
+                      onClick={() => setPage((p) => Math.max(1, p - 1))}
+                      disabled={currentPage <= 1}
+                      className="rounded-md border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 shadow-sm transition hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                      Previous
+                    </button>
+                    <span className="text-sm text-gray-600">
+                      Page {currentPage} of {totalPages}
+                      <span className="ml-2 text-gray-400">
+                        ({products.length} products, {PRODUCTS_PER_PAGE} per page)
+                      </span>
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+                      disabled={currentPage >= totalPages}
+                      className="rounded-md border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 shadow-sm transition hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                      Next
+                    </button>
+                  </div>
+                ) : null}
+              </>
             )}
           </div>
         </div>
