@@ -475,8 +475,14 @@ export default function CheckoutPage() {
                   <div className="flex items-center justify-between mb-3">
                     <h2 className="text-lg font-bold text-gray-900">Billing Address</h2>
                     {isAuthenticated() && billingAddress && (
-                      <Link href="/address-book" className="text-sm text-gray-500 hover:text-gray-700 flex items-center gap-1">
-                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" /></svg>
+                      <Link
+                        href="/address-book"
+                        className="inline-flex items-center gap-1.5 rounded-lg bg-gray-100 px-2.5 py-1.5 text-sm font-medium text-gray-700 transition-colors hover:bg-gray-200 hover:text-gray-900"
+                        aria-label="Change billing address"
+                      >
+                        <svg className="h-4 w-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden>
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
+                        </svg>
                         Change
                       </Link>
                     )}
