@@ -112,6 +112,7 @@ export default function AdminProductsPage() {
       showMsg("success", "Product deleted.");
       if (editingProductId === id) cancelEdit();
       await loadProducts();
+      await loadCategories();
     } catch (err: unknown) {
       showMsg("error", err instanceof Error ? err.message : "Failed to delete product");
     } finally {
@@ -285,6 +286,7 @@ export default function AdminProductsPage() {
       setEditingProductId(null);
       if (descEditorRef.current) descEditorRef.current.innerHTML = "";
       await loadProducts();
+      await loadCategories();
     } catch (err: unknown) {
       showMsg("error", err instanceof Error ? err.message : "Failed to save product");
     } finally {
