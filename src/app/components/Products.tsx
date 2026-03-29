@@ -211,15 +211,13 @@ export default function Products() {
                       ? `${categoryParam.replace(/-/g, " ")}`
                       : "All Products"}
               </h1>
-              <p className="text-gray-600">
-                {searchParam
-                  ? "Products matching your search (by name, category, or subcategory)"
-                  : subcategoryParam
-                    ? "Showing products in this subcategory"
-                    : categoryParam
-                      ? "Showing products in selected category"
-                      : "Browse our All Products Catalog"}
-              </p>
+              {(searchParam || subcategoryParam) && (
+                <p className="text-gray-600">
+                  {searchParam
+                    ? "Products matching your search (by name, category, or subcategory)"
+                    : "Showing products in this subcategory"}
+                </p>
+              )}
             </div>
 
             {loading ? (
