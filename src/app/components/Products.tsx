@@ -3,7 +3,7 @@
 import Image from "next/image";
 import Link from "next/link";
 import { useState, useEffect, useRef } from "react";
-import { useSearchParams, useRouter } from "next/navigation";
+import { useSearchParams, useRouter, usePathname } from "next/navigation";
 import { productsAPI, getProductImageUrl } from "../../utils/api";
 import Sidebar from "./Sidebar";
 
@@ -39,58 +39,84 @@ function parseProductMoney(value: string | number | null | undefined): number | 
   return Number.isNaN(n) ? null : n;
 }
 
-/** Grid: 5 per row × 4 rows = 20 products per page (on xl screens). */
+/** Matches backend default storefront page size. */
 const PRODUCTS_PER_PAGE = 20;
 
 export default function Products() {
   const searchParams = useSearchParams();
   const router = useRouter();
+  const pathname = usePathname();
   const categoryParam = searchParams.get("category");
   const searchParam = searchParams.get("search")?.trim() || null;
   const subcategoryParam = searchParams.get("subcategory")?.trim() || null;
+  const pageFromUrl = Math.max(1, parseInt(searchParams.get("page") || "1", 10) || 1);
 
   const [products, setProducts] = useState<Product[]>([]);
   const [loading, setLoading] = useState(true);
-  const [page, setPage] = useState(1);
+  const [pagination, setPagination] = useState<{ total: number; pages: number; page: number } | null>(null);
   const [selectedCategory, setSelectedCategory] = useState<string | null>(categoryParam);
-  const lastFetchedKeyRef = useRef<string>("");
+  const prevFilterKeyRef = useRef<string | null>(null);
 
-  useEffect(() => {
-    setPage(1);
-  }, [selectedCategory, searchParam, subcategoryParam]);
-
-  useEffect(() => {
-    const tp = Math.max(1, Math.ceil(products.length / PRODUCTS_PER_PAGE));
-    setPage((p) => (p > tp ? tp : p));
-  }, [products.length]);
+  const filterKey = `${selectedCategory ?? ""}|${searchParam ?? ""}|${subcategoryParam ?? ""}`;
 
   useEffect(() => {
     setSelectedCategory(categoryParam);
   }, [categoryParam]);
 
+  /** Drop ?page= when category / search / subcategory filters change (not on first mount). */
+  useEffect(() => {
+    if (prevFilterKeyRef.current === null) {
+      prevFilterKeyRef.current = filterKey;
+      return;
+    }
+    if (prevFilterKeyRef.current !== filterKey) {
+      prevFilterKeyRef.current = filterKey;
+      if (searchParams.get("page")) {
+        const sp = new URLSearchParams(searchParams.toString());
+        sp.delete("page");
+        const q = sp.toString();
+        router.replace(q ? `${pathname}?${q}` : pathname);
+      }
+    }
+  }, [filterKey, pathname, router, searchParams]);
+
   useEffect(() => {
     const fetchProducts = async () => {
       try {
-        const params: Record<string, string | number> = { limit: 100 };
+        const params: Record<string, string | number> = {
+          limit: PRODUCTS_PER_PAGE,
+          page: pageFromUrl,
+        };
         if (selectedCategory) params.category = selectedCategory;
         if (subcategoryParam) params.subcategory = subcategoryParam;
         if (searchParam) params.search = searchParam;
-        const requestKey = JSON.stringify(params);
-        if (lastFetchedKeyRef.current === requestKey) return;
-        lastFetchedKeyRef.current = requestKey;
         setLoading(true);
         const response = await productsAPI.getAll(params);
         setProducts(response.products || []);
+        const p = response.pagination;
+        if (p && typeof p.total === "number" && typeof p.pages === "number") {
+          setPagination({ total: p.total, pages: Math.max(1, p.pages), page: p.page ?? pageFromUrl });
+        } else {
+          setPagination(null);
+        }
       } catch (error) {
-        lastFetchedKeyRef.current = "";
         console.error("Error fetching products:", error);
         setProducts([]);
+        setPagination(null);
       } finally {
         setLoading(false);
       }
     };
     fetchProducts();
-  }, [selectedCategory, searchParam, subcategoryParam]);
+  }, [selectedCategory, searchParam, subcategoryParam, pageFromUrl]);
+
+  const goToPage = (nextPage: number) => {
+    const sp = new URLSearchParams(searchParams.toString());
+    if (nextPage <= 1) sp.delete("page");
+    else sp.set("page", String(nextPage));
+    const q = sp.toString();
+    router.push(q ? `${pathname}?${q}` : pathname);
+  };
 
   const handleCategoryClick = (categorySlug: string) => {
     setSelectedCategory(categorySlug);
@@ -172,10 +198,8 @@ export default function Products() {
     );
   };
 
-  const totalPages = Math.max(1, Math.ceil(products.length / PRODUCTS_PER_PAGE));
-  const currentPage = Math.min(page, totalPages);
-  const pageStart = (currentPage - 1) * PRODUCTS_PER_PAGE;
-  const paginatedProducts = products.slice(pageStart, pageStart + PRODUCTS_PER_PAGE);
+  const totalPages = pagination?.pages ?? 1;
+  const currentPage = pagination?.page ?? pageFromUrl;
 
   return (
     <section className="min-h-screen bg-white px-4 py-8 pt-24 sm:px-6 lg:px-8">
@@ -222,7 +246,7 @@ export default function Products() {
             ) : (
               <>
                 <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
-                  {paginatedProducts.map((product) => (
+                  {products.map((product) => (
                     <ProductCard key={product.id} product={product} />
                   ))}
                 </div>
@@ -230,7 +254,7 @@ export default function Products() {
                   <div className="mt-8 flex flex-wrap items-center justify-center gap-3 border-t border-gray-200 pt-6">
                     <button
                       type="button"
-                      onClick={() => setPage((p) => Math.max(1, p - 1))}
+                      onClick={() => goToPage(currentPage - 1)}
                       disabled={currentPage <= 1}
                       className="rounded-md border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 shadow-sm transition hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50"
                     >
@@ -239,12 +263,12 @@ export default function Products() {
                     <span className="text-sm text-gray-600">
                       Page {currentPage} of {totalPages}
                       <span className="ml-2 text-gray-400">
-                        ({products.length} products, {PRODUCTS_PER_PAGE} per page)
+                        ({pagination?.total ?? products.length} products, {PRODUCTS_PER_PAGE} per page)
                       </span>
                     </span>
                     <button
                       type="button"
-                      onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+                      onClick={() => goToPage(currentPage + 1)}
                       disabled={currentPage >= totalPages}
                       className="rounded-md border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 shadow-sm transition hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50"
                     >

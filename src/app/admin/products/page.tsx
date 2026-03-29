@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import Image from "next/image";
@@ -80,6 +80,150 @@ export default function AdminProductsPage() {
   const [prodIsActive, setProdIsActive] = useState(true);
   const [prodProperties, setProdProperties] = useState<ProductProperty[]>([]);
   const descEditorRef = useRef<HTMLDivElement>(null);
+  /** Saved so toolbar clicks don’t lose the caret before execCommand / list insertion. */
+  const descLastRangeRef = useRef<Range | null>(null);
+
+  const captureDescSelection = useCallback(() => {
+    const el = descEditorRef.current;
+    if (!el) return;
+    const sel = window.getSelection();
+    if (!sel || sel.rangeCount === 0) return;
+    const r = sel.getRangeAt(0);
+    if (!el.contains(r.commonAncestorContainer)) return;
+    descLastRangeRef.current = r.cloneRange();
+  }, []);
+
+  const applyDescCommand = useCallback(
+    (command: string) => {
+      const el = descEditorRef.current;
+      if (!el) return;
+      el.focus();
+      const sel = window.getSelection();
+      if (sel) {
+        sel.removeAllRanges();
+        const saved = descLastRangeRef.current;
+        if (saved) {
+          try {
+            sel.addRange(saved);
+          } catch {
+            const r = document.createRange();
+            r.selectNodeContents(el);
+            r.collapse(false);
+            sel.addRange(r);
+          }
+        } else {
+          const r = document.createRange();
+          r.selectNodeContents(el);
+          r.collapse(false);
+          sel.addRange(r);
+        }
+      }
+      try {
+        document.execCommand(command, false);
+      } catch {
+        /* ignore */
+      }
+      captureDescSelection();
+      setProdDescription(el.innerHTML);
+    },
+    [captureDescSelection]
+  );
+
+  /** Inserts real <ul>/<ol> — browser execCommand for lists is unreliable in contenteditable. */
+  const insertDescList = useCallback(
+    (ordered: boolean) => {
+      const el = descEditorRef.current;
+      if (!el) return;
+      el.focus();
+
+      const sel = window.getSelection();
+      if (!sel) return;
+
+      const restoreCaret = () => {
+        sel.removeAllRanges();
+        const saved = descLastRangeRef.current;
+        if (saved) {
+          try {
+            sel.addRange(saved);
+            return;
+          } catch {
+            /* fall through */
+          }
+        }
+        if (el.childNodes.length === 0) {
+          el.appendChild(document.createElement("br"));
+        }
+        const r = document.createRange();
+        r.selectNodeContents(el);
+        r.collapse(false);
+        sel.addRange(r);
+      };
+
+      restoreCaret();
+      if (!sel.rangeCount) return;
+
+      let range = sel.getRangeAt(0).cloneRange();
+      if (!el.contains(range.commonAncestorContainer)) {
+        restoreCaret();
+        range = sel.getRangeAt(0).cloneRange();
+      }
+
+      const list = document.createElement(ordered ? "ol" : "ul");
+      const li = document.createElement("li");
+
+      if (range.collapsed) {
+        li.appendChild(document.createElement("br"));
+        list.appendChild(li);
+        try {
+          range.insertNode(list);
+        } catch {
+          el.appendChild(list);
+        }
+        const nr = document.createRange();
+        nr.setStart(li, 0);
+        nr.collapse(true);
+        sel.removeAllRanges();
+        sel.addRange(nr);
+      } else {
+        const textFallback = range.toString();
+        try {
+          const contents = range.extractContents();
+          if (contents.textContent === "" && textFallback) {
+            li.textContent = textFallback;
+          } else {
+            li.appendChild(contents);
+          }
+        } catch {
+          li.textContent = textFallback;
+        }
+        list.appendChild(li);
+        try {
+          range.insertNode(list);
+        } catch {
+          el.appendChild(list);
+        }
+        const nr = document.createRange();
+        nr.selectNodeContents(li);
+        nr.collapse(false);
+        sel.removeAllRanges();
+        sel.addRange(nr);
+      }
+
+      descLastRangeRef.current = sel.rangeCount ? sel.getRangeAt(0).cloneRange() : null;
+      setProdDescription(el.innerHTML);
+    },
+    []
+  );
+
+  useEffect(() => {
+    const onSelectionChange = () => {
+      if (document.activeElement !== descEditorRef.current) return;
+      captureDescSelection();
+    };
+    document.addEventListener("selectionchange", onSelectionChange);
+    return () => document.removeEventListener("selectionchange", onSelectionChange);
+  }, [captureDescSelection]);
+
   const productFormRef = useRef<HTMLFormElement>(null);
   const categoryFormRef = useRef<HTMLFormElement>(null);
   const [editingProductId, setEditingProductId] = useState<number | null>(null);
@@ -471,8 +615,7 @@ export default function AdminProductsPage() {
                               title="Bold"
                               onMouseDown={(e) => {
                                 e.preventDefault();
-                                descEditorRef.current?.focus();
-                                document.execCommand("bold");
+                                applyDescCommand("bold");
                               }}
                               className="rounded-md px-2 py-1 text-sm font-bold text-slate-700 hover:bg-slate-200"
                             >
@@ -483,8 +626,7 @@ export default function AdminProductsPage() {
                               title="Italic"
                               onMouseDown={(e) => {
                                 e.preventDefault();
-                                descEditorRef.current?.focus();
-                                document.execCommand("italic");
+                                applyDescCommand("italic");
                               }}
                               className="rounded-md px-2 py-1 text-sm italic text-slate-700 hover:bg-slate-200"
                             >
@@ -495,8 +637,7 @@ export default function AdminProductsPage() {
                               title="Bullet list"
                               onMouseDown={(e) => {
                                 e.preventDefault();
-                                descEditorRef.current?.focus();
-                                document.execCommand("insertUnorderedList");
+                                insertDescList(false);
                               }}
                               className="rounded-md px-2 py-1 text-sm text-slate-700 hover:bg-slate-200"
                             >
@@ -507,8 +648,7 @@ export default function AdminProductsPage() {
                               title="Numbered list"
                               onMouseDown={(e) => {
                                 e.preventDefault();
-                                descEditorRef.current?.focus();
-                                document.execCommand("insertOrderedList");
+                                insertDescList(true);
                               }}
                               className="rounded-md px-2 py-1 text-sm text-slate-700 hover:bg-slate-200"
                             >
@@ -519,8 +659,10 @@ export default function AdminProductsPage() {
                             ref={descEditorRef}
                             contentEditable
                             suppressContentEditableWarning
+                            onMouseUp={captureDescSelection}
+                            onKeyUp={captureDescSelection}
                             onInput={() => descEditorRef.current && setProdDescription(descEditorRef.current.innerHTML)}
-                            className="max-h-[200px] min-h-[100px] overflow-y-auto px-3 py-2 text-slate-900 focus:outline-none"
+                            className="admin-product-desc-editor max-h-[200px] min-h-[100px] overflow-y-auto px-3 py-2 text-slate-900 focus:outline-none"
                             data-placeholder="Enter description (bold, italic, lists supported)..."
                             style={{ outline: "none" }}
                           />

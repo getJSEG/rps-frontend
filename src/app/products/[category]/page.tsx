@@ -154,7 +154,7 @@ export default function CategoryProductsPage({ params }: { params: Promise<{ cat
           <div className="flex gap-8">
             <Sidebar />
 
-            <div className="flex-1 min-w-0">
+            <div className="flex-1 min-w-0 overflow-x-hidden">
               {loading ? (
                 <div className="text-center py-12">
                   <p className="text-gray-600">Loading…</p>

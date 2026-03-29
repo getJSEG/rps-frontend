@@ -1,10 +1,11 @@
 "use client";
 
-import { useRef } from "react";
+import { useRef, useEffect, useCallback } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import { Swiper, SwiperSlide } from "swiper/react";
 import { Navigation } from "swiper/modules";
+import type { Swiper as SwiperClass } from "swiper/types";
 import { getProductImageUrl } from "../../utils/api";
 import "swiper/css";
 import "swiper/css/navigation";
@@ -48,6 +49,26 @@ type ProductCarouselProps = {
 export default function ProductCarousel({ products }: ProductCarouselProps) {
   const prevRef = useRef<HTMLButtonElement>(null);
   const nextRef = useRef<HTMLButtonElement>(null);
+  const swiperRef = useRef<SwiperClass | null>(null);
+
+  const bindNavigation = useCallback(() => {
+    const swiper = swiperRef.current;
+    if (!swiper || !prevRef.current || !nextRef.current) return;
+    const nav = swiper.params.navigation;
+    if (typeof nav === "object" && nav != null) {
+      nav.prevEl = prevRef.current;
+      nav.nextEl = nextRef.current;
+    }
+    if (swiper.navigation) {
+      swiper.navigation.destroy();
+      swiper.navigation.init();
+      swiper.navigation.update();
+    }
+  }, []);
+
+  useEffect(() => {
+    bindNavigation();
+  }, [products, bindNavigation]);
 
   if (!products.length) {
     return (
@@ -56,11 +77,35 @@ export default function ProductCarousel({ products }: ProductCarouselProps) {
   }
 
   return (
-    <div className="relative group/carousel">
+    <div className="relative w-full min-w-0 overflow-hidden group/carousel">
+      {/* Buttons must mount before Swiper so refs exist when navigation binds (onSwiper / onInit). */}
+      <button
+        ref={prevRef}
+        type="button"
+        aria-label="Previous products"
+        className="absolute left-2 top-[42%] z-20 flex h-9 w-9 -translate-y-1/2 items-center justify-center rounded-full border border-gray-200 bg-white text-gray-700 shadow-md transition hover:bg-gray-50 disabled:pointer-events-none disabled:opacity-35 sm:flex"
+      >
+        <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+        </svg>
+      </button>
+      <button
+        ref={nextRef}
+        type="button"
+        aria-label="Next products"
+        className="absolute right-2 top-[42%] z-20 flex h-9 w-9 -translate-y-1/2 items-center justify-center rounded-full border border-gray-200 bg-white text-gray-700 shadow-md transition hover:bg-gray-50 disabled:pointer-events-none disabled:opacity-35 sm:flex"
+      >
+        <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+        </svg>
+      </button>
       <Swiper
         modules={[Navigation]}
         slidesPerView={1.15}
         spaceBetween={16}
+        watchOverflow
+        observer
+        observeParents
         breakpoints={{
           480: { slidesPerView: 1.5, spaceBetween: 16 },
           640: { slidesPerView: 2, spaceBetween: 16 },
@@ -68,12 +113,15 @@ export default function ProductCarousel({ products }: ProductCarouselProps) {
           1200: { slidesPerView: 4, spaceBetween: 20 },
           1536: { slidesPerView: 5, spaceBetween: 20 },
         }}
-        onInit={(swiper) => {
-          if (swiper.params.navigation && typeof swiper.params.navigation !== "boolean") {
-            swiper.params.navigation.prevEl = prevRef.current;
-            swiper.params.navigation.nextEl = nextRef.current;
-            swiper.navigation.init();
-            swiper.navigation.update();
+        onSwiper={(swiper) => {
+          swiperRef.current = swiper;
+          queueMicrotask(() => bindNavigation());
+        }}
+        onBeforeInit={(swiper) => {
+          const nav = swiper.params.navigation;
+          if (typeof nav === "object" && nav != null && prevRef.current && nextRef.current) {
+            nav.prevEl = prevRef.current;
+            nav.nextEl = nextRef.current;
           }
         }}
         className="!pb-1"
@@ -151,26 +199,6 @@ export default function ProductCarousel({ products }: ProductCarouselProps) {
           );
         })}
       </Swiper>
-      <button
-        ref={prevRef}
-        type="button"
-        aria-label="Previous products"
-        className="absolute left-0 top-[42%] z-10 flex h-9 w-9 -translate-y-1/2 items-center justify-center rounded-full border border-gray-200 bg-white text-gray-700 shadow-md transition-opacity hover:bg-gray-50 disabled:opacity-0 sm:flex -ml-2 opacity-0 group-hover/carousel:opacity-100"
-      >
-        <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
-        </svg>
-      </button>
-      <button
-        ref={nextRef}
-        type="button"
-        aria-label="Next products"
-        className="absolute right-0 top-[42%] z-10 flex h-9 w-9 -translate-y-1/2 items-center justify-center rounded-full border border-gray-200 bg-white text-gray-700 shadow-md transition-opacity hover:bg-gray-50 disabled:opacity-0 sm:flex -mr-2 opacity-0 group-hover/carousel:opacity-100"
-      >
-        <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-        </svg>
-      </button>
     </div>
   );
 }

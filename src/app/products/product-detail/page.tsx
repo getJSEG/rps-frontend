@@ -239,6 +239,11 @@ function ProductDetailContent() {
   }, [productId]);
 
   useEffect(() => {
+    setSelectedImageIndex(0);
+    setSelectedSubcategory(null);
+  }, [productId]);
+
+  useEffect(() => {
     let cancelled = false;
     (async () => {
       try {
@@ -569,7 +574,7 @@ function ProductDetailContent() {
   })();
   const hasProductProperties = productProperties.some((x) => (x?.key && String(x.key).trim()) || (x?.value && String(x.value).trim()));
   
-  // Subcategories for thumbnail gallery
+  /** Strip thumbnails only — hero image always uses this product’s `imageSrc` (not the first product per subcategory from the list API). */
   const subcategoryThumbnails = subcategories.length > 0 
     ? subcategories.map(sub => ({
         src: getProductImageUrl(sub.image_url) || imageSrc,
@@ -585,6 +590,9 @@ function ProductDetailContent() {
         { src: imageSrc, label: "Tent with Walls" },
         { src: imageSrc, label: "Patterned Canopy" },
       ];
+
+  const mainHeroSrc = imageSrc;
+  const showMainHero = Boolean(mainHeroSrc && mainHeroSrc !== "/placeholder.jpg");
 
   if (loading) {
     return (
@@ -650,10 +658,11 @@ function ProductDetailContent() {
                     setImageZoom({ x: 50, y: 50, scale: 1 });
                   }}
                 >
-                  {subcategoryThumbnails[selectedImageIndex]?.src && subcategoryThumbnails[selectedImageIndex].src !== '/placeholder.jpg' ? (
-                    isProductImageBackendUpload || (subcategoryThumbnails[selectedImageIndex].src || '').includes('/uploads/') ? (
+                  {showMainHero ? (
+                    isProductImageBackendUpload || (mainHeroSrc || "").includes("/uploads/") ? (
                       <img
-                        src={subcategoryThumbnails[selectedImageIndex].src}
+                        key={String(product?.id ?? productId)}
+                        src={mainHeroSrc}
                         alt={productName}
                         className="w-full h-full object-cover  transition-transform duration-300 ease-out"
                         style={{
@@ -663,7 +672,8 @@ function ProductDetailContent() {
                       />
                     ) : (
                       <Image
-                        src={subcategoryThumbnails[selectedImageIndex].src}
+                        key={String(product?.id ?? productId)}
+                        src={mainHeroSrc}
                         alt={productName}
                         fill
                         className="object-cover transition-transform duration-300  ease-out"
@@ -749,71 +759,6 @@ function ProductDetailContent() {
                     </p>
                   </div>
                 ) : null}
-            </div>
-
-              {/* Product Features / Description */}
-            <div className="mb-6 min-w-0 max-w-full">
-                {productDescription ? (
-                  <div className="space-y-2 text-gray-700 min-w-0">
-                    {productDescription.split('\n').map((line, idx) => (
-                      <p key={idx} className="flex items-start gap-2 min-w-0">
-                        <span className="shrink-0" aria-hidden>•</span>
-                        <span className="min-w-0 flex-1 break-words [overflow-wrap:anywhere]">{line}</span>
-                      </p>
-                    ))}
-                  </div>
-                ) : hasProductProperties ? (
-                  <ul className="space-y-2 text-gray-700 min-w-0">
-                    {productProperties
-                      .filter((p) => (p?.key && String(p.key).trim()) || (p?.value && String(p.value).trim()))
-                      .map((p, idx) => (
-                        <li key={idx} className="flex items-start gap-2 min-w-0">
-                          <span className="shrink-0" aria-hidden>•</span>
-                          <span className="min-w-0 flex-1 break-words [overflow-wrap:anywhere]">
-                            {p?.key && String(p.key).trim() ? `${p.key}: ${p.value || ""}` : p?.value || ""}
-                          </span>
-                        </li>
-                      ))}
-                  </ul>
-                ) : (() => {
-                  const specs: { label: string; value: string }[] = [];
-                  if (product?.price != null && product?.price !== "") specs.push({ label: "Price", value: `$${product.price}` });
-                  if (product?.price_per_sqft != null) specs.push({ label: "Price per sq ft", value: `$${product.price_per_sqft}` });
-                  if (product?.min_charge != null) specs.push({ label: "Min charge", value: `$${product.min_charge}` });
-                  if (product?.material && String(product.material).trim()) specs.push({ label: "Material", value: String(product.material) });
-                  if (specs.length > 0) {
-                    return (
-                      <ul className="space-y-2 text-gray-700">
-                        {specs.map((s, idx) => (
-                          <li key={idx} className="flex items-start">
-                            <span className="mr-2">•</span>
-                            <span>{s.label}: {s.value}</span>
-                          </li>
-                        ))}
-                      </ul>
-                    );
-                  }
-                  return (
-                    <ul className="space-y-2 text-gray-700">
-                      <li className="flex items-start">
-                        <span className="mr-2">•</span>
-                        <span>High quality product</span>
-                      </li>
-                      <li className="flex items-start">
-                        <span className="mr-2">•</span>
-                        <span>Custom sizes available</span>
-                      </li>
-                      <li className="flex items-start">
-                        <span className="mr-2">•</span>
-                        <span>Professional printing</span>
-                      </li>
-                      <li className="flex items-start">
-                        <span className="mr-2">•</span>
-                        <span>Fast turnaround</span>
-                      </li>
-                    </ul>
-                  );
-                })()}
             </div>
           </div>
 

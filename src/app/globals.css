@@ -57,6 +57,38 @@ body {
   display: list-item !important;
 }
 
+/*
+ * Admin product description editor — show bullets/numbers.
+ * Tailwind preflight sets ul/ol { list-style: none } — override with full shorthand.
+ * Use list-style-position: inside so markers aren’t clipped by overflow-y-auto on the editor.
+ */
+.admin-app .admin-product-desc-editor ul,
+.admin-product-desc-editor ul {
+  list-style: disc inside !important;
+  padding-inline-start: 1.25rem !important;
+  margin: 0.35rem 0 !important;
+}
+.admin-app .admin-product-desc-editor ol,
+.admin-product-desc-editor ol {
+  list-style: decimal inside !important;
+  padding-inline-start: 1.25rem !important;
+  margin: 0.35rem 0 !important;
+}
+.admin-app .admin-product-desc-editor li,
+.admin-product-desc-editor li {
+  display: list-item !important;
+  margin: 0.2rem 0 !important;
+  list-style-position: inside !important;
+}
+.admin-app .admin-product-desc-editor ul > li::marker,
+.admin-product-desc-editor ul > li::marker {
+  color: #334155;
+}
+.admin-app .admin-product-desc-editor ol > li::marker,
+.admin-product-desc-editor ol > li::marker {
+  color: #334155;
+  font-weight: 500;
+}
 
 .nav-bg {
   background: rgba(250, 250, 252, .8);;
