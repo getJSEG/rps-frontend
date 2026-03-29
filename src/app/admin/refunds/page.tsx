@@ -8,7 +8,7 @@ import { ordersAPI } from "../../../utils/api";
 import AdminNavbar from "../../components/AdminNavbar";
 import { canAccessAdminPanel, isAuthenticated } from "../../../utils/roles";
 
-const REFUND_TAB_STATUSES = ["refund", "cancelled", "approval_needed", "shipped"];
+const REFUND_ONLY_STATUS = "refund";
 
 interface OrderItem {
   id: string;
@@ -60,8 +60,8 @@ export default function RefundsPage() {
         if (response?.orders && Array.isArray(response.orders)) {
           const refundOrders: OrderRow[] = response.orders
             .filter((o: any) => {
-              const s = (o.status || "").toLowerCase();
-              return REFUND_TAB_STATUSES.some((ref) => s === ref || s === ref.replace("_", " "));
+              const s = (o.status || "").toLowerCase().replace(/\s+/g, "_");
+              return s === REFUND_ONLY_STATUS;
             })
             .map((order: any) => {
               const firstItem = order.items?.[0];
@@ -106,28 +106,21 @@ export default function RefundsPage() {
   }, []);
 
   const getStatusColor = (status: string) => {
-    const s = status.toLowerCase();
-    if (s === "refund" || s === "cancelled" || s === "canceled")
-      return "bg-rose-50 text-rose-800 ring-1 ring-rose-200/80";
-    if (s === "approval_needed" || s === "approval needed")
-      return "bg-amber-50 text-amber-900 ring-1 ring-amber-200/80";
-    if (s === "shipped") return "bg-sky-50 text-sky-800 ring-1 ring-sky-200/80";
+    const s = status.toLowerCase().replace(/\s+/g, "_");
+    if (s === "refund") return "bg-rose-50 text-rose-800 ring-1 ring-rose-200/80";
     return "bg-slate-100 text-slate-700 ring-1 ring-slate-200/80";
   };
 
   const formatStatus = (status: string) => {
-    const s = status.toLowerCase();
-    if (s === "approval_needed" || s === "approval needed") return "Approval Needed";
-    if (s === "cancelled" || s === "canceled") return "Cancelled";
+    const s = status.toLowerCase().replace(/\s+/g, "_");
     if (s === "refund") return "Refund";
-    if (s === "shipped") return "Shipped";
     return status.charAt(0).toUpperCase() + status.slice(1);
   };
 
   return (
     <AdminNavbar
       title="Refunds"
-      subtitle="Orders that need follow-up or post-sale handling"
+      subtitle="Orders marked for refund"
     >
       <Link
         href="/admin"
@@ -143,7 +136,7 @@ export default function RefundsPage() {
         <div className="border-b border-slate-100 px-5 py-5 sm:px-6">
           <h2 className="text-lg font-semibold text-slate-900">Filtered orders</h2>
           <p className="mt-1 max-w-2xl text-sm text-slate-500">
-            Refund, cancelled, approval needed, and shipped. Update status from the order detail page.
+            Only orders with status <span className="font-medium text-slate-700">Refund</span>. Change status on the order detail page.
           </p>
         </div>
         <div className="overflow-x-auto">
@@ -170,7 +163,7 @@ export default function RefundsPage() {
               ) : orders.length === 0 ? (
                 <tr>
                   <td colSpan={5} className="px-6 py-14 text-center text-slate-500">
-                    No orders in these statuses right now.
+                    No refund orders right now.
                   </td>
                 </tr>
               ) : (
