@@ -198,7 +198,7 @@ export default function ProductDetailPage({ params }: { params: Promise<{ produc
       <>
         <Navbar />
         <section className="py-8 px-4 bg-white min-h-screen pt-24">
-          <div className="max-w-7xl mx-auto text-center">
+          <div className="w-full max-w-none mx-auto text-center">
             <p className="text-gray-600">Loading product...</p>
           </div>
         </section>
@@ -212,7 +212,7 @@ export default function ProductDetailPage({ params }: { params: Promise<{ produc
       <>
         <Navbar />
         <section className="py-8 px-4 bg-white min-h-screen pt-24">
-          <div className="max-w-7xl mx-auto text-center">
+          <div className="w-full max-w-none mx-auto text-center">
             <h1 className="text-3xl font-bold text-gray-900 mb-4">Product Not Found</h1>
             <Link href="/products" className="text-blue-600 hover:text-blue-700">
               ← Back to Products
@@ -228,7 +228,7 @@ export default function ProductDetailPage({ params }: { params: Promise<{ produc
     <>
       <Navbar />
       <section className="py-8 px-4 bg-white min-h-screen pt-24">
-        <div className="max-w-7xl mx-auto">
+        <div className="w-full max-w-none mx-auto">
           <div className="flex gap-8">
             {/* Sidebar - Left */}
             <Sidebar showAllProductsButton={false} />
