@@ -67,6 +67,7 @@ interface CartItem {
   product_id?: string;
   jobName?: string;
   job_name?: string;
+  jobs?: Array<{ jobName?: string; quantity?: number; unitPrice?: number; lineSubtotal?: number }>;
   [key: string]: unknown;
 }
 

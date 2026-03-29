@@ -477,7 +477,7 @@ export default function Navbar({ cartCountOverride, skipCartCountFetch = false }
                     <div className="absolute right-0 top-full mt-2 w-96 bg-white rounded-lg shadow-xl border border-gray-200 z-50">
                       {/* Search Bar - submits to /products with search + category/subcategory */}
                       <form
-                        className="p-4 border-b border-gray-200"
+                        className="p-4"
                         onSubmit={(e) => {
                           e.preventDefault();
                           const q = searchQuery.trim();
@@ -503,48 +503,6 @@ export default function Navbar({ cartCountOverride, skipCartCountFetch = false }
                           </button>
                         </div>
                       </form>
-
-                      {/* Popular Searches - go to products filtered by category/subcategory/search */}
-                      <div className="p-4">
-                        <h3 className="text-sm font-medium text-gray-500 mb-3">Popular Search</h3>
-                        <ul className="space-y-2">
-                          {[
-                            "DTF and UV DTF",
-                            "Banners",
-                            "Flags",
-                            "Banner Stands",
-                            "Trade Show",
-                            "Tents",
-                            "Table Throws",
-                            "Rigids",
-                            "Adhesives",
-                            "Wall Art",
-                          ].map((item, index) => (
-                            <li key={index}>
-                              <Link
-                                href={`/products?search=${encodeURIComponent(item)}`}
-                                onClick={() => { setIsSearchOpen(false); setSearchQuery(""); }}
-                                className="flex items-center justify-between text-gray-900 hover:bg-gray-50 px-2 py-2 rounded transition-colors group"
-                              >
-                                <span className="text-sm">{item}</span>
-                                <svg
-                                  className="w-4 h-4 text-gray-400 group-hover:text-gray-600"
-                                  fill="none"
-                                  stroke="currentColor"
-                                  viewBox="0 0 24 24"
-                                >
-                                  <path
-                                    strokeLinecap="round"
-                                    strokeLinejoin="round"
-                                    strokeWidth={2}
-                                    d="M9 5l7 7-7 7"
-                                  />
-                                </svg>
-                              </Link>
-                            </li>
-                          ))}
-                        </ul>
-                      </div>
                     </div>
                   )}
                 </div>

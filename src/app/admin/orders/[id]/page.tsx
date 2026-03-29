@@ -24,6 +24,8 @@ interface OrderItem {
   product_category?: string;
   product_subcategory?: string;
   product_sku?: string;
+  width_inches?: number;
+  height_inches?: number;
 }
 
 interface GuestCheckoutShape {
@@ -109,6 +111,14 @@ function formatPaymentMethod(m: string) {
 function dash(v: unknown): string {
   if (v === null || v === undefined || v === "") return "—";
   return String(v);
+}
+
+function formatSizeWxH(w: unknown, h: unknown): string {
+  const nw = w != null && w !== "" ? Number(w) : NaN;
+  const nh = h != null && h !== "" ? Number(h) : NaN;
+  if (!Number.isFinite(nw) || !Number.isFinite(nh) || nw <= 0 || nh <= 0) return "—";
+  const fmt = (n: number) => (Number.isInteger(n) ? String(n) : n.toFixed(2).replace(/\.?0+$/, ""));
+  return `${fmt(nw)}" × ${fmt(nh)}"`;
 }
 
 function linesFromDbOrder(o: Order, kind: "shipping" | "billing"): string[] {
@@ -260,6 +270,14 @@ export default function OrderDetails() {
                 product_category: item.product_category ? String(item.product_category) : undefined,
                 product_subcategory: item.product_subcategory ? String(item.product_subcategory) : undefined,
                 product_sku: item.product_sku ? String(item.product_sku) : undefined,
+                width_inches:
+                  item.width_inches != null && item.width_inches !== ""
+                    ? parseFloat(String(item.width_inches))
+                    : undefined,
+                height_inches:
+                  item.height_inches != null && item.height_inches !== ""
+                    ? parseFloat(String(item.height_inches))
+                    : undefined,
               }))
           : [],
         user_email: mergedUserEmail,
@@ -701,12 +719,13 @@ export default function OrderDetails() {
               {order.items.length === 0 ? (
                 <p className="p-8 text-center text-sm text-slate-500">No line items.</p>
               ) : (
-                <table className="w-full min-w-[900px] border-collapse text-left text-sm">
+                <table className="w-full min-w-[960px] border-collapse text-left text-sm">
                   <thead>
                     <tr className="border-b border-slate-200 bg-white text-[11px] font-bold uppercase tracking-wide text-slate-500">
                       <th className="px-3 py-3 pl-5"> </th>
                       <th className="px-3 py-3">Product</th>
                       <th className="px-3 py-3">Job</th>
+                      <th className="px-3 py-3 whitespace-nowrap">Size (W×H)</th>
                       <th className="px-3 py-3">SKU</th>
                       <th className="px-3 py-3">Category</th>
                       <th className="px-3 py-3">Material</th>
@@ -733,6 +752,9 @@ export default function OrderDetails() {
                           )}
                         </td>
                         <td className="px-3 py-3 text-slate-700">{dash(item.job_name)}</td>
+                        <td className="px-3 py-3 text-slate-700 tabular-nums whitespace-nowrap">
+                          {formatSizeWxH(item.width_inches, item.height_inches)}
+                        </td>
                         <td className="px-3 py-3 font-mono text-xs text-slate-600">{dash(item.product_sku)}</td>
                         <td className="px-3 py-3 text-slate-600">
                           {dash(item.product_category)}

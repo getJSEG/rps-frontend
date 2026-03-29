@@ -34,6 +34,8 @@ type OrderItem = {
   unit_price?: number | string | null;
   total_price?: number | string | null;
   image_url?: string | null;
+  width_inches?: number | string | null;
+  height_inches?: number | string | null;
 };
 
 type OrderRow = {
@@ -84,6 +86,15 @@ function formatMoney(v: number | string | null | undefined): string {
   const n = Number(v);
   if (Number.isNaN(n)) return String(v);
   return n.toFixed(2);
+}
+
+/** Show W×H when both dimensions are valid positive numbers (from product detail). */
+function formatLineSizeInches(w: unknown, h: unknown): string | null {
+  const nw = w != null && w !== "" ? Number(w) : NaN;
+  const nh = h != null && h !== "" ? Number(h) : NaN;
+  if (!Number.isFinite(nw) || !Number.isFinite(nh) || nw <= 0 || nh <= 0) return null;
+  const fmt = (n: number) => (Number.isInteger(n) ? String(n) : n.toFixed(2).replace(/\.?0+$/, ""));
+  return `${fmt(nw)}" × ${fmt(nh)}"`;
 }
 
 function formatStatus(status: string | null | undefined): string {
@@ -610,6 +621,7 @@ export default function Orders() {
                               <tbody>
                                 {items.map((it) => {
                                   const img = getProductImageUrl(it.image_url || undefined);
+                                  const sizeLine = formatLineSizeInches(it.width_inches, it.height_inches);
                                   return (
                                     <tr key={it.id} className="border-t border-gray-100">
                                       <td className="px-3 py-2 align-top">
@@ -625,6 +637,9 @@ export default function Orders() {
                                         <p className="font-medium text-gray-900">{it.product_name || "Item"}</p>
                                         {it.job_name ? (
                                           <p className="text-gray-500 text-xs mt-0.5">Job: {it.job_name}</p>
+                                        ) : null}
+                                        {sizeLine ? (
+                                          <p className="text-gray-500 text-xs mt-0.5">Size: {sizeLine}</p>
                                         ) : null}
                                       </td>
                                       <td className="px-3 py-2 align-top text-right text-gray-800">

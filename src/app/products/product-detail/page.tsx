@@ -116,6 +116,20 @@ function pickDisplayShippingAddress(addresses: SavedAddress[]): SavedAddress | n
   return shipping[0] || billing[0] || normalized[0];
 }
 
+function newProductJobRowId(): string {
+  if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
+    return crypto.randomUUID();
+  }
+  return `job-${Date.now()}-${Math.random().toString(36).slice(2, 11)}`;
+}
+
+/** One print job under a product configuration (same width/height as siblings). */
+interface ProductJobRow {
+  id: string;
+  jobName: string;
+  quantity: string;
+}
+
 function ProductDetailContent() {
   const searchParams = useSearchParams();
   const router = useRouter();
@@ -126,8 +140,9 @@ function ProductDetailContent() {
   const [addingToCart, setAddingToCart] = useState(false);
   const [width, setWidth] = useState("0");
   const [height, setHeight] = useState("0");
-  const [jobName, setJobName] = useState("");
-  const [quantity, setQuantity] = useState("1");
+  const [jobs, setJobs] = useState<ProductJobRow[]>(() => [
+    { id: newProductJobRowId(), jobName: "", quantity: "1" },
+  ]);
   const [productType, setProductType] = useState("canopy-frame"); // "canopy-frame" or "canopy-only"
   const [reinforcedStrip, setReinforcedStrip] = useState("White");
   const [carryBag, setCarryBag] = useState("Standard Bag");
@@ -155,6 +170,18 @@ function ProductDetailContent() {
   const fetchedProductForRef = useRef<string | null>(null);
   const fetchedRelatedForRef = useRef<string | null>(null);
   const fetchedAddressesOnceRef = useRef(false);
+
+  const addJob = () => {
+    setJobs((prev) => [...prev, { id: newProductJobRowId(), jobName: "", quantity: "1" }]);
+  };
+
+  const removeJob = (id: string) => {
+    setJobs((prev) => (prev.length <= 1 ? prev : prev.filter((j) => j.id !== id)));
+  };
+
+  const updateJob = (id: string, patch: Partial<Pick<ProductJobRow, "jobName" | "quantity">>) => {
+    setJobs((prev) => prev.map((j) => (j.id === id ? { ...j, ...patch } : j)));
+  };
 
   // Default pricing values (can be overridden by product data)
   const pricePerSqFt = product?.price_per_sqft || 3.63;
@@ -319,30 +346,54 @@ function ProductDetailContent() {
     fetchSubcategoryProducts();
   }, [selectedSubcategory, product?.category_slug, productId]);
 
-  // Calculate area in square feet
+  // Calculate area in square feet (shared by all jobs on this configuration)
   const widthInches = parseFloat(width) || 0;
   const heightInches = parseFloat(height) || 0;
   const areaSqFt = (widthInches * heightInches) / 144;
   const basePrice = Math.max(areaSqFt * pricePerSqFt, minCharge);
-  const qty = parseFloat(quantity) || 1;
   const unitPrice = basePrice;
-  const subtotal = unitPrice * qty;
+  const jobLines = jobs.map((j) => {
+    const qtyNum = Math.max(0, Math.floor(parseFloat(j.quantity) || 0));
+    return {
+      id: j.id,
+      qtyNum,
+      lineSubtotal: unitPrice * qtyNum,
+    };
+  });
+  const subtotal = jobLines.reduce((sum, line) => sum + line.lineSubtotal, 0);
   const shippingCost = shippingAmountForService(shippingRates, shippingService);
   const total = subtotal + shippingCost;
 
   // Handle Add to Cart (logged-in or guest via X-Guest-Session-Id from api.ts)
   const handleAddToCart = async () => {
-    // Validation
-    if (!jobName.trim()) {
-      setMessage("❌ Error: Please enter Job Name/PO#");
+    if (!String(width).trim()) {
+      setMessage("❌ Error: Width is required");
       setTimeout(() => setMessage(""), 5000);
       return;
     }
-
+    if (!String(height).trim()) {
+      setMessage("❌ Error: Height is required");
+      setTimeout(() => setMessage(""), 5000);
+      return;
+    }
     if (widthInches <= 0 || heightInches <= 0) {
       setMessage("❌ Error: Width and Height must be greater than 0");
       setTimeout(() => setMessage(""), 5000);
       return;
+    }
+
+    for (let i = 0; i < jobs.length; i++) {
+      if (!jobs[i].jobName.trim()) {
+        setMessage(`❌ Error: Job ${i + 1}: Please enter Job Name/PO#`);
+        setTimeout(() => setMessage(""), 5000);
+        return;
+      }
+      const q = parseInt(jobs[i].quantity, 10);
+      if (!Number.isFinite(q) || q < 1) {
+        setMessage(`❌ Error: Job ${i + 1}: Quantity must be at least 1`);
+        setTimeout(() => setMessage(""), 5000);
+        return;
+      }
     }
 
     setAddingToCart(true);
@@ -353,7 +404,25 @@ function ProductDetailContent() {
       const fullWallQty = parseInt(fullWall.match(/\d+/)?.[0] || "0") || 0;
       const halfWallQty = parseInt(halfWall.match(/\d+/)?.[0] || "0") || 0;
 
-      // Create cart item
+      const jobsPayload = jobs.map((j) => {
+        const q = Math.max(1, parseInt(j.quantity, 10) || 1);
+        const up = parseFloat(unitPrice.toFixed(2));
+        return {
+          jobName: j.jobName.trim(),
+          quantity: q,
+          unitPrice: up,
+          lineSubtotal: parseFloat((up * q).toFixed(2)),
+        };
+      });
+      const totalQty = jobsPayload.reduce((s, j) => s + j.quantity, 0);
+      const subtotalNum = jobsPayload.reduce((s, j) => s + j.lineSubtotal, 0);
+      const shippingNum = parseFloat(shippingCost.toFixed(2));
+      const totalNum = parseFloat((subtotalNum + shippingNum).toFixed(2));
+      const legacyJobName =
+        jobsPayload.length === 1
+          ? jobsPayload[0].jobName
+          : `${jobsPayload[0].jobName} (+${jobsPayload.length - 1} more)`;
+
       const cartItem = {
         productId: productId,
         productName: productName,
@@ -361,23 +430,24 @@ function ProductDetailContent() {
         width: widthInches,
         height: heightInches,
         areaSqFt: parseFloat(areaSqFt.toFixed(2)),
-        quantity: qty,
-        jobName: jobName.trim(),
+        jobs: jobsPayload,
+        quantity: totalQty,
+        jobName: legacyJobName,
         turnaround: "free-same-day",
         shipping: shipping,
         shippingService: shippingService,
         emailProof: false,
         fullWall: fullWallQty,
         halfWall: halfWallQty,
-        totalJobs: 1,
+        totalJobs: jobsPayload.length,
         productType: productType,
         reinforcedStrip: reinforcedStrip,
         carryBag: carryBag,
         sandbag: sandbag,
         unitPrice: parseFloat(unitPrice.toFixed(2)),
-        subtotal: parseFloat(subtotal.toFixed(2)),
-        shippingCost: parseFloat(shippingCost.toFixed(2)),
-        total: parseFloat(total.toFixed(2)),
+        subtotal: subtotalNum,
+        shippingCost: shippingNum,
+        total: totalNum,
         pricePerSqFt: pricePerSqFt,
         minCharge: minCharge,
         material: productMaterial,
@@ -857,58 +927,75 @@ function ProductDetailContent() {
               </div>
             </div>
 
-            {/* Job Details Section */}
+            {/* Job Details — multiple jobs share width/height above */}
             <div className="mb-6 p-4 border border-gray-200 rounded-lg">
               <h2 className="text-lg font-semibold text-gray-900 mb-4">Job Details</h2>
-              {/* grid grid-cols-4 gap-2 mb-4-4 */}
-              <div className="flex flex-wrap gap-4 items-end">
-                {/* Job Name */}
-                <div className="min-w-0 flex-1">
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Job Name/PO# <span className="text-red-500">(Required)</span>
-                  </label>
-                  <input
-                    type="text"
-                    value={jobName}
-                    onChange={(e) => setJobName(e.target.value)}
-                    className="w-full px-3 py-2 border border-gray-300 text-black rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    placeholder="Job Name/PO#"
-                  />
-                </div>
-
-                {/* qty per job */}
-                <div className="w-28 shrink-0">
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Qty</label>
-                  <input
-                    type="number"
-                    value={quantity}
-                    onChange={(e) => setQuantity(e.target.value)}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-black  focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    min="1"
-                  />
-                </div>
-
-                {/* prices per job — width grows with formatted amount */}
-                <div className="shrink-0">
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Price</label>
-                  <div
-                    className="inline-flex max-w-full min-h-[42px] items-center overflow-x-auto whitespace-nowrap rounded-lg border border-gray-300 bg-gray-50 px-3 py-2 text-black tabular-nums [scrollbar-width:thin]"
-                    aria-readonly="true"
-                  >
-                    ${subtotal.toFixed(2)}
-                  </div>
-                </div>
-
-
-                {/* <div className="w-1/16">
-                  <div className="hover:bg-gray-100 text-red-500  font-bold my-7 py-1 px-2 rounded">
-                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="size-6">
-                      <path strokeLinecap="round" strokeLinejoin="round" d="m14.74 9-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 0 1-2.244 2.077H8.084a2.25 2.25 0 0 1-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 0 0-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 0 1 3.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 0 0-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 0 0-7.5 0" />
-                    </svg>
-                  </div>
-                </div> */}
-                
+              <div className="space-y-4">
+                {jobs.map((job, index) => {
+                  const line = jobLines[index];
+                  const linePrice = line ? line.lineSubtotal : 0;
+                  return (
+                    <div
+                      key={job.id}
+                      className="flex flex-wrap gap-4 items-end rounded-lg border border-gray-100 bg-white/60 p-3 sm:p-4"
+                    >
+                      <div className="min-w-0 flex-1 basis-[200px]">
+                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                          Job Name/PO# <span className="text-red-500">*</span>
+                        </label>
+                        <input
+                          type="text"
+                          value={job.jobName}
+                          onChange={(e) => updateJob(job.id, { jobName: e.target.value })}
+                          className="w-full px-3 py-2 border border-gray-300 text-black rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                          placeholder="Job Name/PO#"
+                          aria-label={`Job ${index + 1} name or PO number`}
+                        />
+                      </div>
+                      <div className="w-28 shrink-0">
+                        <label className="block text-sm font-medium text-gray-700 mb-2">Qty</label>
+                        <input
+                          type="number"
+                          value={job.quantity}
+                          onChange={(e) => updateJob(job.id, { quantity: e.target.value })}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-lg text-black focus:outline-none focus:ring-2 focus:ring-blue-500"
+                          min={1}
+                          step={1}
+                          aria-label={`Job ${index + 1} quantity`}
+                        />
+                      </div>
+                      <div className="shrink-0">
+                        <label className="block text-sm font-medium text-gray-700 mb-2">Price</label>
+                        <div
+                          className="inline-flex max-w-full min-h-[42px] items-center overflow-x-auto whitespace-nowrap rounded-lg border border-gray-300 bg-gray-50 px-3 py-2 text-black tabular-nums [scrollbar-width:thin]"
+                          aria-readonly="true"
+                        >
+                          ${linePrice.toFixed(2)}
+                        </div>
+                      </div>
+                      {jobs.length > 1 ? (
+                        <div className="shrink-0 flex items-end pb-0.5">
+                          <button
+                            type="button"
+                            onClick={() => removeJob(job.id)}
+                            className="text-sm font-medium text-red-600 hover:text-red-800 px-2 py-2 rounded-lg hover:bg-red-50"
+                            aria-label={`Remove job ${index + 1}`}
+                          >
+                            Remove
+                          </button>
+                        </div>
+                      ) : null}
+                    </div>
+                  );
+                })}
               </div>
+              <button
+                type="button"
+                onClick={addJob}
+                className="mt-4 w-full sm:w-auto px-4 py-2 border border-gray-300 rounded-lg text-gray-800 text-sm font-medium hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500"
+              >
+                Add Another Job
+              </button>
             </div>
 
             {/* Shipping: service & charges for everyone; saved “Ship to” only when logged in */}
@@ -1329,8 +1416,7 @@ function ProductDetailContent() {
                     // Reset form values for new product
                     setWidth("0");
                     setHeight("0");
-                    setQuantity("1");
-                    setJobName("");
+                    setJobs([{ id: newProductJobRowId(), jobName: "", quantity: "1" }]);
                     
                     // Scroll to top to show new product
                     window.scrollTo({ top: 0, behavior: 'smooth' });
