@@ -12,31 +12,31 @@ interface Product {
   name: string;
   category?: string;
   subcategory?: string;
+  description?: string | null;
   price?: string | number | null;
   price_per_sqft?: number | string | null;
   image?: string;
   image_url?: string;
-  isNew?: boolean;
-  is_new?: boolean;
   category_slug?: string;
   category_name?: string;
 }
 
-/** Parse numeric money from API (pg often returns DECIMAL as string). */
+function descriptionPreview(html: string | null | undefined): string {
+  if (!html || typeof html !== "string") return "";
+  return html
+    .replace(/<script[\s\S]*?<\/script>/gi, "")
+    .replace(/<style[\s\S]*?<\/style>/gi, "")
+    .replace(/<[^>]+>/g, " ")
+    .replace(/&nbsp;/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
 function parseProductMoney(value: string | number | null | undefined): number | null {
   if (value == null || value === "") return null;
   if (typeof value === "number" && !Number.isNaN(value)) return value;
   const n = parseFloat(String(value).trim().replace(/[$,\s]/g, ""));
   return Number.isNaN(n) ? null : n;
-}
-
-/** Catalog line: main `price` from DB first, else `price_per_sqft`. */
-function getCatalogPriceDisplay(product: Product): string {
-  const unit = parseProductMoney(product.price);
-  if (unit != null) return `$${unit.toFixed(2)}`;
-  const ppsf = parseProductMoney(product.price_per_sqft ?? undefined);
-  if (ppsf != null) return `$${ppsf.toFixed(2)}/sf`;
-  return "";
 }
 
 export default function Products() {
@@ -51,12 +51,10 @@ export default function Products() {
   const [selectedCategory, setSelectedCategory] = useState<string | null>(categoryParam);
   const lastFetchedKeyRef = useRef<string>("");
 
-  // Sync category from URL when it changes (e.g. from navbar search or sidebar)
   useEffect(() => {
     setSelectedCategory(categoryParam);
   }, [categoryParam]);
 
-  // Fetch products: filter by category, subcategory, or search (product name / category / subcategory)
   useEffect(() => {
     const fetchProducts = async () => {
       try {
@@ -86,45 +84,40 @@ export default function Products() {
     router.push(`/products?category=${categorySlug}`);
   };
 
-  // Product card — catalog style: sharp corners, light image well, title + grey price line (ref. signage grid)
   const ProductCard = ({ product }: { product: Product }) => {
     const rawUrl = product.image_url || product.image;
     const imageSrc = getProductImageUrl(rawUrl);
-    const isNew = product.is_new || product.isNew;
     const isBackendUpload = rawUrl && String(rawUrl).trim().startsWith("/uploads/");
-
-    const priceFromApi = getCatalogPriceDisplay(product);
-    const metaParts: string[] = [];
-    if (isNew) metaParts.push("New low price");
-    if (priceFromApi) metaParts.push(priceFromApi);
-    const metaLine = metaParts.join(" ");
+    const descPlain = descriptionPreview(product.description);
+    const unit = parseProductMoney(product.price);
+    const ppsf = parseProductMoney(product.price_per_sqft ?? undefined);
+    const categoryLabel = product.category_name?.trim() || product.category?.trim() || "";
 
     return (
       <Link href={`/products/product-detail?productId=${product.id}`} className="block h-full">
-        <div className="group flex h-full cursor-pointer flex-col">
-          {/* Bordered box = image only; title + price sit below, outside */}
-          <div className="relative aspect-square w-full overflow-hidden rounded-sm border border-gray-200 bg-[#f5f5f5] transition-colors group-hover:border-gray-300">
+        <div className="group flex h-full cursor-pointer flex-col overflow-hidden rounded-lg border-2 border-gray-200 bg-white shadow-md transition-all hover:border-gray-300 hover:shadow-lg">
+          <div className="relative h-48 w-full overflow-hidden bg-gray-200">
             {imageSrc ? (
               isBackendUpload ? (
                 <img
                   src={imageSrc}
                   alt={product.name}
-                  className="h-full w-full object-cover object-center"
+                  className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105"
                 />
               ) : (
                 <Image
                   src={imageSrc}
                   alt={product.name}
                   fill
-                  className="object-cover object-center"
-                  sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, (max-width: 1280px) 25vw, 20vw"
+                  className="object-cover transition-transform duration-300 group-hover:scale-105"
+                  sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, (max-width: 1280px) 33vw, 20vw"
                   unoptimized
                 />
               )
             ) : (
-              <div className="flex h-full w-full items-center justify-center bg-[#f5f5f5]">
+              <div className="flex h-full w-full items-center justify-center bg-gray-200">
                 <svg
-                  className="h-14 w-14 text-gray-300"
+                  className="h-16 w-16 text-gray-400"
                   fill="none"
                   stroke="currentColor"
                   viewBox="0 0 24 24"
@@ -132,7 +125,7 @@ export default function Products() {
                   <path
                     strokeLinecap="round"
                     strokeLinejoin="round"
-                    strokeWidth={1.5}
+                    strokeWidth={2}
                     d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"
                   />
                 </svg>
@@ -140,13 +133,21 @@ export default function Products() {
             )}
           </div>
 
-          <div className="flex flex-1 flex-col pt-3">
-            <h3 className="text-left text-[15px] font-bold leading-snug tracking-tight text-gray-900">
+          <div className="flex flex-col gap-2 p-4">
+            <h3 className="line-clamp-2 text-lg font-semibold text-gray-900 group-hover:text-blue-600">
               {product.name}
             </h3>
-            {metaLine ? (
-              <p className="mt-1.5 text-left text-sm font-normal leading-snug text-gray-500">{metaLine}</p>
+            {categoryLabel ? <p className="text-xs text-gray-500">{categoryLabel}</p> : null}
+            {descPlain ? (
+              <p className="line-clamp-3 min-w-0 break-words text-sm text-gray-600 [overflow-wrap:anywhere]">{descPlain}</p>
             ) : null}
+            {unit != null ? (
+              <p className="text-lg font-bold text-gray-900">${unit.toFixed(2)}</p>
+            ) : ppsf != null ? (
+              <p className="text-sm text-gray-700">${ppsf.toFixed(2)}/ft²</p>
+            ) : (
+              <p className="text-sm text-gray-700">Price on request</p>
+            )}
           </div>
         </div>
       </Link>
@@ -154,15 +155,12 @@ export default function Products() {
   };
 
   return (
-    <section className="py-8 px-4 bg-white min-h-screen pt-24">
-      <div className="max-w-7xl mx-auto">
-        <div className="flex flex-col lg:flex-row gap-6 lg:gap-8">
-          {/* Sidebar - Left */}
+    <section className="min-h-screen bg-white px-4 py-8 pt-24 sm:px-6 lg:px-8">
+      <div className="mx-auto w-full max-w-none">
+        <div className="flex flex-col gap-6 lg:flex-row lg:gap-8">
           <Sidebar onCategoryClick={handleCategoryClick} />
 
-          {/* Main Content - Right */}
           <div className="flex-1">
-            {/* Page Title */}
             <div className="mb-8">
               <h1 className="text-3xl font-bold text-gray-900 mb-2">
                 {searchParam
@@ -199,7 +197,7 @@ export default function Products() {
                 </p>
               </div>
             ) : (
-              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-6">
+              <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
                 {products.map((product) => (
                   <ProductCard key={product.id} product={product} />
                 ))}

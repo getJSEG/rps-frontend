@@ -1,136 +1,209 @@
 "use client";
 
-import { use, useState, useEffect, useRef } from "react";
-import Image from "next/image";
+import { use, useState, useEffect, useMemo } from "react";
 import Link from "next/link";
 import Navbar from "../../components/Navbar";
 import Footer from "../../components/Footer";
 import Sidebar from "../../components/Sidebar";
-import { productsAPI, getProductImageUrl } from "../../../utils/api";
+import ProductCarousel, { type CarouselProduct } from "../../components/ProductCarousel";
+import { productsAPI } from "../../../utils/api";
+
+interface ApiCategory {
+  id: number;
+  name: string;
+  slug: string;
+  parent_id: number | null;
+  display_order?: number;
+}
 
 interface Product {
   id: string;
   name: string;
-  category?: string;
-  subcategory?: string;
-  price?: number | string;
   image?: string;
   image_url?: string;
   is_new?: boolean;
-  category_slug?: string;
-  category_name?: string;
+}
+
+function slugMatches(a: string, b: string): boolean {
+  const x = decodeURIComponent(a).trim().toLowerCase();
+  const y = decodeURIComponent(b).trim().toLowerCase();
+  return x === y;
 }
 
 export default function CategoryProductsPage({ params }: { params: Promise<{ category: string }> }) {
-  const { category: categorySlug } = use(params);
-  const [products, setProducts] = useState<Product[]>([]);
+  const { category: categorySlugParam } = use(params);
   const [loading, setLoading] = useState(true);
-  const fetchedCategoryRef = useRef<string | null>(null);
-
-  const titleFromSlug = categorySlug.replace(/-/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
+  const [notFound, setNotFound] = useState(false);
+  const [parentName, setParentName] = useState("");
+  const [subsections, setSubsections] = useState<{ id: number; name: string; products: Product[] }[]>([]);
+  const [fallbackProducts, setFallbackProducts] = useState<Product[]>([]);
 
   useEffect(() => {
-    const fetchProducts = async () => {
-      if (fetchedCategoryRef.current === categorySlug) return;
-      fetchedCategoryRef.current = categorySlug;
+    let cancelled = false;
+
+    const run = async () => {
+      setLoading(true);
+      setNotFound(false);
+      setSubsections([]);
+      setFallbackProducts([]);
+      setParentName("");
+
       try {
-        setLoading(true);
-        const response = await productsAPI.getAll({ category: categorySlug, limit: 100 });
-        setProducts(response.products || []);
+        const res = await productsAPI.getCategories();
+        const categories: ApiCategory[] = Array.isArray(res?.categories) ? res.categories : [];
+
+        const parent = categories.find(
+          (c) => c.parent_id == null && c.slug && slugMatches(categorySlugParam, c.slug)
+        );
+
+        if (!parent) {
+          if (!cancelled) {
+            setNotFound(true);
+            setLoading(false);
+          }
+          return;
+        }
+
+        const subs = categories
+          .filter((c) => c.parent_id === parent.id)
+          .sort((a, b) => {
+            const oa = a.display_order ?? 0;
+            const ob = b.display_order ?? 0;
+            if (oa !== ob) return oa - ob;
+            return a.name.localeCompare(b.name);
+          });
+
+        const catQuerySlug = parent.slug || categorySlugParam;
+
+        if (!cancelled) {
+          setParentName(parent.name);
+        }
+
+        if (subs.length === 0) {
+          const flat = await productsAPI.getAll({ category: catQuerySlug, limit: 100 });
+          if (!cancelled) setFallbackProducts(flat.products || []);
+        } else {
+          const results = await Promise.all(
+            subs.map((sub) =>
+              productsAPI.getAll({
+                category: catQuerySlug,
+                subcategory: sub.name,
+                limit: 50,
+              })
+            )
+          );
+          if (!cancelled) {
+            setSubsections(
+              subs.map((sub, i) => ({
+                id: sub.id,
+                name: sub.name,
+                products: (results[i]?.products || []) as Product[],
+              }))
+            );
+          }
+        }
       } catch (e) {
-        fetchedCategoryRef.current = null;
-        console.error("Error fetching products:", e);
-        setProducts([]);
+        console.error(e);
+        if (!cancelled) {
+          setNotFound(true);
+        }
       } finally {
-        setLoading(false);
+        if (!cancelled) setLoading(false);
       }
     };
-    fetchProducts();
-  }, [categorySlug]);
 
-  const ProductCard = ({ product }: { product: Product }) => {
-    const rawUrl = product.image_url || product.image;
-    const imageSrc = getProductImageUrl(rawUrl);
-    const isNew = product.is_new;
-    const isBackendUpload = rawUrl && String(rawUrl).trim().startsWith("/uploads/");
+    run();
+    return () => {
+      cancelled = true;
+    };
+  }, [categorySlugParam]);
 
-    return (
-      <Link href={`/products/product-detail?productId=${product.id}`}>
-        <div className="group h-full cursor-pointer">
-          <div className="w-full h-48 border border-gray-200 bg-gray-200 relative overflow-hidden">
-            {imageSrc ? (
-              isBackendUpload ? (
-                <img
-                  src={imageSrc}
-                  alt={product.name}
-                  className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
-                />
-              ) : (
-                <Image
-                  src={imageSrc}
-                  alt={product.name}
-                  fill
-                  className="object-cover group-hover:scale-105 transition-transform duration-300"
-                  sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, (max-width: 1280px) 33vw, 25vw"
-                  unoptimized
-                />
-              )
-            ) : (
-              <div className="w-full h-full flex items-center justify-center bg-gray-200">
-                <svg className="w-16 h-16 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                </svg>
-              </div>
-            )}
-          </div>
-          <div className="p-4">
-            <div className="flex items-start justify-between mb-2">
-              <h3 className="text-lg font-semibold text-gray-900 group-hover:text-blue-600 transition-colors">
-                {product.name}
-              </h3>
-              {isNew && (
-                <span className="bg-green-500 text-white text-xs px-2 py-1 rounded-full whitespace-nowrap">New</span>
-              )}
-            </div>
-          </div>
-        </div>
-      </Link>
-    );
-  };
+  const carouselProducts = useMemo(
+    () =>
+      subsections.map((s) => ({
+        ...s,
+        carousel: s.products.map(
+          (p): CarouselProduct => ({
+            id: p.id,
+            name: p.name,
+            image: p.image,
+            image_url: p.image_url,
+            is_new: p.is_new,
+          })
+        ),
+      })),
+    [subsections]
+  );
 
   return (
     <>
       <Navbar />
-      <section className="py-8 px-4 bg-white min-h-screen pt-24">
-        <div className="max-w-7xl mx-auto">
+      <section className="min-h-screen bg-white px-4 py-8 pt-24 sm:px-6 lg:px-8">
+        <div className="mx-auto w-full max-w-none">
           <div className="flex gap-8">
             <Sidebar />
 
-            <div className="flex-1">
-              <div className="mb-8">
-                <h1 className="text-3xl font-bold text-gray-900 mb-2">{titleFromSlug}</h1>
-                <p className="text-gray-600">
-                  {loading ? "Loading…" : `${products.length} ${products.length === 1 ? "product" : "products"} found`}
-                </p>
-              </div>
-
-              { loading ? (
+            <div className="flex-1 min-w-0">
+              {loading ? (
                 <div className="text-center py-12">
-                  <p className="text-gray-600">Loading products...</p>
+                  <p className="text-gray-600">Loading…</p>
                 </div>
-              ) : products.length === 0 ? (
+              ) : notFound ? (
                 <div className="text-center py-12">
-                  <p className="text-gray-500 text-lg">No products in this category yet.</p>
-                  <Link href="/products" className="text-blue-600 hover:text-blue-700 font-medium mt-4 inline-block">
-                    View All Products →
+                  <h1 className="text-2xl font-bold text-gray-900 mb-2">Category not found</h1>
+                  <p className="text-gray-600 mb-6">We could not find a category matching this link.</p>
+                  <Link href="/products" className="text-blue-600 hover:text-blue-700 font-medium">
+                    View all products →
                   </Link>
                 </div>
+              ) : subsections.length === 0 ? (
+                <>
+                  <div className="mb-8">
+                    <h1 className="text-3xl font-bold text-gray-900 mb-2">{parentName}</h1>
+                    <p className="text-gray-600">
+                      {fallbackProducts.length}{" "}
+                      {fallbackProducts.length === 1 ? "product" : "products"} in this category
+                    </p>
+                  </div>
+                  {fallbackProducts.length === 0 ? (
+                    <div className="text-center py-12">
+                      <p className="text-gray-500 text-lg">No products in this category yet.</p>
+                      <Link href="/products" className="text-blue-600 hover:text-blue-700 font-medium mt-4 inline-block">
+                        View all products →
+                      </Link>
+                    </div>
+                  ) : (
+                    <ProductCarousel
+                      products={fallbackProducts.map((p) => ({
+                        id: p.id,
+                        name: p.name,
+                        image: p.image,
+                        image_url: p.image_url,
+                        is_new: p.is_new,
+                      }))}
+                    />
+                  )}
+                </>
               ) : (
-                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
-                  {products.map((product) => (
-                    <ProductCard key={product.id} product={product} />
-                  ))}
-                </div>
+                <>
+                  <div className="mb-10">
+                    <h1 className="text-3xl font-bold text-gray-900 mb-2">{parentName}</h1>
+                    <p className="text-gray-600">Browse by subcategory</p>
+                  </div>
+                  <div className="space-y-12">
+                    {carouselProducts.map((section) => (
+                      <section key={section.id} aria-labelledby={`subcat-${section.id}`}>
+                        <h2
+                          id={`subcat-${section.id}`}
+                          className="text-xl font-semibold text-gray-900 mb-4 border-b border-gray-200 pb-2"
+                        >
+                          {section.name}
+                        </h2>
+                        <ProductCarousel products={section.carousel} />
+                      </section>
+                    ))}
+                  </div>
+                </>
               )}
             </div>
           </div>

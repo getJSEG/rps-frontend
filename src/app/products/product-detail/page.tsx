@@ -124,6 +124,25 @@ function newProductJobRowId(): string {
   return `job-${Date.now()}-${Math.random().toString(36).slice(2, 11)}`;
 }
 
+function descriptionPreview(html: string | null | undefined): string {
+  if (!html || typeof html !== "string") return "";
+  return html
+    .replace(/<script[\s\S]*?<\/script>/gi, "")
+    .replace(/<style[\s\S]*?<\/style>/gi, "")
+    .replace(/<[^>]+>/g, " ")
+    .replace(/&nbsp;/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function parseProductMoney(value: string | number | null | undefined): number | null {
+  if (value == null || value === "") return null;
+  if (typeof value === "number" && !Number.isNaN(value)) return value;
+  const n = parseFloat(String(value).trim().replace(/[$,\s]/g, ""));
+  return Number.isNaN(n) ? null : n;
+}
+
+
 function BackToProductsLink({ className = "" }: { className?: string }) {
   return (
     <Link
@@ -1429,106 +1448,97 @@ function ProductDetailContent() {
                       e.preventDefault();
                       e.stopPropagation();
                     }
-                    
-                    // Update URL with new product ID - this will trigger useEffect to fetch new product
+
                     router.push(`/products/product-detail?productId=${relatedProduct.id}`);
-                    
-                    // Reset form values for new product
                     setWidth("0");
                     setHeight("0");
                     setJobs([{ id: newProductJobRowId(), jobName: "", quantity: "1" }]);
-                    
-                    // Scroll to top to show new product
-                    window.scrollTo({ top: 0, behavior: 'smooth' });
+                    window.scrollTo({ top: 0, behavior: "smooth" });
                   };
 
-                  return (
-                  <div
-                    key={relatedProduct.id}
-                    onClick={handleSelectProduct}
-                    className="bg-white rounded-lg shadow-md overflow-hidden hover:shadow-lg group border-2 border-gray-200 hover:border-gray-300 h-full cursor-pointer transition-all"
-                  >
-                    {/* Product Image */}
-                    <div className="w-full h-48 bg-gray-200 relative overflow-hidden">
-                      {(() => {
-                        const rawUrl = relatedProduct.image_url || relatedProduct.image;
-                        const relatedImgSrc = getProductImageUrl(rawUrl);
-                        const isBackendUpload = rawUrl && String(rawUrl).trim().startsWith("/uploads/");
-                        return relatedImgSrc ? (
-                          isBackendUpload ? (
-                            <img src={relatedImgSrc} alt={relatedProduct.name} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" />
-                          ) : (
-                            <Image
-                              src={relatedImgSrc}
-                              alt={relatedProduct.name}
-                              fill
-                              className="object-cover group-hover:scale-105 transition-transform duration-300"
-                              sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, (max-width: 1280px) 33vw, 25vw"
-                            />
-                          )
-                        ) : (
-                          <div className="w-full h-full flex items-center justify-center bg-gray-200">
-                            <svg className="w-16 h-16 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                            </svg>
-                          </div>
-                        );
-                      })()}
-                      {(relatedProduct.isNew || relatedProduct.is_new) && (
-                        <span className="absolute top-2 right-2 bg-green-500 text-white text-xs px-2 py-1 rounded-full">
-                          New
-                        </span>
-                      )}
-                    </div>
+                  const categoryLabel =
+                    relatedProduct.category_name?.trim() || relatedProduct.category?.trim() || "";
+                  const descPlain = descriptionPreview(relatedProduct.description);
+                  const unit = parseProductMoney(relatedProduct.price);
+                  const ppsf = parseProductMoney(relatedProduct.price_per_sqft ?? undefined);
 
-                    {/* Product Info */}
-                    <div className="p-4">
-                      <div className="mb-2">
-                        {relatedProduct.category_name && (
-                          <p className="text-xs text-gray-500 mb-1">{relatedProduct.category_name}</p>
-                        )}
-                        <h3 className="text-lg font-semibold text-gray-900 group-hover:text-blue-600 transition-colors line-clamp-2">
+                  return (
+                    <div
+                      key={relatedProduct.id}
+                      onClick={() => handleSelectProduct()}
+                      className="bg-white rounded-lg shadow-md overflow-hidden hover:shadow-lg group border-2 border-gray-200 hover:border-gray-300 h-full cursor-pointer transition-all"
+                    >
+                      <div className="w-full h-48 bg-gray-200 relative overflow-hidden">
+                        {(() => {
+                          const rawUrl = relatedProduct.image_url || relatedProduct.image;
+                          const relatedImgSrc = getProductImageUrl(rawUrl);
+                          const isBackendUpload = rawUrl && String(rawUrl).trim().startsWith("/uploads/");
+                          return relatedImgSrc ? (
+                            isBackendUpload ? (
+                              <img
+                                src={relatedImgSrc}
+                                alt={relatedProduct.name}
+                                className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                              />
+                            ) : (
+                              <Image
+                                src={relatedImgSrc}
+                                alt={relatedProduct.name}
+                                fill
+                                className="object-cover group-hover:scale-105 transition-transform duration-300"
+                                sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, (max-width: 1280px) 33vw, 25vw"
+                              />
+                            )
+                          ) : (
+                            <div className="w-full h-full flex items-center justify-center bg-gray-200">
+                              <svg className="w-16 h-16 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path
+                                  strokeLinecap="round"
+                                  strokeLinejoin="round"
+                                  strokeWidth={2}
+                                  d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"
+                                />
+                              </svg>
+                            </div>
+                          );
+                        })()}
+                      </div>
+
+                      <div className="p-4">
+                        <h3 className="text-lg font-semibold text-gray-900 group-hover:text-blue-600 transition-colors line-clamp-2 mb-1">
                           {relatedProduct.name}
                         </h3>
-                      </div>
-                      {relatedProduct.description && (
-                        <p className="text-sm text-gray-600 mb-3 line-clamp-2 min-w-0 break-words [overflow-wrap:anywhere]">
-                          {relatedProduct.description}
-                        </p>
-                      )}
-                      <div className="flex items-center justify-between">
-                        {relatedProduct.price ? (
-                          <p className="text-lg font-bold text-gray-900">
-                            ${relatedProduct.price}
+                        {categoryLabel ? (
+                          <p className="text-xs text-gray-500 mb-2">{categoryLabel}</p>
+                        ) : null}
+                        {descPlain ? (
+                          <p className="text-sm text-gray-600 mb-3 line-clamp-3 min-w-0 break-words [overflow-wrap:anywhere]">
+                            {descPlain}
                           </p>
-                        ) : relatedProduct.price_per_sqft ? (
-                          <p className="text-sm text-gray-700">
-                            ${relatedProduct.price_per_sqft.toFixed(2)}/ft²
-                          </p>
-                        ) : (
-                          <p className="text-sm text-gray-700">Price on request</p>
-                        )}
-                        <span className="text-blue-600 text-sm font-medium group-hover:text-blue-700">
-                          View Details →
-                        </span>
-                      </div>
-                      <div className="mt-3 pt-3 border-t border-gray-200">
-                        <button
-                          onClick={(e) => handleSelectProduct(e)}
-                          className="w-full bg-blue-500 hover:bg-blue-700 text-white font-medium px-4 py-2 rounded-lg transition-colors text-sm"
-                        >
-                          Select Product
-                        </button>
-                      </div>
-                      {relatedProduct.id === productId && (
-                        <div className="mt-2">
-                          <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
-                            Currently Selected
+                        ) : null}
+                        <div className="flex items-center justify-between gap-2">
+                          {unit != null ? (
+                            <p className="text-lg font-bold text-gray-900">${unit.toFixed(2)}</p>
+                          ) : ppsf != null ? (
+                            <p className="text-sm text-gray-700">${ppsf.toFixed(2)}/ft²</p>
+                          ) : (
+                            <p className="text-sm text-gray-700">Price on request</p>
+                          )}
+                          <span className="shrink-0 text-sm font-medium text-blue-600 group-hover:text-blue-700">
+                            View Details →
                           </span>
                         </div>
-                      )}
+                        <div className="mt-3 border-t border-gray-200 pt-3">
+                          <button
+                            type="button"
+                            onClick={(e) => handleSelectProduct(e)}
+                            className="w-full rounded-lg bg-blue-500 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-blue-700"
+                          >
+                            Select Product
+                          </button>
+                        </div>
+                      </div>
                     </div>
-                  </div>
                   );
                 })}
               </div>

@@ -65,7 +65,6 @@ export default function Navbar({ cartCountOverride, skipCartCountFetch = false }
   const effectiveSkipCartCountFetch = skipCartCountFetch || shouldSkipCartApiForPathname(pathname ?? "");
   const [isVisible, setIsVisible] = useState(disableScrollBehavior);
   const lastScrollYRef = useRef(0);
-  const [openCategoryId, setOpenCategoryId] = useState<number | null>(null);
   const [isUserDropdownOpen, setIsUserDropdownOpen] = useState(false);
   const [isSearchOpen, setIsSearchOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
@@ -86,10 +85,8 @@ export default function Navbar({ cartCountOverride, skipCartCountFetch = false }
   });
   const [loginError, setLoginError] = useState("");
   const [showPassword, setShowPassword] = useState(false);
-  const categoryNavRef = useRef<HTMLDivElement>(null);
   const userDropdownRef = useRef<HTMLDivElement>(null);
   const searchRef = useRef<HTMLDivElement>(null);
-  const categoryCloseTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const didInitialCartFetchRef = useRef(false);
   const effectiveCartCount = typeof cartCountOverride === "number" ? cartCountOverride : cartCount;
   const [categories, setCategories] = useState<Category[]>([]);
@@ -270,9 +267,6 @@ export default function Navbar({ cartCountOverride, skipCartCountFetch = false }
   // Close dropdown when clicking outside
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
-      if (categoryNavRef.current && !categoryNavRef.current.contains(event.target as Node)) {
-        setOpenCategoryId(null);
-      }
       if (userDropdownRef.current && !userDropdownRef.current.contains(event.target as Node)) {
         setIsUserDropdownOpen(false);
       }
@@ -281,25 +275,18 @@ export default function Navbar({ cartCountOverride, skipCartCountFetch = false }
       }
     };
 
-    if (isUserDropdownOpen || isSearchOpen || openCategoryId !== null) {
+    if (isUserDropdownOpen || isSearchOpen) {
       document.addEventListener("mousedown", handleClickOutside);
     }
 
     return () => {
       document.removeEventListener("mousedown", handleClickOutside);
     };
-  }, [isUserDropdownOpen, isSearchOpen, openCategoryId]);
+  }, [isUserDropdownOpen, isSearchOpen]);
 
   // Keep only the first 9 parent categories (preserve API order = "first created").
   const parentCategories = categories.filter((c) => c.parent_id == null);
   const navbarParentCategories = parentCategories.slice(0, 9);
-  const subCategoriesByParent = categories.reduce<Record<number, Category[]>>((acc, c) => {
-    if (c.parent_id != null) {
-      if (!acc[c.parent_id]) acc[c.parent_id] = [];
-      acc[c.parent_id].push(c);
-    }
-    return acc;
-  }, {});
 
   return (
     <>
@@ -325,7 +312,6 @@ export default function Navbar({ cartCountOverride, skipCartCountFetch = false }
 
             {/* Middle Section - Navigation Links */}
             <div
-              ref={categoryNavRef}
               className="hidden lg:flex items-center gap-1 flex-1 justify-center"
             >
               <div className="flex items-center gap-0.5 whitespace-nowrap relative">
@@ -337,72 +323,17 @@ export default function Navbar({ cartCountOverride, skipCartCountFetch = false }
                 </Link>
               </div>
               {navbarParentCategories.map((category) => {
-                const subcategories = subCategoriesByParent[category.id] || [];
-                const hasDropdown = subcategories.length > 0;
                 const categorySlug = category.slug || category.name.toLowerCase().replace(/\s+/g, "-");
                 return (
-                <div
-                  key={category.id}
-                  className="flex items-center gap-0.5 whitespace-nowrap relative pb-1"
-                  onMouseEnter={() => {
-                    if (!hasDropdown) return;
-                    if (categoryCloseTimeoutRef.current) {
-                      clearTimeout(categoryCloseTimeoutRef.current);
-                      categoryCloseTimeoutRef.current = null;
-                    }
-                    setOpenCategoryId(category.id);
-                  }}
-                  onMouseLeave={() => {
-                    if (!hasDropdown) return;
-                    categoryCloseTimeoutRef.current = setTimeout(() => {
-                      setOpenCategoryId((prev) => (prev === category.id ? null : prev));
-                    }, 120);
-                  }}
-                >
-                  {hasDropdown ? (
-                    <>
-                    <button
-                      className="text-slate-700 hover:text-slate-900 hover:bg-slate-100 text-sm font-normal transition-colors flex items-center gap-0.5 px-2 py-1 rounded-sm border border-transparent hover:border-slate-200"
-                    >
-                      {category.name}
-                    </button>
-                    {openCategoryId === category.id && (
-                      <div
-                        className="absolute left-0 top-full mt-0 w-max min-w-[170px] max-w-[300px] bg-white border border-slate-300 rounded-sm shadow-lg shadow-slate-900/10 z-50"
-                        onMouseEnter={() => {
-                          if (categoryCloseTimeoutRef.current) {
-                            clearTimeout(categoryCloseTimeoutRef.current);
-                            categoryCloseTimeoutRef.current = null;
-                          }
-                        }}
-                        onMouseLeave={() => setOpenCategoryId((prev) => (prev === category.id ? null : prev))}
-                      >
-                        <ul className="py-1">
-                          {subcategories.map((sub) => (
-                            <li key={sub.id}>
-                              <Link
-                                href={`/products?category=${encodeURIComponent(categorySlug)}&subcategory=${encodeURIComponent(sub.name)}`}
-                                className="block px-3 py-1.5 text-sm font-normal text-slate-700 hover:bg-slate-100 hover:text-slate-900 transition-colors whitespace-nowrap"
-                                onClick={() => setOpenCategoryId(null)}
-                              >
-                                {sub.name}
-                              </Link>
-                            </li>
-                          ))}
-                        </ul>
-                      </div>
-                    )}
-                    </>
-                  ) : (
-                    <Link
-                      href={`/products/${categorySlug}`}
-                      className="text-slate-700 hover:text-slate-900 hover:bg-slate-100 text-sm font-normal transition-colors px-2 py-1 rounded-sm"
-                    >
-                      {category.name}
-                    </Link>
-                  )}
-                </div>
-              )})}
+                  <Link
+                    key={category.id}
+                    href={`/products/${encodeURIComponent(categorySlug)}`}
+                    className="text-slate-700 hover:text-slate-900 hover:bg-slate-100 text-sm font-normal transition-colors px-2 py-1 rounded-sm whitespace-nowrap"
+                  >
+                    {category.name}
+                  </Link>
+                );
+              })}
             </div>
 
             {/* Right Section - Login Form or User Actions */}

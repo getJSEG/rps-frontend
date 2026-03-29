@@ -99,7 +99,7 @@ export default function Sidebar({ onCategoryClick, showAllProductsButton = true 
   };
 
   return (
-    <aside className="w-full lg:w-52 xl:w-56 shrink-0">
+    <aside className="w-full lg:w-70 xl:w-75 shrink-0">
       <div className="sticky top-24 z-10 rounded-sm border border-gray-200/50 bg-white shadow-[4px_0_14px_-4px_rgba(15,23,42,0.1),0_1px_2px_rgba(15,23,42,0.04)]">
         <div className="rounded-t-sm border-b border-gray-200/60 bg-gray-100/95 px-3 py-2.5">
           <h2 className="text-xs font-normal uppercase tracking-wider text-gray-600">Categories</h2>
