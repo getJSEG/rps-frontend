@@ -17,7 +17,6 @@ interface Product {
   price_per_sqft?: number | string | null;
   image?: string;
   image_url?: string;
-  category_slug?: string;
   category_name?: string;
 }
 
@@ -54,14 +53,9 @@ export default function Products() {
   const [products, setProducts] = useState<Product[]>([]);
   const [loading, setLoading] = useState(true);
   const [pagination, setPagination] = useState<{ total: number; pages: number; page: number } | null>(null);
-  const [selectedCategory, setSelectedCategory] = useState<string | null>(categoryParam);
   const prevFilterKeyRef = useRef<string | null>(null);
 
-  const filterKey = `${selectedCategory ?? ""}|${searchParam ?? ""}|${subcategoryParam ?? ""}`;
-
-  useEffect(() => {
-    setSelectedCategory(categoryParam);
-  }, [categoryParam]);
+  const filterKey = `${categoryParam ?? ""}|${searchParam ?? ""}|${subcategoryParam ?? ""}`;
 
   /** Drop ?page= when category / search / subcategory filters change (not on first mount). */
   useEffect(() => {
@@ -87,7 +81,7 @@ export default function Products() {
           limit: PRODUCTS_PER_PAGE,
           page: pageFromUrl,
         };
-        if (selectedCategory) params.category = selectedCategory;
+        if (categoryParam) params.category = categoryParam;
         if (subcategoryParam) params.subcategory = subcategoryParam;
         if (searchParam) params.search = searchParam;
         setLoading(true);
@@ -108,7 +102,7 @@ export default function Products() {
       }
     };
     fetchProducts();
-  }, [selectedCategory, searchParam, subcategoryParam, pageFromUrl]);
+  }, [categoryParam, searchParam, subcategoryParam, pageFromUrl]);
 
   const goToPage = (nextPage: number) => {
     const sp = new URLSearchParams(searchParams.toString());
@@ -119,8 +113,7 @@ export default function Products() {
   };
 
   const handleCategoryClick = (categorySlug: string) => {
-    setSelectedCategory(categorySlug);
-    router.push(`/products?category=${categorySlug}`);
+    router.push(`/products?category=${encodeURIComponent(categorySlug)}`);
   };
 
   const ProductCard = ({ product }: { product: Product }) => {
@@ -214,8 +207,8 @@ export default function Products() {
                   ? `Search: "${searchParam}"`
                   : subcategoryParam
                     ? `Products: ${subcategoryParam}`
-                    : selectedCategory
-                      ? `Products: ${selectedCategory.replace(/-/g, " ")}`
+                    : categoryParam
+                      ? `${categoryParam.replace(/-/g, " ")}`
                       : "All Products"}
               </h1>
               <p className="text-gray-600">
@@ -223,7 +216,7 @@ export default function Products() {
                   ? "Products matching your search (by name, category, or subcategory)"
                   : subcategoryParam
                     ? "Showing products in this subcategory"
-                    : selectedCategory
+                    : categoryParam
                       ? "Showing products in selected category"
                       : "Browse our All Products Catalog"}
               </p>
@@ -238,7 +231,7 @@ export default function Products() {
                 <p className="text-gray-600">
                   {searchParam
                     ? `No products found for "${searchParam}". Try a different search or category.`
-                    : subcategoryParam || selectedCategory
+                    : subcategoryParam || categoryParam
                       ? "No products in this category yet."
                       : "No products yet. Admin can add products from Admin Panel."}
                 </p>

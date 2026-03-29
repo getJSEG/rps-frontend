@@ -1,6 +1,7 @@
 "use client";
 
 import { use, useState, useEffect, useMemo } from "react";
+import { useRouter } from "next/navigation";
 import Link from "next/link";
 import Navbar from "../../components/Navbar";
 import Footer from "../../components/Footer";
@@ -21,7 +22,6 @@ interface Product {
   name: string;
   image?: string;
   image_url?: string;
-  is_new?: boolean;
   description?: string | null;
   price?: string | number | null;
   price_per_sqft?: number | string | null;
@@ -38,6 +38,7 @@ function slugMatches(a: string, b: string): boolean {
 
 export default function CategoryProductsPage({ params }: { params: Promise<{ category: string }> }) {
   const { category: categorySlugParam } = use(params);
+  const router = useRouter();
   const [loading, setLoading] = useState(true);
   const [notFound, setNotFound] = useState(false);
   const [parentName, setParentName] = useState("");
@@ -48,6 +49,7 @@ export default function CategoryProductsPage({ params }: { params: Promise<{ cat
     let cancelled = false;
 
     const run = async () => {
+      let skipLoadingEnd = false;
       setLoading(true);
       setNotFound(false);
       setSubsections([]);
@@ -63,10 +65,15 @@ export default function CategoryProductsPage({ params }: { params: Promise<{ cat
         );
 
         if (!parent) {
-          if (!cancelled) {
-            setNotFound(true);
-            setLoading(false);
+          const child = categories.find(
+            (c) => c.parent_id != null && c.slug && slugMatches(categorySlugParam, c.slug)
+          );
+          if (child?.slug) {
+            skipLoadingEnd = true;
+            router.replace(`/products?category=${encodeURIComponent(child.slug)}`);
+            return;
           }
+          if (!cancelled) setNotFound(true);
           return;
         }
 
@@ -114,7 +121,7 @@ export default function CategoryProductsPage({ params }: { params: Promise<{ cat
           setNotFound(true);
         }
       } finally {
-        if (!cancelled) setLoading(false);
+        if (!cancelled && !skipLoadingEnd) setLoading(false);
       }
     };
 
@@ -122,7 +129,7 @@ export default function CategoryProductsPage({ params }: { params: Promise<{ cat
     return () => {
       cancelled = true;
     };
-  }, [categorySlugParam]);
+  }, [categorySlugParam, router]);
 
   const carouselProducts = useMemo(
     () =>

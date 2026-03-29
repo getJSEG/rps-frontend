@@ -9,7 +9,6 @@ interface Category {
   name: string;
   slug: string;
   parent_id: number | null;
-  description?: string | null;
   product_count?: number;
 }
 
@@ -80,9 +79,13 @@ export default function Sidebar({ onCategoryClick, showAllProductsButton = true 
     }
   }, [selectedCategory, categories]);
 
-  const handleCategoryClick = (categorySlug: string) => {
+  const handleCategoryClick = (categorySlug: string, isSubcategory: boolean) => {
     if (onCategoryClick) {
       onCategoryClick(categorySlug);
+      return;
+    }
+    if (isSubcategory) {
+      router.push(`/products?category=${encodeURIComponent(categorySlug)}`);
       return;
     }
     router.push(`/products/${categorySlug}`);
@@ -172,7 +175,7 @@ export default function Sidebar({ onCategoryClick, showAllProductsButton = true 
                                   <li key={child.id}>
                                     <button
                                       type="button"
-                                      onClick={() => handleCategoryClick(child.slug)}
+                                      onClick={() => handleCategoryClick(child.slug, true)}
                                       className={`group w-full flex items-center justify-between gap-1.5 py-1 pl-1.5 pr-1 text-left text-sm leading-tight rounded-md transition-colors ${
                                         isSelected
                                           ? "text-blue-800 font-medium bg-blue-50/50"
@@ -200,7 +203,7 @@ export default function Sidebar({ onCategoryClick, showAllProductsButton = true 
                     ) : (
                       <button
                         type="button"
-                        onClick={() => handleCategoryClick(parent.slug)}
+                        onClick={() => handleCategoryClick(parent.slug, false)}
                         className={`flex w-full items-center justify-between gap-2 py-1.5 px-2 text-left text-sm rounded-md transition-colors ${
                           parentSelected
                             ? "bg-blue-50/70 text-blue-800 font-medium"
