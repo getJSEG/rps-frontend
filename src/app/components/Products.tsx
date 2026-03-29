@@ -91,7 +91,8 @@ export default function Products() {
     const descPlain = descriptionPreview(product.description);
     const unit = parseProductMoney(product.price);
     const ppsf = parseProductMoney(product.price_per_sqft ?? undefined);
-    const categoryLabel = product.category_name?.trim() || product.category?.trim() || "";
+    const topLabel =
+      product.subcategory?.trim() || product.category_name?.trim() || product.category?.trim() || "";
 
     return (
       <Link href={`/products/product-detail?productId=${product.id}`} className="block h-full">
@@ -134,10 +135,14 @@ export default function Products() {
           </div>
 
           <div className="flex flex-col gap-2 p-4">
-            <h3 className="line-clamp-2 text-lg font-semibold text-gray-900 group-hover:text-blue-600">
-              {product.name}
-            </h3>
-            {categoryLabel ? <p className="text-xs text-gray-500">{categoryLabel}</p> : null}
+            <div className="min-w-0">
+              {topLabel ? (
+                <p className="mb-1 text-xs text-gray-500 line-clamp-1">{topLabel}</p>
+              ) : null}
+              <h3 className="line-clamp-2 text-lg font-semibold text-gray-900 transition-colors group-hover:text-blue-600">
+                {product.name}
+              </h3>
+            </div>
             {descPlain ? (
               <p className="line-clamp-3 min-w-0 break-words text-sm text-gray-600 [overflow-wrap:anywhere]">{descPlain}</p>
             ) : null}

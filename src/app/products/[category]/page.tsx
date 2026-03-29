@@ -22,6 +22,12 @@ interface Product {
   image?: string;
   image_url?: string;
   is_new?: boolean;
+  description?: string | null;
+  price?: string | number | null;
+  price_per_sqft?: number | string | null;
+  subcategory?: string;
+  category?: string;
+  category_name?: string;
 }
 
 function slugMatches(a: string, b: string): boolean {
@@ -128,7 +134,12 @@ export default function CategoryProductsPage({ params }: { params: Promise<{ cat
             name: p.name,
             image: p.image,
             image_url: p.image_url,
-            is_new: p.is_new,
+            subcategory: s.name,
+            category_name: p.category_name,
+            category: p.category,
+            description: p.description,
+            price: p.price,
+            price_per_sqft: p.price_per_sqft,
           })
         ),
       })),
@@ -179,7 +190,12 @@ export default function CategoryProductsPage({ params }: { params: Promise<{ cat
                         name: p.name,
                         image: p.image,
                         image_url: p.image_url,
-                        is_new: p.is_new,
+                        subcategory: p.subcategory,
+                        category_name: p.category_name,
+                        category: p.category,
+                        description: p.description,
+                        price: p.price,
+                        price_per_sqft: p.price_per_sqft,
                       }))}
                     />
                   )}

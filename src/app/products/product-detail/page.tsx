@@ -124,25 +124,6 @@ function newProductJobRowId(): string {
   return `job-${Date.now()}-${Math.random().toString(36).slice(2, 11)}`;
 }
 
-function descriptionPreview(html: string | null | undefined): string {
-  if (!html || typeof html !== "string") return "";
-  return html
-    .replace(/<script[\s\S]*?<\/script>/gi, "")
-    .replace(/<style[\s\S]*?<\/style>/gi, "")
-    .replace(/<[^>]+>/g, " ")
-    .replace(/&nbsp;/g, " ")
-    .replace(/\s+/g, " ")
-    .trim();
-}
-
-function parseProductMoney(value: string | number | null | undefined): number | null {
-  if (value == null || value === "") return null;
-  if (typeof value === "number" && !Number.isNaN(value)) return value;
-  const n = parseFloat(String(value).trim().replace(/[$,\s]/g, ""));
-  return Number.isNaN(n) ? null : n;
-}
-
-
 function BackToProductsLink({ className = "" }: { className?: string }) {
   return (
     <Link
@@ -648,17 +629,17 @@ function ProductDetailContent() {
           <div className="mb-8">
             <BackToProductsLink />
           </div>
-
+          <h1 className="text-3xl font-bold text-gray-900 mb-6">{productName}</h1>
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-12 min-w-0">
           {/* Left Panel - Product Image and Details */}
           <div className="min-w-0 max-w-full">
-            <h1 className="text-3xl font-bold text-gray-900 mb-6">{productName}</h1>
+            {/* <h1 className="text-3xl font-bold text-gray-900 mb-6">{productName}</h1> */}
             
 
             {/* Main Product Image */}
             <div className="mb-4">
                 <div 
-                  className="w-full h-150 bg-gray-100 border border-gray-300 rounded-lg relative overflow-hidden cursor-zoom-in"
+                  className="w-full h-150 mt-6 bg-gray-100 border border-gray-300 rounded-lg relative overflow-hidden cursor-zoom-in"
                   onMouseMove={(e) => {
                     const rect = e.currentTarget.getBoundingClientRect();
                     const x = ((e.clientX - rect.left) / rect.width) * 100;
@@ -1449,25 +1430,25 @@ function ProductDetailContent() {
                       e.stopPropagation();
                     }
 
+                    // Update URL with new product ID - this will trigger useEffect to fetch new product
                     router.push(`/products/product-detail?productId=${relatedProduct.id}`);
+
+                    // Reset form values for new product
                     setWidth("0");
                     setHeight("0");
                     setJobs([{ id: newProductJobRowId(), jobName: "", quantity: "1" }]);
+
+                    // Scroll to top to show new product
                     window.scrollTo({ top: 0, behavior: "smooth" });
                   };
-
-                  const categoryLabel =
-                    relatedProduct.category_name?.trim() || relatedProduct.category?.trim() || "";
-                  const descPlain = descriptionPreview(relatedProduct.description);
-                  const unit = parseProductMoney(relatedProduct.price);
-                  const ppsf = parseProductMoney(relatedProduct.price_per_sqft ?? undefined);
 
                   return (
                     <div
                       key={relatedProduct.id}
-                      onClick={() => handleSelectProduct()}
+                      onClick={handleSelectProduct}
                       className="bg-white rounded-lg shadow-md overflow-hidden hover:shadow-lg group border-2 border-gray-200 hover:border-gray-300 h-full cursor-pointer transition-all"
                     >
+                      {/* Product Image */}
                       <div className="w-full h-48 bg-gray-200 relative overflow-hidden">
                         {(() => {
                           const rawUrl = relatedProduct.image_url || relatedProduct.image;
@@ -1502,41 +1483,56 @@ function ProductDetailContent() {
                             </div>
                           );
                         })()}
+                        {(relatedProduct.isNew || relatedProduct.is_new) && (
+                          <span className="absolute top-2 right-2 bg-green-500 text-white text-xs px-2 py-1 rounded-full">
+                            New
+                          </span>
+                        )}
                       </div>
 
+                      {/* Product Info */}
                       <div className="p-4">
-                        <h3 className="text-lg font-semibold text-gray-900 group-hover:text-blue-600 transition-colors line-clamp-2 mb-1">
-                          {relatedProduct.name}
-                        </h3>
-                        {categoryLabel ? (
-                          <p className="text-xs text-gray-500 mb-2">{categoryLabel}</p>
-                        ) : null}
-                        {descPlain ? (
-                          <p className="text-sm text-gray-600 mb-3 line-clamp-3 min-w-0 break-words [overflow-wrap:anywhere]">
-                            {descPlain}
+                        <div className="mb-2">
+                          {relatedProduct.category_name && (
+                            <p className="text-xs text-gray-500 mb-1">{relatedProduct.category_name}</p>
+                          )}
+                          <h3 className="text-lg font-semibold text-gray-900 group-hover:text-blue-600 transition-colors line-clamp-2">
+                            {relatedProduct.name}
+                          </h3>
+                        </div>
+                        {relatedProduct.description && (
+                          <p className="text-sm text-gray-600 mb-3 line-clamp-2 min-w-0 break-words [overflow-wrap:anywhere]">
+                            {relatedProduct.description}
                           </p>
-                        ) : null}
-                        <div className="flex items-center justify-between gap-2">
-                          {unit != null ? (
-                            <p className="text-lg font-bold text-gray-900">${unit.toFixed(2)}</p>
-                          ) : ppsf != null ? (
-                            <p className="text-sm text-gray-700">${ppsf.toFixed(2)}/ft²</p>
+                        )}
+                        <div className="flex items-center justify-between">
+                          {relatedProduct.price ? (
+                            <p className="text-lg font-bold text-gray-900">${relatedProduct.price}</p>
+                          ) : relatedProduct.price_per_sqft ? (
+                            <p className="text-sm text-gray-700">${relatedProduct.price_per_sqft.toFixed(2)}/ft²</p>
                           ) : (
                             <p className="text-sm text-gray-700">Price on request</p>
                           )}
-                          <span className="shrink-0 text-sm font-medium text-blue-600 group-hover:text-blue-700">
+                          <span className="text-blue-600 text-sm font-medium group-hover:text-blue-700">
                             View Details →
                           </span>
                         </div>
-                        <div className="mt-3 border-t border-gray-200 pt-3">
+                        <div className="mt-3 pt-3 border-t border-gray-200">
                           <button
                             type="button"
                             onClick={(e) => handleSelectProduct(e)}
-                            className="w-full rounded-lg bg-blue-500 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-blue-700"
+                            className="w-full bg-blue-500 hover:bg-blue-700 text-white font-medium px-4 py-2 rounded-lg transition-colors text-sm"
                           >
                             Select Product
                           </button>
                         </div>
+                        {relatedProduct.id === productId && (
+                          <div className="mt-2">
+                            <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
+                              Currently Selected
+                            </span>
+                          </div>
+                        )}
                       </div>
                     </div>
                   );

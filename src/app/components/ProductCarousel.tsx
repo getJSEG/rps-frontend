@@ -14,8 +14,32 @@ export type CarouselProduct = {
   name: string;
   image?: string;
   image_url?: string;
-  is_new?: boolean;
+  /** Subcategory label (e.g. section name on category hub); shown first when set */
+  subcategory?: string;
+  category_name?: string;
+  category?: string;
+  description?: string | null;
+  price?: string | number | null;
+  price_per_sqft?: number | string | null;
 };
+
+function descriptionPreview(html: string | null | undefined): string {
+  if (!html || typeof html !== "string") return "";
+  return html
+    .replace(/<script[\s\S]*?<\/script>/gi, "")
+    .replace(/<style[\s\S]*?<\/style>/gi, "")
+    .replace(/<[^>]+>/g, " ")
+    .replace(/&nbsp;/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function parseProductMoney(value: string | number | null | undefined): number | null {
+  if (value == null || value === "") return null;
+  if (typeof value === "number" && !Number.isNaN(value)) return value;
+  const n = parseFloat(String(value).trim().replace(/[$,\s]/g, ""));
+  return Number.isNaN(n) ? null : n;
+}
 
 type ProductCarouselProps = {
   products: CarouselProduct[];
@@ -58,33 +82,37 @@ export default function ProductCarousel({ products }: ProductCarouselProps) {
           const rawUrl = product.image_url || product.image;
           const imageSrc = getProductImageUrl(rawUrl);
           const isBackendUpload = rawUrl && String(rawUrl).trim().startsWith("/uploads/");
-          const isNew = product.is_new;
+          const topLabel =
+            product.subcategory?.trim() || product.category_name?.trim() || product.category?.trim() || "";
+          const descPlain = descriptionPreview(product.description);
+          const unit = parseProductMoney(product.price);
+          const ppsf = parseProductMoney(product.price_per_sqft ?? undefined);
 
           return (
             <SwiperSlide key={product.id} className="!h-auto">
               <Link href={`/products/product-detail?productId=${product.id}`} className="block h-full">
-                <div className="group h-full flex flex-col border border-gray-200 bg-white rounded-lg overflow-hidden shadow-sm hover:shadow-md transition-shadow">
-                  <div className="w-full aspect-[4/3] bg-gray-200 relative overflow-hidden">
+                <div className="group flex h-full cursor-pointer flex-col overflow-hidden rounded-lg border-2 border-gray-200 bg-white shadow-md transition-all hover:border-gray-300 hover:shadow-lg">
+                  <div className="relative h-40 w-full overflow-hidden bg-gray-200">
                     {imageSrc ? (
                       isBackendUpload ? (
                         <img
                           src={imageSrc}
                           alt={product.name}
-                          className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                          className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105"
                         />
                       ) : (
                         <Image
                           src={imageSrc}
                           alt={product.name}
                           fill
-                          className="object-cover group-hover:scale-105 transition-transform duration-300"
+                          className="object-cover transition-transform duration-300 group-hover:scale-105"
                           sizes="(max-width: 640px) 45vw, (max-width: 900px) 30vw, 22vw"
                           unoptimized
                         />
                       )
                     ) : (
-                      <div className="w-full h-full flex items-center justify-center bg-gray-200">
-                        <svg className="w-12 h-12 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <div className="flex h-full w-full items-center justify-center bg-gray-200">
+                        <svg className="h-12 w-12 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                           <path
                             strokeLinecap="round"
                             strokeLinejoin="round"
@@ -95,17 +123,27 @@ export default function ProductCarousel({ products }: ProductCarouselProps) {
                       </div>
                     )}
                   </div>
-                  <div className="p-3 flex-1 flex flex-col">
-                    <div className="flex items-start justify-between gap-2">
-                      <h3 className="text-sm font-semibold text-gray-900 group-hover:text-blue-600 transition-colors line-clamp-2">
+                  <div className="flex flex-1 flex-col gap-2 p-3 sm:p-4">
+                    <div className="min-w-0">
+                      {topLabel ? (
+                        <p className="mb-1 line-clamp-1 text-xs text-gray-500">{topLabel}</p>
+                      ) : null}
+                      <h3 className="line-clamp-2 text-base font-semibold text-gray-900 transition-colors group-hover:text-blue-600 sm:text-lg">
                         {product.name}
                       </h3>
-                      {isNew && (
-                        <span className="shrink-0 bg-green-500 text-white text-xs px-2 py-0.5 rounded-full whitespace-nowrap">
-                          New
-                        </span>
-                      )}
                     </div>
+                    {descPlain ? (
+                      <p className="line-clamp-3 min-w-0 break-words text-sm text-gray-600 [overflow-wrap:anywhere]">
+                        {descPlain}
+                      </p>
+                    ) : null}
+                    {unit != null ? (
+                      <p className="text-base font-bold text-gray-900 sm:text-lg">${unit.toFixed(2)}</p>
+                    ) : ppsf != null ? (
+                      <p className="text-sm text-gray-700">${ppsf.toFixed(2)}/ft²</p>
+                    ) : (
+                      <p className="text-sm text-gray-700">Price on request</p>
+                    )}
                   </div>
                 </div>
               </Link>
@@ -117,9 +155,9 @@ export default function ProductCarousel({ products }: ProductCarouselProps) {
         ref={prevRef}
         type="button"
         aria-label="Previous products"
-        className="absolute left-0 top-[42%] -translate-y-1/2 z-10 w-9 h-9 rounded-full bg-white border border-gray-200 shadow-md text-gray-700 hover:bg-gray-50 opacity-0 group-hover/carousel:opacity-100 transition-opacity disabled:opacity-0 hidden sm:flex items-center justify-center -ml-2"
+        className="absolute left-0 top-[42%] z-10 flex h-9 w-9 -translate-y-1/2 items-center justify-center rounded-full border border-gray-200 bg-white text-gray-700 shadow-md transition-opacity hover:bg-gray-50 disabled:opacity-0 sm:flex -ml-2 opacity-0 group-hover/carousel:opacity-100"
       >
-        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
         </svg>
       </button>
@@ -127,9 +165,9 @@ export default function ProductCarousel({ products }: ProductCarouselProps) {
         ref={nextRef}
         type="button"
         aria-label="Next products"
-        className="absolute right-0 top-[42%] -translate-y-1/2 z-10 w-9 h-9 rounded-full bg-white border border-gray-200 shadow-md text-gray-700 hover:bg-gray-50 opacity-0 group-hover/carousel:opacity-100 transition-opacity disabled:opacity-0 hidden sm:flex items-center justify-center -mr-2"
+        className="absolute right-0 top-[42%] z-10 flex h-9 w-9 -translate-y-1/2 items-center justify-center rounded-full border border-gray-200 bg-white text-gray-700 shadow-md transition-opacity hover:bg-gray-50 disabled:opacity-0 sm:flex -mr-2 opacity-0 group-hover/carousel:opacity-100"
       >
-        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
         </svg>
       </button>
