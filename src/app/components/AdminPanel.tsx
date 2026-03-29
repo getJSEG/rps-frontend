@@ -7,6 +7,7 @@ import Image from "next/image";
 import { ordersAPI, productsAPI, cartAPI } from "../../utils/api";
 import AdminNavbar from "./AdminNavbar";
 import { canAccessAdminPanel, isAuthenticated, getUserRole } from "../../utils/roles";
+import { FiTrash2 } from "react-icons/fi";
 
 interface OrderItem {
   id: string;
@@ -445,6 +446,25 @@ export default function AdminPanel() {
     }
   };
 
+  /** Same pill as Status column; map payment row to a status key for shared colors. */
+  const paymentKeyForTag = (order: { isCartItem?: boolean; paymentType?: string }) => {
+    if (order.isCartItem) return "pending";
+    const p = (order.paymentType || "").toLowerCase();
+    if (p === "stripe") return "processing";
+    if (p === "manual" || p === "admin_cart") return "pending";
+    return "unknown";
+  };
+
+  const formatPaymentLabel = (order: { isCartItem?: boolean; paymentType?: string }) => {
+    if (order.isCartItem) return "Cart";
+    const raw = order.paymentType || "—";
+    const p = raw.toLowerCase();
+    if (p === "stripe") return "Card (Stripe)";
+    if (p === "manual") return "Manual / test";
+    if (p === "admin_cart") return "Admin cart";
+    return raw;
+  };
+
   return (
     <AdminNavbar
       title="Orders"
@@ -574,12 +594,14 @@ export default function AdminPanel() {
                         <td className="px-4 py-4 whitespace-nowrap text-slate-500 sm:px-6">
                           {order.orderDate}
                         </td>
-                        <td className="px-4 py-4 whitespace-nowrap text-slate-500 sm:px-6">
-                          {order.isCartItem ? (
-                            <span className="font-medium text-amber-700">Cart</span>
-                          ) : (
-                            order.paymentType
-                          )}
+                        <td className="px-4 py-4 whitespace-nowrap sm:px-6">
+                          <span
+                            className={`inline-flex rounded-lg px-2.5 py-1 text-xs font-medium ${getStatusColor(
+                              paymentKeyForTag(order)
+                            )}`}
+                          >
+                            {formatPaymentLabel(order)}
+                          </span>
                         </td>
                         <td className="px-4 py-4 whitespace-nowrap font-semibold text-slate-900 sm:px-6">
                           ${order.amount.toFixed(2)}
@@ -594,9 +616,15 @@ export default function AdminPanel() {
                             type="button"
                             onClick={(e) => handleRemoveOrder(e, order)}
                             disabled={removingId === order.id}
-                            className="text-sm font-medium text-rose-600 transition-colors hover:text-rose-800 disabled:cursor-not-allowed disabled:opacity-50"
+                            title="Remove"
+                            aria-label={order.isCartItem ? "Remove from cart" : "Remove order"}
+                            className="inline-flex items-center justify-center rounded-lg p-1.5 font-medium text-rose-600 transition-colors hover:bg-rose-50 hover:text-rose-800 disabled:cursor-not-allowed disabled:opacity-50"
                           >
-                            {removingId === order.id ? "Removing…" : "Remove"}
+                            {removingId === order.id ? (
+                              <span className="inline-block h-[18px] w-[18px] animate-spin rounded-full border-2 border-rose-200 border-t-rose-600" />
+                            ) : (
+                              <FiTrash2 size={18} aria-hidden />
+                            )}
                           </button>
                         </td>
                       </tr>

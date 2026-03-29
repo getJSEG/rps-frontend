@@ -17,6 +17,7 @@ import {
   type ShippingRates,
 } from "../../../utils/api";
 import { isAuthenticated } from "../../../utils/roles";
+import { FiArrowLeft, FiEdit, FiTrash2 } from "react-icons/fi";
 
 interface ProductProperty {
   key: string;
@@ -121,6 +122,21 @@ function newProductJobRowId(): string {
     return crypto.randomUUID();
   }
   return `job-${Date.now()}-${Math.random().toString(36).slice(2, 11)}`;
+}
+
+function BackToProductsLink({ className = "" }: { className?: string }) {
+  return (
+    <Link
+      href="/products"
+      className={`group inline-flex max-w-full items-center gap-2 rounded-lg border border-slate-200/90 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:border-gray-200 hover:bg-gray-50/80 hover:text-sky-900 hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-400 focus-visible:ring-offset-2 ${className}`}
+    >
+      <FiArrowLeft
+        className="h-4 w-4 shrink-0 text-slate-600 transition-transform duration-200 group-hover:-translate-x-0.5 group-hover:text-sky-700"
+        aria-hidden
+      />
+      <span className="leading-tight">Back to products</span>
+    </Link>
+  );
 }
 
 /** One print job under a product configuration (same width/height as siblings). */
@@ -594,9 +610,9 @@ function ProductDetailContent() {
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
             <div className="text-center py-12">
               <h1 className="text-3xl font-bold text-gray-900 mb-4">Product Not Found</h1>
-              <Link href="/products" className="text-blue-600 hover:text-blue-700">
-                ← Back to Products
-              </Link>
+              <div className="flex justify-center pt-2">
+                <BackToProductsLink />
+              </div>
             </div>
           </div>
         </div>
@@ -610,11 +626,8 @@ function ProductDetailContent() {
       <Navbar skipCartCountFetch />
     <div className="min-h-screen bg-white pt-24 pb-16">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          {/* Breadcrumb */}
-          <div className="mb-6">
-            <Link href="/products" className="text-blue-600 hover:text-blue-700 text-sm">
-              ← Back to Products
-            </Link>
+          <div className="mb-8">
+            <BackToProductsLink />
           </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-12 min-w-0">
@@ -642,7 +655,7 @@ function ProductDetailContent() {
                       <img
                         src={subcategoryThumbnails[selectedImageIndex].src}
                         alt={productName}
-                        className="w-full h-full object-cover transition-transform duration-300 ease-out"
+                        className="w-full h-full object-cover  transition-transform duration-300 ease-out"
                         style={{
                           transform: `scale(${imageZoom.scale})`,
                           transformOrigin: `${imageZoom.x}% ${imageZoom.y}%`,
@@ -653,7 +666,7 @@ function ProductDetailContent() {
                         src={subcategoryThumbnails[selectedImageIndex].src}
                         alt={productName}
                         fill
-                        className="object-cover transition-transform duration-300 ease-out"
+                        className="object-cover transition-transform duration-300  ease-out"
                         sizes="(max-width: 1024px) 96vw, 60vw"
                         style={{
                           transform: `scale(${imageZoom.scale})`,
@@ -662,7 +675,7 @@ function ProductDetailContent() {
                       />
                     )
                   ) : (
-                    <div className="w-full h-full flex items-center justify-center">
+                    <div className="w-full h-full flex border-2 border-gray-500 items-center justify-center">
                       <svg
                         className="w-28 h-28 text-gray-400"
                         fill="none"
@@ -693,8 +706,12 @@ function ProductDetailContent() {
                       setSelectedImageIndex(idx);
                       setSelectedSubcategory(sub.label);
                     }}
-                    className={`w-25 h-25 bg-gray-100 border-2 rounded cursor-pointer hover:border-blue-500 relative overflow-hidden shrink-0 ${
-                      selectedSubcategory === sub.label ? 'border-blue-500 ring-2 ring-blue-300' : selectedImageIndex === idx ? 'border-blue-500' : 'border-gray-300'
+                    className={`w-25 h-25 bg-gray-100 border-2 rounded cursor-pointer hover:border-gray-400 relative overflow-hidden shrink-0 ${
+                      selectedSubcategory === sub.label
+                        ? 'border-gray-400 ring-2 ring-gray-300'
+                        : selectedImageIndex === idx
+                          ? 'border-gray-400'
+                          : 'border-gray-400'
                     }`}
                     title={sub.label}
                   >
@@ -947,7 +964,7 @@ function ProductDetailContent() {
                           type="text"
                           value={job.jobName}
                           onChange={(e) => updateJob(job.id, { jobName: e.target.value })}
-                          className="w-full px-3 py-2 border border-gray-300 text-black rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                          className="w-full px-3 py-2 border text-sm text-gray-500 border-gray-300 text-black rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
                           placeholder="Job Name/PO#"
                           aria-label={`Job ${index + 1} name or PO number`}
                         />
@@ -978,10 +995,11 @@ function ProductDetailContent() {
                           <button
                             type="button"
                             onClick={() => removeJob(job.id)}
-                            className="text-sm font-medium text-red-600 hover:text-red-800 px-2 py-2 rounded-lg hover:bg-red-50"
+                            className="inline-flex items-center mb-3 justify-center font-medium text-rose-600 hover:text-rose-800"
                             aria-label={`Remove job ${index + 1}`}
+                            title="Delete"
                           >
-                            Remove
+                            <FiTrash2 size={18} aria-hidden />
                           </button>
                         </div>
                       ) : null}
@@ -992,7 +1010,7 @@ function ProductDetailContent() {
               <button
                 type="button"
                 onClick={addJob}
-                className="mt-4 w-full sm:w-auto px-4 py-2 border border-gray-300 rounded-lg text-gray-800 text-sm font-medium hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                className="mt-4 w-full sm:w-auto px-4 py-2 border border-gray-300 rounded-lg text-gray-800 text-sm font-medium hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500"
               >
                 Add Another Job
               </button>
@@ -1014,9 +1032,11 @@ function ProductDetailContent() {
                     {addressesLoading ? null : displayShipTo ? (
                       <Link
                         href={`/address-book?edit=${displayShipTo.id}`}
-                        className="text-sm text-blue-600 hover:text-blue-800 font-medium shrink-0"
+                        className="inline-flex shrink-0 items-center justify-center font-medium text-sky-600 hover:text-sky-800"
+                        title="Edit"
+                        aria-label="Edit address"
                       >
-                        Edit
+                        <FiEdit size={18} aria-hidden />
                       </Link>
                     ) : (
                       <Link

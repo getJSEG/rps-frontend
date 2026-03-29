@@ -183,9 +183,9 @@ export default function AdminNavbar({
             <button
               type="button"
               onClick={handleLogout}
-              className="inline-flex h-10 items-center gap-2 rounded-xl border border-red-200 bg- px-4 text-sm font-medium text-red-700 shadow-sm transition hover:border-red-300 hover:bg-red-50"
+              className="inline-flex h-10 items-center gap-2 rounded-sm border border-red-500 bg-red-500 px-4 text-sm font-semibold text-white shadow-sm transition-colors hover:border-red-600 hover:bg-red-600"
             >
-              <FiLogOut className="h-4 w-4 text-red-500" />
+              <FiLogOut className="h-4 w-4 text-white" aria-hidden />
               Log out
             </button>
           </div>

@@ -526,9 +526,18 @@ export default function AdminProductsPage() {
                         <p className="mt-1 text-xs text-slate-500">Use toolbar for bold, italic, and lists. Shown on product page.</p>
                       </div>
                       <div className="md:col-span-2">
-                        <label className="mb-1 block text-sm font-medium text-slate-700">
-                          Product properties (e.g. Size, Material)
-                        </label>
+                        <div className="mb-2 flex flex-wrap items-start justify-between mb-4 gap-3">
+                          <label className="block text-sm font-medium text-slate-700">
+                            Product properties (e.g. Size, Material)
+                          </label>
+                          <button
+                            type="button"
+                            onClick={() => setProdProperties([...prodProperties, { key: "", value: "" }])}
+                            className="shrink-0 rounded-lg bg-slate-900 px-4 py-2.5 text-sm font-medium text-white shadow-sm transition hover:bg-slate-800"
+                          >
+                            + Add property
+                          </button>
+                        </div>
                         <div className="space-y-2">
                           {prodProperties.map((pr, idx) => (
                             <div key={idx} className="flex gap-2 items-center">
@@ -557,19 +566,14 @@ export default function AdminProductsPage() {
                               <button
                                 type="button"
                                 onClick={() => setProdProperties(prodProperties.filter((_, i) => i !== idx))}
-                                className="rounded-md px-2 py-1 text-rose-600 hover:bg-rose-50"
+                                title="Remove property"
+                                aria-label="Remove property"
+                                className="inline-flex shrink-0 items-center justify-center rounded-lg p-2 text-rose-600 transition-colors hover:bg-rose-50 hover:text-rose-800"
                               >
-                                Remove
+                                <FiTrash2 size={18} aria-hidden />
                               </button>
                             </div>
                           ))}
-                          <button
-                            type="button"
-                            onClick={() => setProdProperties([...prodProperties, { key: "", value: "" }])}
-                            className="text-sm font-medium text-sky-600 hover:text-sky-800"
-                          >
-                            + Add property
-                          </button>
                         </div>
                       </div>
                       <select
@@ -622,25 +626,28 @@ export default function AdminProductsPage() {
                         onChange={(e) => setProdPricePerSqft(e.target.value)}
                         className={inputClass}
                       />
-                      <input
-                        type="number"
-                        step="0.01"
-                        placeholder="Min charge"
-                        value={prodMinCharge}
-                        onChange={(e) => setProdMinCharge(e.target.value)}
-                        className={inputClass}
-                      />
-                      <input
-                        type="text"
-                        placeholder="Material"
-                        value={prodMaterial}
-                        onChange={(e) => setProdMaterial(e.target.value)}
-                        className={inputClass}
-                      />
-                      <div className="md:col-span-2 space-y-2">
-                        <p className="text-sm font-medium text-slate-700">Product image (file or URL)</p>
-                        <div className="flex flex-wrap items-center gap-2">
-                          <label className="cursor-pointer rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-700 shadow-sm transition hover:border-slate-300 hover:bg-slate-50">
+                      <div className="md:col-span-2 grid grid-cols-1 gap-4 md:grid-cols-2">
+                        <input
+                          type="number"
+                          step="0.01"
+                          placeholder="Min charge"
+                          value={prodMinCharge}
+                          onChange={(e) => setProdMinCharge(e.target.value)}
+                          className={inputClass}
+                        />
+                        <input
+                          type="text"
+                          placeholder="Material"
+                          value={prodMaterial}
+                          onChange={(e) => setProdMaterial(e.target.value)}
+                          className={inputClass}
+                        />
+                        <div className="space-y-2">
+                          <p className="text-sm font-medium text-slate-700">Product image (file or URL)</p>
+                        </div>
+                        <div className="hidden min-h-[1.25rem] md:block" aria-hidden />
+                        <div className="flex min-w-0 flex-wrap items-center gap-2">
+                          <label className="shrink-0 cursor-pointer rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-700 shadow-sm transition hover:border-slate-300 hover:bg-slate-50">
                             {uploadingImage ? "Uploading…" : "Choose image file"}
                             <input
                               type="file"
@@ -650,28 +657,31 @@ export default function AdminProductsPage() {
                               onChange={handleProductImageUpload}
                             />
                           </label>
-                          <span className="text-sm text-slate-400">or</span>
+                          <span className="shrink-0 text-sm text-slate-400">or</span>
                           <input
                             type="text"
                             placeholder="Image URL (e.g. /image.jpg)"
                             value={prodImageUrl}
                             onChange={(e) => setProdImageUrl(e.target.value)}
-                            className="min-w-[200px] flex-1 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm shadow-sm outline-none focus:border-sky-400 focus:ring-2 focus:ring-sky-400/25"
+                            className="min-w-0 flex-1 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm shadow-sm outline-none focus:border-sky-400 focus:ring-2 focus:ring-sky-400/25"
                           />
                         </div>
-                        {prodImageUrl && isValidImageSrc(prodImageUrl) && (
-                          <div className="h-20 w-20 overflow-hidden rounded-lg border border-slate-200 bg-slate-100">
-                            <Image src={getProductImageSrc(prodImageUrl)} alt="" width={80} height={80} className="w-full h-full object-cover" unoptimized />
-                          </div>
-                        )}
+                        <input
+                          type="text"
+                          placeholder="SKU"
+                          value={prodSku}
+                          onChange={(e) => setProdSku(e.target.value)}
+                          className={`${inputClass} md:self-center`}
+                        />
+                        {prodImageUrl && isValidImageSrc(prodImageUrl) ? (
+                          <>
+                            <div className="h-20 w-20 overflow-hidden rounded-lg border border-slate-200 bg-slate-100">
+                              <Image src={getProductImageSrc(prodImageUrl)} alt="" width={80} height={80} className="h-full w-full object-cover" unoptimized />
+                            </div>
+                            <div className="hidden md:block" aria-hidden />
+                          </>
+                        ) : null}
                       </div>
-                      <input
-                        type="text"
-                        placeholder="SKU"
-                        value={prodSku}
-                        onChange={(e) => setProdSku(e.target.value)}
-                        className={inputClass}
-                      />
                       {/* <div className="flex items-center gap-6">
                         <label className="group flex cursor-pointer items-center gap-2 text-sm text-slate-700 transition-colors">
                           <div className="relative flex items-center justify-center">

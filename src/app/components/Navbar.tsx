@@ -562,9 +562,9 @@ export default function Navbar({ cartCountOverride, skipCartCountFetch = false }
                           <button
                             type="button"
                             onClick={handleLogout}
-                            className="flex w-full items-center gap-2 rounded-sm px-1.5 py-1 text-left text-sm  text-rose-600 hover:bg-rose-50"
+                            className="mt-1 flex w-full items-center justify-center gap-2 rounded-sm border border-red-500 bg-red-500 px-4 py-2 text-sm font-semibold text-white transition-colors hover:border-red-600 hover:bg-red-600"
                           >
-                            <IoLogOutOutline className="h-4 w-4 shrink-0 opacity-90" aria-hidden />
+                            <IoLogOutOutline className="h-4 w-4 shrink-0 text-white" aria-hidden />
                             Logout
                           </button>
                         </div>
