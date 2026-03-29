@@ -731,8 +731,7 @@ export default function OrderDetails() {
                       <th className="px-3 py-3">Material</th>
                       <th className="px-3 py-3 text-right">Qty</th>
                       <th className="px-3 py-3 text-right">Unit</th>
-                      <th className="px-3 py-3 text-right">Line total</th>
-                      <th className="px-3 py-3 pr-5">Description</th>
+                      <th className="px-3 py-3 text-right pr-5">Line total</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -765,20 +764,7 @@ export default function OrderDetails() {
                         <td className="px-3 py-3 text-slate-600">{dash(item.product_material)}</td>
                         <td className="px-3 py-3 text-right tabular-nums">{item.quantity}</td>
                         <td className="px-3 py-3 text-right tabular-nums">${formatMoney(item.unit_price)}</td>
-                        <td className="px-3 py-3 text-right font-semibold tabular-nums text-slate-900">${formatMoney(item.total_price)}</td>
-                        <td className="max-w-[220px] px-3 py-3 pr-5 text-xs text-slate-600">
-                          {item.product_description ? (
-                            <span className="line-clamp-4" title={item.product_description}>
-                              {item.product_description}
-                            </span>
-                          ) : (
-                            "—"
-                          )}
-                          <div className="mt-1 space-y-0.5 text-[10px] text-slate-400">
-                            {item.product_price_per_sqft != null && <span>${formatMoney(item.product_price_per_sqft)}/sq ft · </span>}
-                            {item.product_min_charge != null && <span>Min ${formatMoney(item.product_min_charge)}</span>}
-                          </div>
-                        </td>
+                        <td className="px-3 py-3 pr-5 text-right font-semibold tabular-nums text-slate-900">${formatMoney(item.total_price)}</td>
                       </tr>
                     ))}
                   </tbody>
