@@ -2,7 +2,7 @@
 
 import Image from "next/image";
 import Link from "next/link";
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useLayoutEffect, useRef } from "react";
 import { useSearchParams, useRouter, usePathname } from "next/navigation";
 import { productsAPI, getProductImageUrl } from "../../utils/api";
 import Sidebar from "./Sidebar";
@@ -18,6 +18,52 @@ interface Product {
   image?: string;
   image_url?: string;
   category_name?: string;
+}
+
+interface CategoryItem {
+  id: number;
+  name: string;
+  slug: string;
+  parent_id: number | null;
+}
+
+const CATEGORY_NAME_BY_SLUG_KEY = "categoryNameBySlug";
+
+function readCategoryNameFromStorage(slug: string | null): string | null {
+  if (!slug || typeof window === "undefined") return null;
+  const key = decodeURIComponent(slug).trim().toLowerCase();
+  try {
+    const mapRaw = localStorage.getItem(CATEGORY_NAME_BY_SLUG_KEY);
+    if (mapRaw) {
+      const map = JSON.parse(mapRaw) as Record<string, string>;
+      const name = map[key];
+      if (typeof name === "string" && name.trim()) return name.trim();
+    }
+    const navRaw = localStorage.getItem("navbarCategories");
+    if (navRaw) {
+      const list = JSON.parse(navRaw) as CategoryItem[];
+      if (Array.isArray(list)) {
+        const m = list.find((c) => String(c.slug).trim().toLowerCase() === key);
+        if (m?.name?.trim()) return m.name.trim();
+      }
+    }
+  } catch {
+    // ignore
+  }
+  return null;
+}
+
+function writeCategoryNameToStorage(slug: string, name: string) {
+  if (typeof window === "undefined" || !slug || !name.trim()) return;
+  const key = decodeURIComponent(slug).trim().toLowerCase();
+  try {
+    const mapRaw = localStorage.getItem(CATEGORY_NAME_BY_SLUG_KEY);
+    const map: Record<string, string> = mapRaw ? (JSON.parse(mapRaw) as Record<string, string>) : {};
+    map[key] = name.trim();
+    localStorage.setItem(CATEGORY_NAME_BY_SLUG_KEY, JSON.stringify(map));
+  } catch {
+    // ignore
+  }
 }
 
 function descriptionPreview(html: string | null | undefined): string {
@@ -41,11 +87,12 @@ function parseProductMoney(value: string | number | null | undefined): number | 
 /** Matches backend default storefront page size. */
 const PRODUCTS_PER_PAGE = 20;
 
-export default function Products() {
+export default function Products({ forcedCategorySlug = null }: { forcedCategorySlug?: string | null }) {
   const searchParams = useSearchParams();
   const router = useRouter();
   const pathname = usePathname();
-  const categoryParam = searchParams.get("category");
+  const urlCategoryParam = searchParams.get("category");
+  const categoryParam = forcedCategorySlug ?? urlCategoryParam;
   const searchParam = searchParams.get("search")?.trim() || null;
   const subcategoryParam = searchParams.get("subcategory")?.trim() || null;
   const pageFromUrl = Math.max(1, parseInt(searchParams.get("page") || "1", 10) || 1);
@@ -53,6 +100,7 @@ export default function Products() {
   const [products, setProducts] = useState<Product[]>([]);
   const [loading, setLoading] = useState(true);
   const [pagination, setPagination] = useState<{ total: number; pages: number; page: number } | null>(null);
+  const [categoryDisplayName, setCategoryDisplayName] = useState<string | null>(null);
   const prevFilterKeyRef = useRef<string | null>(null);
 
   const filterKey = `${categoryParam ?? ""}|${searchParam ?? ""}|${subcategoryParam ?? ""}`;
@@ -104,6 +152,46 @@ export default function Products() {
     fetchProducts();
   }, [categoryParam, searchParam, subcategoryParam, pageFromUrl]);
 
+  /** Apply cached name before paint so title never flashes slug (localStorage is client-only; avoids SSR mismatch). */
+  useLayoutEffect(() => {
+    if (!categoryParam) {
+      setCategoryDisplayName(null);
+      return;
+    }
+    setCategoryDisplayName(readCategoryNameFromStorage(categoryParam));
+  }, [categoryParam]);
+
+  useEffect(() => {
+    let cancelled = false;
+    const loadCategoryName = async () => {
+      if (!categoryParam) {
+        setCategoryDisplayName(null);
+        return;
+      }
+      try {
+        const res = await productsAPI.getCategories();
+        const categories: CategoryItem[] = Array.isArray(res?.categories) ? res.categories : [];
+        const match = categories.find(
+          (c) => String(c.slug).trim().toLowerCase() === String(categoryParam).trim().toLowerCase()
+        );
+        const name = match?.name?.trim() || null;
+        if (!cancelled) {
+          setCategoryDisplayName(name);
+          if (name) writeCategoryNameToStorage(categoryParam, name);
+        }
+      } catch {
+        if (!cancelled) {
+          const fallback = readCategoryNameFromStorage(categoryParam);
+          setCategoryDisplayName(fallback);
+        }
+      }
+    };
+    loadCategoryName();
+    return () => {
+      cancelled = true;
+    };
+  }, [categoryParam]);
+
   const goToPage = (nextPage: number) => {
     const sp = new URLSearchParams(searchParams.toString());
     if (nextPage <= 1) sp.delete("page");
@@ -113,7 +201,7 @@ export default function Products() {
   };
 
   const handleCategoryClick = (categorySlug: string) => {
-    router.push(`/products?category=${encodeURIComponent(categorySlug)}`);
+    router.push(`/products/${encodeURIComponent(categorySlug)}`);
   };
 
   const ProductCard = ({ product }: { product: Product }) => {
@@ -202,13 +290,23 @@ export default function Products() {
 
           <div className="flex-1">
             <div className="mb-8">
-              <h1 className="text-3xl font-bold text-gray-900 mb-2">
+              <h1 className="text-3xl font-bold text-gray-900 mb-2 min-h-[2.25rem]">
                 {searchParam
                   ? `Search: "${searchParam}"`
                   : subcategoryParam
                     ? `Products: ${subcategoryParam}`
                     : categoryParam
-                      ? `${categoryParam.replace(/-/g, " ")}`
+                      ? categoryDisplayName
+                        ? categoryDisplayName
+                        : (
+                            <>
+                              <span className="sr-only">Loading category title…</span>
+                              <span
+                                className="inline-block h-9 min-w-[12rem] max-w-md animate-pulse rounded-md bg-gray-200 align-middle"
+                                aria-hidden
+                              />
+                            </>
+                          )
                       : "All Products"}
               </h1>
               {(searchParam || subcategoryParam) && (

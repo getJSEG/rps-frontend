@@ -79,16 +79,33 @@ export default function Sidebar({ onCategoryClick, showAllProductsButton = true 
     }
   }, [selectedCategory, categories]);
 
-  const handleCategoryClick = (categorySlug: string, isSubcategory: boolean) => {
+  const navigateToCategoryListing = (categorySlug: string, isSubcategory: boolean) => {
     if (onCategoryClick) {
       onCategoryClick(categorySlug);
       return;
     }
-    if (isSubcategory) {
-      router.push(`/products?category=${encodeURIComponent(categorySlug)}`);
+    router.push(`/products/${encodeURIComponent(categorySlug)}`);
+  };
+
+  const handleCategoryClick = async (categorySlug: string, isSubcategory: boolean) => {
+    if (!isSubcategory) {
+      navigateToCategoryListing(categorySlug, false);
       return;
     }
-    router.push(`/products/${categorySlug}`);
+
+    // For leaf clicks, skip the extra step when only one product exists.
+    try {
+      const res = await productsAPI.getAll({ category: categorySlug, limit: 2 });
+      const products = Array.isArray(res?.products) ? res.products : [];
+      if (products.length === 1 && products[0]?.id != null) {
+        router.push(`/products/product-detail?productId=${encodeURIComponent(String(products[0].id))}`);
+        return;
+      }
+    } catch (e) {
+      console.error("Error resolving direct product navigation:", e);
+    }
+
+    navigateToCategoryListing(categorySlug, true);
   };
 
   const handleClearFilter = () => {
@@ -171,22 +188,29 @@ export default function Sidebar({ onCategoryClick, showAllProductsButton = true 
                             <ul className="ml-1 pl-2 border-l border-gray-200/90 space-y-0">
                               {children.map((child) => {
                                 const isSelected = selectedCategory === child.slug;
+                                const isDisabled = child.product_count === 0;
                                 return (
                                   <li key={child.id}>
                                     <button
                                       type="button"
-                                      onClick={() => handleCategoryClick(child.slug, true)}
+                                      disabled={isDisabled}
+                                      onClick={() => {
+                                        if (isDisabled) return;
+                                        void handleCategoryClick(child.slug, true);
+                                      }}
                                       className={`group w-full flex items-center justify-between gap-1.5 py-1 pl-1.5 pr-1 text-left text-sm leading-tight rounded-md transition-colors ${
-                                        isSelected
-                                          ? "text-blue-800 font-medium bg-blue-50/50"
-                                          : "text-gray-600 hover:text-gray-900 hover:bg-gray-50/80"
+                                        isDisabled
+                                          ? "cursor-default text-gray-400 opacity-70"
+                                          : isSelected
+                                            ? "text-blue-800 font-medium bg-blue-50/50"
+                                            : "text-gray-600 hover:text-gray-900 hover:bg-gray-50/80"
                                       }`}
                                     >
                                       <span className="truncate">{child.name}</span>
                                       {child.product_count != null && child.product_count > 0 && (
                                         <span
                                           className={`shrink-0 text-[10px] tabular-nums text-gray-400 group-hover:text-gray-500 ${
-                                            isSelected ? "text-blue-600/80" : ""
+                                            isDisabled ? "" : isSelected ? "text-blue-600/80" : ""
                                           }`}
                                         >
                                           {child.product_count}
@@ -203,7 +227,9 @@ export default function Sidebar({ onCategoryClick, showAllProductsButton = true 
                     ) : (
                       <button
                         type="button"
-                        onClick={() => handleCategoryClick(parent.slug, false)}
+                        onClick={() => {
+                          void handleCategoryClick(parent.slug, false);
+                        }}
                         className={`flex w-full items-center justify-between gap-2 py-1.5 px-2 text-left text-sm rounded-md transition-colors ${
                           parentSelected
                             ? "bg-blue-50/70 text-blue-800 font-medium"

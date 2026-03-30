@@ -37,6 +37,27 @@ type Category = {
   parent_id: number | null;
 };
 
+function readCachedNavbarCategories(): Category[] {
+  if (typeof window === "undefined") return [];
+  try {
+    const raw = localStorage.getItem("navbarCategories");
+    if (!raw) return [];
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return [];
+    return parsed.filter(
+      (c): c is Category =>
+        c &&
+        typeof c === "object" &&
+        typeof c.id === "number" &&
+        typeof c.name === "string" &&
+        typeof c.slug === "string" &&
+        (c.parent_id === null || typeof c.parent_id === "number")
+    );
+  } catch {
+    return [];
+  }
+}
+
 function getDisplayNameFromUser(user: any): string {
   if (!user || typeof user !== "object") return "";
   const candidates = [user.fullName, user.full_name, user.name, user.firstName, user.email];
@@ -84,9 +105,29 @@ export default function Navbar() {
   const [isUserDropdownOpen, setIsUserDropdownOpen] = useState(false);
   const [isSearchOpen, setIsSearchOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
-  const [isLoggedIn, setIsLoggedIn] = useState(false);
-  const [userName, setUserName] = useState("");
-  const [cartCount, setCartCount] = useState(0);
+  const [isLoggedIn, setIsLoggedIn] = useState(() => {
+    if (typeof window === "undefined") return false;
+    return localStorage.getItem("isLoggedIn") === "true";
+  });
+  const [userName, setUserName] = useState(() => {
+    if (typeof window === "undefined") return "";
+    const loggedIn = localStorage.getItem("isLoggedIn") === "true";
+    if (!loggedIn) return "";
+    const userStr = localStorage.getItem("user");
+    if (!userStr) return "";
+    try {
+      const user = JSON.parse(userStr);
+      return getDisplayNameFromUser(user);
+    } catch {
+      return "";
+    }
+  });
+  const [cartCount, setCartCount] = useState(() => {
+    if (typeof window === "undefined") return 0;
+    const cached = localStorage.getItem("cartCount");
+    const parsed = cached != null ? Number(cached) : NaN;
+    return Number.isFinite(parsed) && parsed >= 0 ? parsed : 0;
+  });
   const [email, setEmail] = useState(() => {
     if (typeof window !== 'undefined') {
       return localStorage.getItem("registeredEmail") || "";
@@ -105,7 +146,7 @@ export default function Navbar() {
   const searchRef = useRef<HTMLDivElement>(null);
   const didInitialCartFetchRef = useRef(false);
   const loginCheckInvocationRef = useRef(0);
-  const [categories, setCategories] = useState<Category[]>([]);
+  const [categories, setCategories] = useState<Category[]>(() => readCachedNavbarCategories());
 
   // Cart count from API (JWT or guest X-Guest-Session-Id)
   const updateCartCount = async () => {
@@ -114,9 +155,11 @@ export default function Navbar() {
         const { cartAPI } = await import("../../utils/api");
         const res = await cartAPI.get();
         const items = Array.isArray(res?.cartItems) ? res.cartItems : [];
-        setCartCount(cartBadgeCount(items));
+        const next = cartBadgeCount(items);
+        setCartCount(next);
+        localStorage.setItem("cartCount", String(next));
       } catch {
-        setCartCount(0);
+        // Keep previous/cached badge when cart endpoint is temporarily unavailable.
       }
     }
   };
@@ -200,11 +243,15 @@ export default function Navbar() {
       try {
         const { productsAPI } = await import("../../utils/api");
         const res = await productsAPI.getCategories();
+        const nextCategories = Array.isArray(res?.categories) ? res.categories : [];
         if (!mounted) return;
-        setCategories(Array.isArray(res?.categories) ? res.categories : []);
+        setCategories(nextCategories);
+        if (typeof window !== "undefined") {
+          localStorage.setItem("navbarCategories", JSON.stringify(nextCategories));
+        }
       } catch {
         if (!mounted) return;
-        setCategories([]);
+        setCategories((prev) => (prev.length > 0 ? prev : []));
       }
     };
     loadCategories();
@@ -458,9 +505,9 @@ export default function Navbar() {
                     {userName}
                   </span>
                 ) : (
-                <a href="/estimates" className="text-gray-700 hover:text-gray-900 text-sm font-medium transition-colors">
+                <Link href="/estimates" className="text-gray-700 hover:text-gray-900 text-sm font-medium transition-colors">
                   Estimate
-                </a>
+                </Link>
                 )}
 
                 {/* User Profile Icon */}
@@ -480,26 +527,26 @@ export default function Navbar() {
                       {/* Menu Options */}
                       <div className="px-2.5 py-2">
                         <div className="space-y-0.5">
-                          <a href="/account-settings" className="flex items-center gap-2 rounded-sm px-1.5 py-1 text-[#0B6BCB] hover:bg-slate-100 hover:text-blue-800 text-sm whitespace-nowrap">
+                          <Link href="/account-settings" className="flex items-center gap-2 rounded-sm px-1.5 py-1 text-[#0B6BCB] hover:bg-slate-100 hover:text-blue-800 text-sm whitespace-nowrap">
                             <IoSettingsOutline className="h-4 w-4 shrink-0 opacity-90" aria-hidden />
                             Account Settings
-                          </a>
-                          <a href="/change-password" className="flex items-center gap-2 rounded-sm px-1.5 py-1 text-[#0B6BCB] hover:bg-slate-100 hover:text-blue-800 text-sm whitespace-nowrap">
+                          </Link>
+                          <Link href="/change-password" className="flex items-center gap-2 rounded-sm px-1.5 py-1 text-[#0B6BCB] hover:bg-slate-100 hover:text-blue-800 text-sm whitespace-nowrap">
                             <IoKeyOutline className="h-4 w-4 shrink-0 opacity-90" aria-hidden />
                             Change Password
-                          </a>
-                          <a href="/credit-cards" className="flex items-center gap-2 rounded-sm px-1.5 py-1 text-[#0B6BCB] hover:bg-slate-100 hover:text-blue-800 text-sm whitespace-nowrap">
+                          </Link>
+                          <Link href="/credit-cards" className="flex items-center gap-2 rounded-sm px-1.5 py-1 text-[#0B6BCB] hover:bg-slate-100 hover:text-blue-800 text-sm whitespace-nowrap">
                             <IoCardOutline className="h-4 w-4 shrink-0 opacity-90" aria-hidden />
                             Manage Credit Cards
-                          </a>
-                          <a href="/messages" className="flex items-center gap-2 rounded-sm px-1.5 py-1 text-[#0B6BCB] hover:bg-slate-100 hover:text-blue-800 text-sm whitespace-nowrap">
+                          </Link>
+                          <Link href="/messages" className="flex items-center gap-2 rounded-sm px-1.5 py-1 text-[#0B6BCB] hover:bg-slate-100 hover:text-blue-800 text-sm whitespace-nowrap">
                             <IoMailOutline className="h-4 w-4 shrink-0 opacity-90" aria-hidden />
                             Messages
-                          </a>
-                          <a href="/address-book" className="flex items-center gap-2 rounded-sm px-1.5 py-1 text-[#0B6BCB] hover:bg-slate-100 hover:text-blue-800 text-sm whitespace-nowrap">
+                          </Link>
+                          <Link href="/address-book" className="flex items-center gap-2 rounded-sm px-1.5 py-1 text-[#0B6BCB] hover:bg-slate-100 hover:text-blue-800 text-sm whitespace-nowrap">
                             <IoBookOutline className="h-4 w-4 shrink-0 opacity-90" aria-hidden />
                             Address Book
-                          </a>
+                          </Link>
                           <button
                             type="button"
                             onClick={handleLogout}
