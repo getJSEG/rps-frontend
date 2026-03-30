@@ -92,7 +92,7 @@ export default function Sidebar({ onCategoryClick, showAllProductsButton = true 
   };
 
   const handleClearFilter = () => {
-    router.push("/products");
+    router.push("/");
   };
 
   const getChildren = (parentId: number) => childCategories.filter((c) => c.parent_id === parentId);
@@ -137,44 +137,31 @@ export default function Sidebar({ onCategoryClick, showAllProductsButton = true 
                 const children = getChildren(parent.id);
                 const isOpen = openGroups[parent.id] ?? false;
                 const hasChildren = children.length > 0;
-                const parentSelected = selectedCategory === parent.slug;
+                const parentSelected = !hasChildren && selectedCategory === parent.slug;
 
                 return (
                   <div key={parent.id} className={index > 0 ? "mt-1 pt-1 border-t border-gray-100" : ""}>
                     {hasChildren ? (
                       <>
-                        <div className="flex items-center gap-1">
-                          <button
-                            type="button"
-                            onClick={() => handleCategoryClick(parent.slug, false)}
-                            className={`flex min-w-0 flex-1 items-center justify-between gap-2 py-1.5 px-2 text-left text-sm rounded-md transition-colors ${
-                              parentSelected
-                                ? "bg-blue-50/70 text-blue-800 font-medium"
-                                : "text-gray-800 hover:bg-gray-50/90"
-                            }`}
+                        <button
+                          type="button"
+                          onClick={() => toggleGroup(parent.id)}
+                          className="flex w-full items-center gap-1.5 py-1.5 px-2 text-left text-sm font-normal text-gray-900 rounded-md hover:bg-gray-50/90"
+                          aria-expanded={isOpen}
+                        >
+                          <span className="min-w-0 flex-1 truncate">{parent.name}</span>
+                          <span className="shrink-0 text-[10px] font-normal text-gray-400 tabular-nums">
+                            {children.length}
+                          </span>
+                          <svg
+                            className={`h-3.5 w-3.5 shrink-0 text-gray-400 transition-transform duration-150 ${isOpen ? "rotate-180" : ""}`}
+                            fill="none"
+                            stroke="currentColor"
+                            viewBox="0 0 24 24"
                           >
-                            <span className="truncate font-normal">{parent.name}</span>
-                            <span className="shrink-0 text-[10px] font-normal text-gray-400 tabular-nums">
-                              {children.length}
-                            </span>
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => toggleGroup(parent.id)}
-                            className="shrink-0 rounded-md p-1 text-gray-400 transition-colors hover:bg-gray-50 hover:text-gray-600"
-                            aria-expanded={isOpen}
-                            aria-label={isOpen ? `Collapse ${parent.name} subcategories` : `Expand ${parent.name} subcategories`}
-                          >
-                            <svg
-                              className={`h-3.5 w-3.5 transition-transform duration-150 ${isOpen ? "rotate-180" : ""}`}
-                              fill="none"
-                              stroke="currentColor"
-                              viewBox="0 0 24 24"
-                            >
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                            </svg>
-                          </button>
-                        </div>
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                          </svg>
+                        </button>
                         <div
                           className={`grid transition-[grid-template-rows] duration-150 ease-out ${
                             isOpen ? "grid-rows-[1fr]" : "grid-rows-[0fr]"
