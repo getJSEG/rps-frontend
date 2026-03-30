@@ -207,7 +207,6 @@ export default function CreditCards() {
   const menuItems = [
     { label: "Account Settings", href: "/account-settings" },
     { label: "Change Password", href: "/change-password" },
-    { label: "Reseller Permit", href: "/reseller-permit" },
     { label: "Credit Cards", href: "/credit-cards", active: true },
     { label: "Your Default Address", href: "/address-book" },
   ];

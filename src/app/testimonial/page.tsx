@@ -53,7 +53,7 @@ export default function TestimonialPage() {
       role: "Operations Manager",
       image: "/downloadman.png",
       rating: 5,
-      text: "As a reseller, I appreciate the competitive pricing and reliable service. Elmer has helped us grow our business by providing high-quality products that our customers love. The online ordering system is also very user-friendly.",
+      text: "As a long-time customer, I appreciate the competitive pricing and reliable service. Elmer has helped our business grow by providing high-quality products that our own clients love. The online ordering system is also very user-friendly.",
       date: "September 2023"
     },
     {
@@ -155,7 +155,7 @@ export default function TestimonialPage() {
                 href="/register"
                 className="bg-white hover:bg-gray-50 text-blue-600 font-medium px-8 py-3 rounded-lg border-2 border-blue-600 transition-colors"
               >
-                Become a Reseller
+                Create an account
               </a>
             </div>
           </div>

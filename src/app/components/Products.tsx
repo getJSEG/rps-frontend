@@ -20,6 +20,15 @@ interface Product {
   category_name?: string;
 }
 
+interface Category {
+  id: number;
+  name: string;
+  slug: string;
+  parent_id: number | null;
+  description?: string | null;
+  product_count?: number;
+}
+
 function descriptionPreview(html: string | null | undefined): string {
   if (!html || typeof html !== "string") return "";
   return html
@@ -40,6 +49,7 @@ function parseProductMoney(value: string | number | null | undefined): number | 
 
 /** Matches backend default storefront page size. */
 const PRODUCTS_PER_PAGE = 20;
+const CATEGORIES_PER_PAGE = 20;
 
 export default function Products() {
   const searchParams = useSearchParams();
@@ -49,8 +59,10 @@ export default function Products() {
   const searchParam = searchParams.get("search")?.trim() || null;
   const subcategoryParam = searchParams.get("subcategory")?.trim() || null;
   const pageFromUrl = Math.max(1, parseInt(searchParams.get("page") || "1", 10) || 1);
+  const isCategoryLanding = !categoryParam && !searchParam && !subcategoryParam;
 
   const [products, setProducts] = useState<Product[]>([]);
+  const [categories, setCategories] = useState<Category[]>([]);
   const [loading, setLoading] = useState(true);
   const [pagination, setPagination] = useState<{ total: number; pages: number; page: number } | null>(null);
   const prevFilterKeyRef = useRef<string | null>(null);
@@ -76,6 +88,13 @@ export default function Products() {
 
   useEffect(() => {
     const fetchProducts = async () => {
+      if (isCategoryLanding) {
+        setProducts([]);
+        setPagination(null);
+        setLoading(false);
+        return;
+      }
+
       try {
         const params: Record<string, string | number> = {
           limit: PRODUCTS_PER_PAGE,
@@ -102,7 +121,31 @@ export default function Products() {
       }
     };
     fetchProducts();
-  }, [categoryParam, searchParam, subcategoryParam, pageFromUrl]);
+  }, [categoryParam, searchParam, subcategoryParam, pageFromUrl, isCategoryLanding]);
+
+  useEffect(() => {
+    const fetchCategories = async () => {
+      if (!isCategoryLanding) {
+        setCategories([]);
+        return;
+      }
+
+      try {
+        setLoading(true);
+        const response = await productsAPI.getCategories();
+        const allCategories = Array.isArray(response?.categories) ? response.categories : [];
+        const parents = allCategories.filter((c: Category) => c.parent_id == null);
+        setCategories(parents);
+      } catch (error) {
+        console.error("Error fetching categories:", error);
+        setCategories([]);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchCategories();
+  }, [isCategoryLanding]);
 
   const goToPage = (nextPage: number) => {
     const sp = new URLSearchParams(searchParams.toString());
@@ -193,6 +236,10 @@ export default function Products() {
 
   const totalPages = pagination?.pages ?? 1;
   const currentPage = pagination?.page ?? pageFromUrl;
+  const totalCategoryPages = Math.max(1, Math.ceil(categories.length / CATEGORIES_PER_PAGE));
+  const currentCategoryPage = Math.min(pageFromUrl, totalCategoryPages);
+  const categoryStartIndex = (currentCategoryPage - 1) * CATEGORIES_PER_PAGE;
+  const paginatedCategories = categories.slice(categoryStartIndex, categoryStartIndex + CATEGORIES_PER_PAGE);
 
   return (
     <section className="min-h-screen bg-white px-4 py-8 pt-24 sm:px-6 lg:px-8">
@@ -222,16 +269,76 @@ export default function Products() {
 
             {loading ? (
               <div className="text-center py-12">
-                <p className="text-gray-600">Loading products...</p>
+                <p className="text-gray-600">{isCategoryLanding ? "Loading categories..." : "Loading products..."}</p>
               </div>
+            ) : isCategoryLanding ? (
+              categories.length === 0 ? (
+                <div className="text-center py-12">
+                  <p className="text-gray-600">No categories yet. Admin can add categories from Admin Panel.</p>
+                </div>
+              ) : (
+                <>
+                  <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-5">
+                    {paginatedCategories.map((category) => {
+                      const categoryDesc = descriptionPreview(category.description);
+                      const count = category.product_count ?? 0;
+                      return (
+                        <Link
+                          key={category.id}
+                          href={`/products/${category.slug}`}
+                          className="group block overflow-hidden rounded-lg border-2 border-gray-200 bg-white p-6 shadow-md transition-all hover:border-gray-300 hover:shadow-lg"
+                        >
+                          <h2 className="text-xl font-semibold text-gray-900 transition-colors group-hover:text-gray-600">
+                            {category.name}
+                          </h2>
+                          <p className="mt-1 text-xs font-medium text-gray-500">
+                            {count === 1 ? "1 product" : `${count} products`}
+                          </p>
+                          {categoryDesc ? (
+                            <p className="mt-2 line-clamp-4 min-w-0 break-words text-sm text-gray-600 [overflow-wrap:anywhere]">
+                              {categoryDesc}
+                            </p>
+                          ) : (
+                            <p className="mt-2 text-sm text-gray-600">Browse products in this category</p>
+                          )}
+                        </Link>
+                      );
+                    })}
+                  </div>
+                  {totalCategoryPages > 1 ? (
+                    <div className="mt-8 flex flex-wrap items-center justify-center gap-3 border-t border-gray-200 pt-6">
+                      <button
+                        type="button"
+                        onClick={() => goToPage(currentCategoryPage - 1)}
+                        disabled={currentCategoryPage <= 1}
+                        className="rounded-md border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 shadow-sm transition hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50"
+                      >
+                        Previous
+                      </button>
+                      <span className="text-sm text-gray-600">
+                        Page {currentCategoryPage} of {totalCategoryPages}
+                        <span className="ml-2 text-gray-400">
+                          ({categories.length} categories, {CATEGORIES_PER_PAGE} per page)
+                        </span>
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => goToPage(currentCategoryPage + 1)}
+                        disabled={currentCategoryPage >= totalCategoryPages}
+                        className="rounded-md border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 shadow-sm transition hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50"
+                      >
+                        Next
+                      </button>
+                    </div>
+                  ) : null}
+                </>
+              )
             ) : products.length === 0 ? (
               <div className="text-center py-12">
                 <p className="text-gray-600">
                   {searchParam
                     ? `No products found for "${searchParam}". Try a different search or category.`
-                    : subcategoryParam || categoryParam
-                      ? "No products in this category yet."
-                      : "No products yet. Admin can add products from Admin Panel."}
+                    : "No products in this category yet."}
                 </p>
               </div>
             ) : (

@@ -47,6 +47,17 @@ interface Product {
   properties?: ProductProperty[] | null;
 }
 
+function descriptionPreview(html: string | null | undefined): string {
+  if (!html || typeof html !== "string") return "";
+  return html
+    .replace(/<script[\s\S]*?<\/script>/gi, "")
+    .replace(/<style[\s\S]*?<\/style>/gi, "")
+    .replace(/<[^>]+>/g, " ")
+    .replace(/&nbsp;/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
 export default function AdminProductsPage() {
   const router = useRouter();
   const [activeTab, setActiveTab] = useState<Tab>("products");
@@ -878,11 +889,12 @@ export default function AdminProductsPage() {
                       </div>
                     </form>
                     <div className="overflow-x-auto rounded-xl border border-slate-200/80">
-                      <table className="w-full min-w-[640px] text-sm">
+                      <table className="w-full min-w-[880px] text-sm">
                         <thead>
                           <tr className="border-b border-slate-200 bg-slate-50/90 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
                             <th className="px-4 py-3">Image</th>
                             <th className="px-4 py-3">Name</th>
+                            <th className="px-4 py-3">Description</th>
                             <th className="px-4 py-3">Category</th>
                             <th className="px-4 py-3">Price</th>
                             <th className="px-4 py-3">Active</th>
@@ -890,7 +902,9 @@ export default function AdminProductsPage() {
                           </tr>
                         </thead>
                         <tbody className="divide-y divide-slate-100">
-                          {products.map((p) => (
+                          {products.map((p) => {
+                            const descPlain = descriptionPreview(p.description);
+                            return (
                             <tr key={p.id} className="transition-colors hover:bg-slate-50/80">
                               <td className="px-4 py-3">
                                 {p.image_url && isValidImageSrc(p.image_url) ? (
@@ -902,6 +916,15 @@ export default function AdminProductsPage() {
                                 )}
                               </td>
                               <td className="px-4 py-3 font-medium text-slate-900">{p.name}</td>
+                              <td className="px-4 py-3 max-w-[min(28rem,40vw)] text-slate-600">
+                                {descPlain ? (
+                                  <span className="line-clamp-2 text-sm [overflow-wrap:anywhere]" title={descPlain}>
+                                    {descPlain}
+                                  </span>
+                                ) : (
+                                  <span className="text-slate-400">—</span>
+                                )}
+                              </td>
                               <td className="px-4 py-3 text-slate-600">
                                 {p.category_name || "—"} {p.subcategory ? ` / ${p.subcategory}` : ""}
                               </td>
@@ -941,7 +964,8 @@ export default function AdminProductsPage() {
                                 </div>
                               </td>
                             </tr>
-                          ))}
+                            );
+                          })}
                         </tbody>
                       </table>
                     </div>
@@ -1046,19 +1070,31 @@ export default function AdminProductsPage() {
                       </div>
                     </form>
                     <div className="overflow-x-auto rounded-xl border border-slate-200/80">
-                      <table className="w-full min-w-[480px] text-sm">
+                      <table className="w-full min-w-[720px] text-sm">
                         <thead>
                           <tr className="border-b border-slate-200 bg-slate-50/90 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
                             <th className="px-4 py-3">Name</th>
+                            <th className="px-4 py-3">Description</th>
                             <th className="px-4 py-3">Slug</th>
                             <th className="px-4 py-3">Products</th>
                             <th className="px-4 py-3">Action</th>
                           </tr>
                         </thead>
                         <tbody className="divide-y divide-slate-100">
-                          {parentCategories.map((c) => (
+                          {parentCategories.map((c) => {
+                            const descPlain = descriptionPreview(c.description);
+                            return (
                             <tr key={c.id} className="hover:bg-slate-50/80">
                               <td className="px-4 py-3 font-medium text-slate-900">{c.name}</td>
+                              <td className="px-4 py-3 max-w-[min(24rem,35vw)] text-slate-600">
+                                {descPlain ? (
+                                  <span className="line-clamp-2 text-sm [overflow-wrap:anywhere]" title={descPlain}>
+                                    {descPlain}
+                                  </span>
+                                ) : (
+                                  <span className="text-slate-400">—</span>
+                                )}
+                              </td>
                               <td className="px-4 py-3 text-slate-600">{c.slug}</td>
                               <td className="px-4 py-3 text-slate-600">{c.product_count}</td>
                               <td className="px-4 py-3">
@@ -1085,7 +1121,8 @@ export default function AdminProductsPage() {
                                 </button>
                               </td>
                             </tr>
-                          ))}
+                            );
+                          })}
                         </tbody>
                       </table>
                     </div>
@@ -1154,25 +1191,36 @@ export default function AdminProductsPage() {
                       </div>
                     </form>
                     <div className="overflow-x-auto rounded-xl border border-slate-200/80">
-                      <table className="w-full min-w-[560px] text-sm">
+                      <table className="w-full min-w-[800px] text-sm">
                         <thead>
                           <tr className="border-b border-slate-200 bg-slate-50/90 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
                             <th className="px-4 py-3">Name</th>
-                            <th className="px-4 py-3">Slug</th>
                             <th className="px-4 py-3">Parent</th>
+                            <th className="px-4 py-3">Description</th>
                             <th className="px-4 py-3">Products</th>
+                            <th className="px-4 py-3">Slug</th>
                             <th className="px-4 py-3">Action</th>
                           </tr>
                         </thead>
                         <tbody className="divide-y divide-slate-100">
                           {subCategories.map((c) => {
                             const parent = categories.find((x) => x.id === c.parent_id);
+                            const descPlain = descriptionPreview(c.description);
                             return (
                               <tr key={c.id} className="hover:bg-slate-50/80">
                                 <td className="px-4 py-3 font-medium text-slate-900">{c.name}</td>
-                                <td className="px-4 py-3 text-slate-600">{c.slug}</td>
                                 <td className="px-4 py-3 text-slate-600">{parent?.name || "—"}</td>
+                                <td className="px-4 py-3 max-w-[min(24rem,35vw)] text-slate-600">
+                                  {descPlain ? (
+                                    <span className="line-clamp-2 text-sm [overflow-wrap:anywhere]" title={descPlain}>
+                                      {descPlain}
+                                    </span>
+                                  ) : (
+                                    <span className="text-slate-400">—</span>
+                                  )}
+                                </td>
                                 <td className="px-4 py-3 text-slate-600">{c.product_count}</td>
+                                <td className="px-4 py-3 text-slate-600">{c.slug}</td>
                                 <td className="px-4 py-3">
                                   <button
                                     type="button"

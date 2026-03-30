@@ -14,7 +14,6 @@ interface RegisteredUser {
   newsletter: boolean;
   role: string;
   is_active: boolean;
-  is_approved: boolean;
   created_at: string;
 }
 
@@ -89,7 +88,6 @@ export default function UsersPage() {
       <div className="overflow-hidden rounded-xl border border-slate-200/60 bg-white shadow-sm shadow-slate-900/5">
         <div className="border-b border-slate-100 bg-slate-50/80 px-5 py-5 sm:px-6">
           <h2 className="text-lg font-semibold text-slate-900">Registered users</h2>
-          <p className="mt-0.5 text-sm text-slate-500">Users who signed up on the platform.</p>
         </div>
 
         <div className="overflow-x-auto">
@@ -103,16 +101,15 @@ export default function UsersPage() {
           ) : filteredUsers.length === 0 ? (
             <div className="px-6 py-14 text-center text-slate-500">No registered users found.</div>
           ) : (
-            <table className="w-full min-w-[900px]">
+            <table className="w-full min-w-[760px]">
               <thead>
                 <tr className="border-b border-slate-200 bg-slate-50/90 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
-                  <th className="px-4 py-3.5 sm:px-6">#</th>
+                  <th className="px-4 py-3.5 sm:px-6">Serial Number</th>
                   <th className="px-4 py-3.5 sm:px-6">Name</th>
                   <th className="px-4 py-3.5 sm:px-6">Email</th>
                   <th className="px-4 py-3.5 sm:px-6">Phone</th>
                   <th className="px-4 py-3.5 sm:px-6">Role</th>
                   <th className="px-4 py-3.5 sm:px-6">Status</th>
-                  <th className="px-4 py-3.5 sm:px-6">Approved</th>
                   <th className="px-4 py-3.5 sm:px-6">Registered</th>
                 </tr>
               </thead>
@@ -127,7 +124,7 @@ export default function UsersPage() {
                     <td className="whitespace-nowrap px-4 py-4 text-slate-600 sm:px-6">{user.telephone || "—"}</td>
                     <td className="whitespace-nowrap px-4 py-4 sm:px-6">
                       <span className="inline-flex rounded-lg bg-slate-100 px-2.5 py-1 text-xs font-medium text-slate-700 ring-1 ring-slate-200/80">
-                        {user.role || "user"}
+                        {user.role || "customer"}
                       </span>
                     </td>
                     <td className="whitespace-nowrap px-4 py-4 sm:px-6">
@@ -139,17 +136,6 @@ export default function UsersPage() {
                         }`}
                       >
                         {user.is_active ? "Active" : "Inactive"}
-                      </span>
-                    </td>
-                    <td className="whitespace-nowrap px-4 py-4 sm:px-6">
-                      <span
-                        className={`inline-flex rounded-lg px-2.5 py-1 text-xs font-medium ring-1 ${
-                          user.is_approved
-                            ? "bg-sky-50 text-sky-800 ring-sky-200/80"
-                            : "bg-amber-50 text-amber-900 ring-amber-200/80"
-                        }`}
-                      >
-                        {user.is_approved ? "Approved" : "Pending"}
                       </span>
                     </td>
                     <td className="whitespace-nowrap px-4 py-4 text-slate-600 sm:px-6">

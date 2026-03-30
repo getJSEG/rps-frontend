@@ -15,7 +15,13 @@ interface ProfileUser {
   newsletter: boolean;
   role: string;
   is_active?: boolean;
-  is_approved?: boolean;
+}
+
+function formatAccountRole(role: string | undefined): string {
+  const r = (role || "").toLowerCase();
+  if (r === "admin") return "Admin";
+  if (r === "employee") return "Employee";
+  return "Customer";
 }
 
 export default function AccountSettings() {
@@ -101,7 +107,6 @@ export default function AccountSettings() {
   const menuItems = [
     { label: "Account Settings", href: "/account-settings", active: true },
     { label: "Change Password", href: "/change-password" },
-    { label: "Reseller Permit", href: "/reseller-permit" },
     { label: "Credit Cards", href: "/credit-cards" },
     { label: "Your Default Address", href: "/address-book" },
   ];
@@ -123,7 +128,7 @@ export default function AccountSettings() {
           <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-gray-500">Account Area</p>
           <h1 className="mt-1 text-2xl font-semibold tracking-tight text-gray-900 sm:text-3xl">Account Settings</h1>
           <p className="mt-1.5 text-sm text-gray-600">
-            Logged in as <span className="font-medium text-gray-800">{formData.role || "user"}</span>. Keep your profile details up to date.
+            Logged in as <span className="font-medium text-gray-800">{formatAccountRole(formData.role)}</span>. Keep your profile details up to date.
           </p>
         </div>
 

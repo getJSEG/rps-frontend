@@ -1,6 +1,6 @@
 // Role-based access control utilities
 
-export type UserRole = 'admin' | 'employee' | 'user' | 'reseller';
+export type UserRole = 'admin' | 'employee' | 'customer';
 
 /**
  * Get current user role from localStorage (case-insensitive match for admin/employee)
@@ -25,8 +25,7 @@ export function getUserRole(): UserRole | null {
   const r = String(raw).toLowerCase();
   if (r === 'admin') return 'admin';
   if (r === 'employee') return 'employee';
-  if (r === 'reseller' || r === 'user') return r as UserRole;
-  return raw as UserRole;
+  return 'customer';
 }
 
 /**
@@ -52,11 +51,10 @@ export function isEmployee(): boolean {
 }
 
 /**
- * Check if user is regular user/reseller
+ * Check if user is a retail customer (not admin or employee).
  */
 export function isUser(): boolean {
-  const role = getUserRole();
-  return role === 'user' || role === 'reseller';
+  return getUserRole() === 'customer';
 }
 
 /**

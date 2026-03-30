@@ -164,7 +164,7 @@ export default function CartPage() {
   if (loading) {
     return (
       <>
-        <Navbar cartCountOverride={cartItems.length} skipCartCountFetch />
+        <Navbar />
         <div className="min-h-screen bg-white  pb-16">
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
             <div className="text-center py-12">
@@ -185,7 +185,7 @@ export default function CartPage() {
 
   return (
     <>
-      <Navbar cartCountOverride={cartItems.length} skipCartCountFetch />
+      <Navbar />
       <div className="min-h-screen bg-gray-50 pt-25 pb-16">
         <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
           {cartItems.length === 0 ? (

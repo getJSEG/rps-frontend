@@ -17,7 +17,10 @@ import {
   type ShippingRates,
 } from "../../../utils/api";
 import { isAuthenticated } from "../../../utils/roles";
-import { FiArrowLeft, FiEdit, FiTrash2 } from "react-icons/fi";
+import { FiArrowLeft, FiEdit, FiTrash2, FiX } from "react-icons/fi";
+
+/** Drop the final graphic at `public/images/one-artwork-per-job.png` (replaces the tiny placeholder). */
+const ONE_ARTWORK_PER_JOB_IMAGE = "/images/one-artwork-per-job.png";
 
 interface ProductProperty {
   key: string;
@@ -128,7 +131,7 @@ function BackToProductsLink({ className = "" }: { className?: string }) {
   return (
     <Link
       href="/products"
-      className={`group inline-flex max-w-full items-center gap-2 rounded-lg border border-slate-200/90 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:border-gray-200 hover:bg-gray-50/80 hover:text-sky-900 hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-400 focus-visible:ring-offset-2 ${className}`}
+      className={`group inline-flex max-w-full items-center gap-2 rounded-lg border border-slate-200/90 bg-white px-4 py-2.5 text-sm  text-slate-700 shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:border-gray-200 hover:bg-gray-50/80 hover:text-sky-900 hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-400 focus-visible:ring-offset-2 ${className}`}
     >
       <FiArrowLeft
         className="h-4 w-4 shrink-0 text-slate-600 transition-transform duration-200 group-hover:-translate-x-0.5 group-hover:text-sky-700"
@@ -183,6 +186,7 @@ function ProductDetailContent() {
   const [savedAddresses, setSavedAddresses] = useState<SavedAddress[]>([]);
   const [addressesLoading, setAddressesLoading] = useState(false);
   const [shippingRates, setShippingRates] = useState<ShippingRates | null>(null);
+  const [jobArtworkInfoOpen, setJobArtworkInfoOpen] = useState(false);
   const fetchedProductForRef = useRef<string | null>(null);
   const fetchedRelatedForRef = useRef<string | null>(null);
   const fetchedAddressesOnceRef = useRef(false);
@@ -257,6 +261,15 @@ function ProductDetailContent() {
       cancelled = true;
     };
   }, []);
+
+  useEffect(() => {
+    if (!jobArtworkInfoOpen) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setJobArtworkInfoOpen(false);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [jobArtworkInfoOpen]);
 
   // Fetch related products from different categories
   useEffect(() => {
@@ -597,7 +610,7 @@ function ProductDetailContent() {
   if (loading) {
     return (
       <>
-        <Navbar skipCartCountFetch />
+        <Navbar />
         <div className="min-h-screen bg-white pt-24 pb-16">
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
             <div className="text-center py-12">
@@ -613,7 +626,7 @@ function ProductDetailContent() {
   if (!product && !productId) {
     return (
       <>
-        <Navbar skipCartCountFetch />
+        <Navbar />
         <div className="min-h-screen bg-white pt-24 pb-16">
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
             <div className="text-center py-12">
@@ -631,7 +644,7 @@ function ProductDetailContent() {
 
   return (
     <>
-      <Navbar skipCartCountFetch />
+      <Navbar />
     <div className="min-h-screen bg-white pt-24 pb-16">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="mb-8">
@@ -952,13 +965,32 @@ function ProductDetailContent() {
                   );
                 })}
               </div>
-              <button
-                type="button"
-                onClick={addJob}
-                className="mt-4 w-full sm:w-auto px-4 py-2 border border-gray-300 rounded-lg text-gray-800 text-sm font-medium hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500"
-              >
-                Add Another Job
-              </button>
+              <div className="mt-4 flex flex-wrap items-center justify-between gap-x-4 gap-y-2 px-3">
+                <button
+                  type="button"
+                  onClick={addJob}
+                  className="inline-flex min-w-0 items-center gap-1 text-sm font-medium text-blue-600 hover:text-blue-800 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-400 focus-visible:ring-offset-2"
+                >
+                  <span className="text-base leading-none" aria-hidden>
+                    +
+                  </span>
+                  Add Another Job
+                </button>
+                <div className="inline-flex items-center gap-2 text-sm text-gray-600">
+                  <span>One Artwork Per Job</span>
+                  <button
+                    type="button"
+                    onClick={() => setJobArtworkInfoOpen(true)}
+                    className="inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full border border-blue-400 bg-white text-[13px] font-semibold leading-none text-blue-600 shadow-sm hover:border-blue-500 hover:bg-gray-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-400 focus-visible:ring-offset-2"
+                    aria-label="About one artwork per job"
+                    title="About one artwork per job"
+                  >
+                    <span aria-hidden className="-mt-px">
+                      ?
+                    </span>
+                  </button>
+                </div>
+              </div>
             </div>
 
             {/* Shipping: service & charges for everyone; saved “Ship to” only when logged in */}
@@ -1488,6 +1520,45 @@ function ProductDetailContent() {
         </div>
       )}
     </div>
+      {jobArtworkInfoOpen ? (
+        <div
+          className="fixed inset-0 z-[100] flex items-center justify-center bg-white/45 p-4 backdrop-blur-md backdrop-saturate-150 supports-[backdrop-filter]:bg-white/35"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="job-artwork-info-title"
+          onClick={() => setJobArtworkInfoOpen(false)}
+        >
+          <div
+            className="max-h-[90vh] w-full max-w-3xl overflow-y-auto rounded-2xl border border-slate-200/60 bg-slate-50/90 p-4 shadow-2xl shadow-slate-900/10 ring-1 ring-white/60 backdrop-blur-sm sm:p-6"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="mb-4 flex items-start justify-between gap-3">
+              <h2 id="job-artwork-info-title" className="text-lg font-semibold text-slate-800 pr-2">
+                One Artwork Per Job
+              </h2>
+              <button
+                type="button"
+                onClick={() => setJobArtworkInfoOpen(false)}
+                className="shrink-0 rounded-lg p-1.5 text-slate-500 hover:bg-white/80 hover:text-slate-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-400"
+                aria-label="Close"
+              >
+                <FiX className="h-6 w-6" aria-hidden />
+              </button>
+            </div>
+            <div className="relative w-full overflow-hidden rounded-lg border border-slate-200/50 bg-white shadow-inner">
+              <Image
+                src={ONE_ARTWORK_PER_JOB_IMAGE}
+                alt="Illustration explaining one artwork per job"
+                width={1200}
+                height={800}
+                className="h-auto w-full max-h-[min(70vh,800px)] object-contain"
+                sizes="(max-width: 768px) 100vw, 90vw"
+                quality={95}
+              />
+            </div>
+          </div>
+        </div>
+      ) : null}
       <Footer />
     </>
   );
@@ -1497,7 +1568,7 @@ export default function ProductDetailPage() {
   return (
     <Suspense fallback={
       <>
-        <Navbar skipCartCountFetch />
+        <Navbar />
         <div className="min-h-screen bg-white pt-24 pb-16">
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
             <div className="text-center py-12">

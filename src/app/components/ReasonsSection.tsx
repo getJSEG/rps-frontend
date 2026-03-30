@@ -52,7 +52,7 @@ export default function ReasonsSection() {
         />
       ),
       title: "Trusted by Professionals",
-      description: "Join a network of 40,000+ resellers who trust our decade-plus experience. We shipped over 2 million jobs in 2023."
+      description: "Join thousands of customers who trust our decade-plus experience. We shipped over 2 million jobs in 2023."
     },
     {
       icon: (

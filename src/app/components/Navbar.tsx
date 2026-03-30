@@ -15,13 +15,6 @@ import {
 } from "react-icons/io5";
 import { toast } from "react-toastify";
 
-function shouldDisableScrollNavbar(pathname: string): boolean {
-  if (!pathname) return false;
-  if (pathname === "/checkout" || pathname === "/cart" || pathname === "/orders" || pathname === "/products") return true;
-  if (pathname.startsWith("/products/product-detail") || pathname.startsWith("/products/product/")) return true;
-  return false;
-}
-
 function shouldSkipCartApiForPathname(pathname: string): boolean {
   if (!pathname) return false;
   const skipPrefixes = [
@@ -44,11 +37,6 @@ type Category = {
   parent_id: number | null;
 };
 
-type NavbarProps = {
-  cartCountOverride?: number;
-  skipCartCountFetch?: boolean;
-};
-
 function getDisplayNameFromUser(user: any): string {
   if (!user || typeof user !== "object") return "";
   const candidates = [user.fullName, user.full_name, user.name, user.firstName, user.email];
@@ -58,13 +46,41 @@ function getDisplayNameFromUser(user: any): string {
   return "";
 }
 
-export default function Navbar({ cartCountOverride, skipCartCountFetch = false }: NavbarProps) {
+/** Total units across cart lines (falls back to line count if quantities are missing). */
+function cartBadgeCount(items: unknown[]): number {
+  if (!Array.isArray(items) || items.length === 0) return 0;
+  let sum = 0;
+  for (const raw of items) {
+    const row = raw && typeof raw === "object" ? (raw as Record<string, unknown>) : null;
+    if (!row) continue;
+    const q = row.quantity;
+    const n = q != null && q !== "" ? Number(q) : NaN;
+    if (Number.isFinite(n) && n > 0) sum += n;
+    else sum += 1;
+  }
+  return sum > 0 ? sum : items.length;
+}
+
+function CartIconLink({ count }: { count: number }) {
+  const label = count > 0 ? `Shopping cart, ${count} items` : "Shopping cart";
+  return (
+    <Link href="/cart" className="text-blue-400 hover:text-blue-500 transition-colors relative" aria-label={label}>
+      <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden>
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H17m0 0a2 2 0 100 4 2 2 0 000-4zm-8 2a2 2 0 11-4 0 2 2 0 014 0z" />
+      </svg>
+      {count > 0 && (
+        <span className="absolute -top-2 -right-2 bg-red-500 text-white text-xs font-bold rounded-full min-w-[1.25rem] h-5 px-0.5 flex items-center justify-center">
+          {count > 99 ? "99+" : count}
+        </span>
+      )}
+    </Link>
+  );
+}
+
+export default function Navbar() {
   const router = useRouter();
   const pathname = usePathname();
-  const disableScrollBehavior = shouldDisableScrollNavbar(pathname ?? "");
-  const effectiveSkipCartCountFetch = skipCartCountFetch || shouldSkipCartApiForPathname(pathname ?? "");
-  const [isVisible, setIsVisible] = useState(disableScrollBehavior);
-  const lastScrollYRef = useRef(0);
+  const effectiveSkipCartCountFetch = shouldSkipCartApiForPathname(pathname ?? "");
   const [isUserDropdownOpen, setIsUserDropdownOpen] = useState(false);
   const [isSearchOpen, setIsSearchOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
@@ -88,7 +104,7 @@ export default function Navbar({ cartCountOverride, skipCartCountFetch = false }
   const userDropdownRef = useRef<HTMLDivElement>(null);
   const searchRef = useRef<HTMLDivElement>(null);
   const didInitialCartFetchRef = useRef(false);
-  const effectiveCartCount = typeof cartCountOverride === "number" ? cartCountOverride : cartCount;
+  const loginCheckInvocationRef = useRef(0);
   const [categories, setCategories] = useState<Category[]>([]);
 
   // Cart count from API (JWT or guest X-Guest-Session-Id)
@@ -98,7 +114,7 @@ export default function Navbar({ cartCountOverride, skipCartCountFetch = false }
         const { cartAPI } = await import("../../utils/api");
         const res = await cartAPI.get();
         const items = Array.isArray(res?.cartItems) ? res.cartItems : [];
-        setCartCount(items.length);
+        setCartCount(cartBadgeCount(items));
       } catch {
         setCartCount(0);
       }
@@ -108,6 +124,10 @@ export default function Navbar({ cartCountOverride, skipCartCountFetch = false }
   // Check login status on mount and listen for changes
   useEffect(() => {
     const checkLoginStatus = () => {
+      loginCheckInvocationRef.current += 1;
+      if (loginCheckInvocationRef.current > 1 && !effectiveSkipCartCountFetch) {
+        void updateCartCount();
+      }
       const loggedIn = localStorage.getItem("isLoggedIn") === "true";
       setIsLoggedIn(loggedIn);
 
@@ -157,7 +177,15 @@ export default function Navbar({ cartCountOverride, skipCartCountFetch = false }
     };
     window.addEventListener("storage", onStorageChange);
 
+    const onVisibilityChange = () => {
+      if (document.visibilityState === "visible" && !effectiveSkipCartCountFetch) {
+        void updateCartCount();
+      }
+    };
+    document.addEventListener("visibilitychange", onVisibilityChange);
+
     return () => {
+      document.removeEventListener("visibilitychange", onVisibilityChange);
       window.removeEventListener("loginStatusChanged", checkLoginStatus);
       if (!effectiveSkipCartCountFetch) {
         window.removeEventListener("cartUpdated", updateCartCount);
@@ -243,27 +271,6 @@ export default function Navbar({ cartCountOverride, skipCartCountFetch = false }
     router.push("/");
   };
 
-  useEffect(() => {
-    if (disableScrollBehavior) {
-      setIsVisible(true);
-      return;
-    }
-    if (typeof window !== 'undefined') {
-      const initialScrollY = window.scrollY;
-      lastScrollYRef.current = initialScrollY;
-      setIsVisible(false);
-    }
-    const handleScroll = () => {
-      const currentScrollY = window.scrollY;
-      const lastScrollY = lastScrollYRef.current;
-      if (currentScrollY > lastScrollY) setIsVisible(true);
-      else if (currentScrollY < lastScrollY) setIsVisible(false);
-      lastScrollYRef.current = currentScrollY;
-    };
-    window.addEventListener("scroll", handleScroll);
-    return () => window.removeEventListener("scroll", handleScroll);
-  }, [disableScrollBehavior]);
-
   // Close dropdown when clicking outside
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
@@ -344,6 +351,8 @@ export default function Navbar({ cartCountOverride, skipCartCountFetch = false }
                     {loginError}
                   </p>
                 )}
+                <div className="flex items-center gap-2">
+                <CartIconLink count={cartCount} />
                 <div className="flex items-center gap-1.5 rounded-sm border border-slate-200 bg-white/90 p-1">
                   <input
                     type="email"
@@ -388,6 +397,7 @@ export default function Navbar({ cartCountOverride, skipCartCountFetch = false }
                   >
                     Register
                   </a>
+                </div>
                 </div>
               </div>
             ) : (
@@ -493,9 +503,9 @@ export default function Navbar({ cartCountOverride, skipCartCountFetch = false }
                           <button
                             type="button"
                             onClick={handleLogout}
-                            className="mt-1 flex w-full items-center justify-center gap-2 rounded-sm border border-red-500 bg-red-500 px-4 py-2 text-sm font-semibold text-white transition-colors hover:border-red-600 hover:bg-red-600"
+                            className="mt-1 flex w-full justify-center gap-3 rounded-sm border border-red-500 bg-red-500 px-4 py-2 text-sm text-white transition-colors hover:border-red-600 hover:bg-red-600"
                           >
-                            <IoLogOutOutline className="h-4 w-4 shrink-0 text-white" aria-hidden />
+                            <IoLogOutOutline className="h-5 w-5 shrink-0 text-white " aria-hidden />
                             Logout
                           </button>
                         </div>
@@ -504,17 +514,7 @@ export default function Navbar({ cartCountOverride, skipCartCountFetch = false }
                   )}
                 </div>
 
-                {/* Shopping Cart Icon */}
-                <Link href="/cart" className="text-blue-400 hover:text-blue-500 transition-colors relative">
-                  <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H17m0 0a2 2 0 100 4 2 2 0 000-4zm-8 2a2 2 0 11-4 0 2 2 0 014 0z" />
-                  </svg>
-                  {effectiveCartCount > 0 && (
-                    <span className="absolute -top-2 -right-2 bg-red-500 text-white text-xs font-bold rounded-full h-5 w-5 flex items-center justify-center">
-                      {effectiveCartCount > 99 ? '99+' : effectiveCartCount}
-                    </span>
-                  )}
-                </Link>
+                <CartIconLink count={cartCount} />
               </div>
             )}
           </div>

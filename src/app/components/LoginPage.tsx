@@ -87,7 +87,6 @@ export default function LoginPage() {
         <div className="flex flex-col gap-4 text-white text-start">
           <p className="text-3xl">Resource Print Solution </p>
           <p className="text-3xl">Specializing in Grand Format Production</p>
-          {/* <p className="text-lg text-[#ddd]">We sell exclusively to our resellers</p> */}
         </div>
       </div>
 

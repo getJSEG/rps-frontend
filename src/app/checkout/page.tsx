@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import Navbar from "../components/Navbar";
@@ -76,6 +76,15 @@ interface StripeElementsRef {
   paymentElement: StripePaymentElement;
 }
 
+async function fetchCartItemsFromApi(): Promise<CartItem[]> {
+  try {
+    const res = await cartAPI.get();
+    return Array.isArray(res?.cartItems) ? (res.cartItems as CartItem[]) : [];
+  } catch {
+    return [];
+  }
+}
+
 export default function CheckoutPage() {
   const router = useRouter();
   const [cartItems, setCartItems] = useState<CartItem[]>([]);
@@ -109,6 +118,10 @@ export default function CheckoutPage() {
   const [savingAddress, setSavingAddress] = useState(false);
   const [shippingRates, setShippingRates] = useState<ShippingRates | null>(null);
 
+  const loadCartFromApi = useCallback(async () => {
+    setCartItems(await fetchCartItemsFromApi());
+  }, []);
+
   const globalDefault = addresses.find((a) => a.is_default) ?? null;
   const billingAddress =
     globalDefault?.address_type === "billing"
@@ -121,19 +134,37 @@ export default function CheckoutPage() {
 
   useEffect(() => {
     let cancelled = false;
-    (async () => {
-      try {
-        const res = await cartAPI.get();
-        const items = Array.isArray(res?.cartItems) ? res.cartItems : [];
-        if (!cancelled) setCartItems(items);
-      } catch {
-        if (!cancelled) setCartItems([]);
-      } finally {
-        if (!cancelled) setLoading(false);
+    void (async () => {
+      const items = await fetchCartItemsFromApi();
+      if (!cancelled) {
+        setCartItems(items);
+        setLoading(false);
       }
     })();
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+    };
   }, []);
+
+  useEffect(() => {
+    const onCartUpdated = () => {
+      void loadCartFromApi();
+    };
+    const onVisible = () => {
+      if (document.visibilityState === "visible") void loadCartFromApi();
+    };
+    const onPageShow = (e: Event) => {
+      if ("persisted" in e && (e as PageTransitionEvent).persisted) void loadCartFromApi();
+    };
+    window.addEventListener("cartUpdated", onCartUpdated);
+    document.addEventListener("visibilitychange", onVisible);
+    window.addEventListener("pageshow", onPageShow);
+    return () => {
+      window.removeEventListener("cartUpdated", onCartUpdated);
+      document.removeEventListener("visibilitychange", onVisible);
+      window.removeEventListener("pageshow", onPageShow);
+    };
+  }, [loadCartFromApi]);
 
   useEffect(() => {
     let c = false;
@@ -385,7 +416,7 @@ export default function CheckoutPage() {
   if (loading) {
     return (
       <>
-        <Navbar skipCartCountFetch />
+        <Navbar />
         <div className="min-h-screen bg-gray-50 pt-24 pb-16 flex items-center justify-center">
           <p className="text-gray-600">Loading...</p>
         </div>
@@ -397,7 +428,7 @@ export default function CheckoutPage() {
   if (cartItems.length === 0 && !clientSecret) {
     return (
       <>
-        <Navbar skipCartCountFetch />
+        <Navbar />
         <div className="min-h-screen bg-gray-50 pt-24 pb-16 flex flex-col items-center justify-center gap-4">
           <p className="text-gray-600">Your cart is empty.</p>
           <Link href="/cart" className="text-blue-600 hover:underline">Back to Cart</Link>
@@ -409,7 +440,7 @@ export default function CheckoutPage() {
 
   return (
     <>
-      <Navbar skipCartCountFetch />
+      <Navbar />
       <div className="min-h-screen bg-gray-50 pt-24 pb-16">
         <div className="max-w-3xl mx-auto px-4 py-6">
           <div className="flex items-center justify-center gap-2 sm:gap-4">
