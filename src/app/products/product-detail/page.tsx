@@ -19,8 +19,8 @@ import {
 import { isAuthenticated } from "../../../utils/roles";
 import { FiArrowLeft, FiEdit, FiTrash2, FiX } from "react-icons/fi";
 
-/** Drop the final graphic at `public/images/one-artwork-per-job.png` (replaces the tiny placeholder). */
-const ONE_ARTWORK_PER_JOB_IMAGE = "/images/one-artwork-per-job.png";
+/** One artwork per job popup image in `public`. */
+const ONE_ARTWORK_PER_JOB_IMAGE = "/Oneartwokperjob.jpg";
 
 interface ProductProperty {
   key: string;
@@ -1522,7 +1522,7 @@ function ProductDetailContent() {
     </div>
       {jobArtworkInfoOpen ? (
         <div
-          className="fixed inset-0 z-[100] flex items-center justify-center bg-white/45 p-4 backdrop-blur-md backdrop-saturate-150 supports-[backdrop-filter]:bg-white/35"
+          className="fixed inset-0 z-[100] flex items-center justify-center bg-white/45 p-4 backdrop-blur-[1px] backdrop-saturate-150 supports-[backdrop-filter]:bg-white/35"
           role="dialog"
           aria-modal="true"
           aria-labelledby="job-artwork-info-title"
