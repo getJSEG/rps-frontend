@@ -71,6 +71,8 @@ interface Order {
   customer_phone?: string;
   shipping_method?: string | null;
   shipping_charge?: number;
+  /** Optional carrier / shipment ID (DB: order_tracking_id). */
+  order_tracking_id?: string | null;
 }
 
 function parseGuest(raw: Order["guest_checkout"]): GuestCheckoutShape | null {
@@ -183,6 +185,12 @@ export default function OrderDetails() {
   const [updatingStatus, setUpdatingStatus] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [showStatusDropdown, setShowStatusDropdown] = useState(false);
+  const [trackingModalOpen, setTrackingModalOpen] = useState(false);
+  const [trackingDraft, setTrackingDraft] = useState("");
+  const [savingTracking, setSavingTracking] = useState(false);
+  const [removingTracking, setRemovingTracking] = useState(false);
+  const [removeTrackingModalOpen, setRemoveTrackingModalOpen] = useState(false);
+  const [deleteOrderModalOpen, setDeleteOrderModalOpen] = useState(false);
 
   const fetchOrder = useCallback(async () => {
     if (!orderId) {
@@ -288,6 +296,10 @@ export default function OrderDetails() {
           d.shipping_charge != null && d.shipping_charge !== ""
             ? parseFloat(String(d.shipping_charge)) || 0
             : 0,
+        order_tracking_id:
+          d.order_tracking_id != null && String(d.order_tracking_id).trim() !== ""
+            ? String(d.order_tracking_id)
+            : null,
       };
       setOrder(processedOrder);
     } catch (err: unknown) {
@@ -388,16 +400,64 @@ export default function OrderDetails() {
     }
   };
 
-  const handleDeleteOrder = async () => {
-    if (!order || !window.confirm("Delete this order? This cannot be undone.")) return;
+  const confirmDeleteOrder = async () => {
+    if (!order) return;
     try {
       setDeleting(true);
       await ordersAPI.deleteAdmin(order.id);
+      setDeleteOrderModalOpen(false);
       router.push("/admin");
     } catch {
       alert("Failed to delete order. Please try again.");
     } finally {
       setDeleting(false);
+    }
+  };
+
+  const openTrackingModal = () => {
+    if (!order) return;
+    setTrackingDraft(order.order_tracking_id?.trim() ? order.order_tracking_id : "");
+    setTrackingModalOpen(true);
+  };
+
+  const handleSaveTrackingId = async () => {
+    if (!order) return;
+    try {
+      setSavingTracking(true);
+      const trimmed = trackingDraft.trim();
+      const response = await ordersAPI.updateOrderTrackingId(order.id, trimmed === "" ? null : trimmed);
+      const row = response?.order as Record<string, unknown> | undefined;
+      const next =
+        row?.order_tracking_id != null && String(row.order_tracking_id).trim() !== ""
+          ? String(row.order_tracking_id)
+          : null;
+      setOrder((prev) => (prev ? { ...prev, order_tracking_id: next } : null));
+      setTrackingModalOpen(false);
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : "Failed to save tracking ID";
+      alert(msg);
+    } finally {
+      setSavingTracking(false);
+    }
+  };
+
+  const confirmRemoveTrackingId = async () => {
+    if (!order?.order_tracking_id?.trim()) return;
+    try {
+      setRemovingTracking(true);
+      const response = await ordersAPI.updateOrderTrackingId(order.id, null);
+      const row = response?.order as Record<string, unknown> | undefined;
+      const next =
+        row?.order_tracking_id != null && String(row.order_tracking_id).trim() !== ""
+          ? String(row.order_tracking_id)
+          : null;
+      setOrder((prev) => (prev ? { ...prev, order_tracking_id: next } : null));
+      setRemoveTrackingModalOpen(false);
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : "Failed to remove tracking ID";
+      alert(msg);
+    } finally {
+      setRemovingTracking(false);
     }
   };
 
@@ -530,14 +590,184 @@ export default function OrderDetails() {
             </div>
             <button
               type="button"
-              onClick={handleDeleteOrder}
+              onClick={() => setDeleteOrderModalOpen(true)}
               disabled={deleting}
               className="rounded-xl border border-rose-200 bg-white px-4 py-2.5 text-sm font-semibold text-rose-700 hover:bg-rose-50 disabled:opacity-50"
             >
-              {deleting ? "Deleting…" : "Delete order"}
+              Delete order
             </button>
           </div>
         </div>
+
+        {/* Order tracking ID — optional; admins may add or edit */}
+        <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+            <div className="min-w-0 flex-1">
+              <p className="text-[10px] font-bold uppercase tracking-widest text-slate-500">Order tracking ID</p>
+              <p className="mt-1 break-all font-mono text-sm text-slate-900">
+                {order.order_tracking_id?.trim() ? order.order_tracking_id : "—"}
+              </p>
+            </div>
+            <div className="flex shrink-0 flex-wrap items-center gap-2">
+              <button
+                type="button"
+                onClick={openTrackingModal}
+                className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm font-semibold text-slate-800 shadow-sm hover:bg-slate-100"
+              >
+                Order Tracking ID
+              </button>
+              {order.order_tracking_id?.trim() ? (
+                <button
+                  type="button"
+                  onClick={() => setRemoveTrackingModalOpen(true)}
+                  disabled={removingTracking}
+                  className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-rose-200 bg-white text-rose-600 hover:bg-rose-50 disabled:opacity-50"
+                  aria-label="Remove order tracking ID"
+                  title="Remove tracking ID"
+                >
+                  <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden>
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                      d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
+                    />
+                  </svg>
+                </button>
+              ) : null}
+            </div>
+          </div>
+        </div>
+
+        {trackingModalOpen && (
+          <div
+            className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="tracking-modal-title"
+            onClick={() => {
+              if (!savingTracking) setTrackingModalOpen(false);
+            }}
+          >
+            <div
+              className="w-full max-w-md rounded-2xl border border-slate-200 bg-white p-6 shadow-xl"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <h2 id="tracking-modal-title" className="text-lg font-bold text-slate-900">
+                Order tracking ID
+              </h2>
+              <input
+                type="text"
+                value={trackingDraft}
+                onChange={(e) => setTrackingDraft(e.target.value)}
+                placeholder="Order tracking number"
+                className="mt-4 w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm text-slate-900 outline-none ring-slate-200 focus:ring-2"
+                maxLength={255}
+                autoFocus
+              />
+              <div className="mt-6 flex flex-wrap justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={() => setTrackingModalOpen(false)}
+                  disabled={savingTracking}
+                  className="rounded-xl px-4 py-2.5 text-sm font-semibold text-slate-600 hover:bg-slate-100 disabled:opacity-50"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={handleSaveTrackingId}
+                  disabled={savingTracking}
+                  className="rounded-xl bg-slate-900 px-4 py-2.5 text-sm font-semibold text-white hover:bg-slate-800 disabled:opacity-50"
+                >
+                  {savingTracking ? "Saving…" : "Save"}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {deleteOrderModalOpen && (
+          <div
+            className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="delete-order-modal-title"
+            onClick={() => {
+              if (!deleting) setDeleteOrderModalOpen(false);
+            }}
+          >
+            <div
+              className="w-full max-w-md rounded-2xl border border-slate-200 bg-white p-6 shadow-xl"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <h2 id="delete-order-modal-title" className="text-lg font-bold text-slate-900">
+                Delete order?
+              </h2>
+              <p className="mt-2 text-sm text-slate-600">
+                Are you sure you want to delete this order? This cannot be undone.
+              </p>
+              <div className="mt-6 flex flex-wrap justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={() => setDeleteOrderModalOpen(false)}
+                  disabled={deleting}
+                  className="rounded-xl px-4 py-2.5 text-sm font-semibold text-slate-600 hover:bg-slate-100 disabled:opacity-50"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={confirmDeleteOrder}
+                  disabled={deleting}
+                  className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-2.5 text-sm font-semibold text-rose-800 hover:bg-rose-100 disabled:opacity-50"
+                >
+                  {deleting ? "Deleting…" : "Delete order"}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {removeTrackingModalOpen && (
+          <div
+            className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="remove-tracking-modal-title"
+            onClick={() => {
+              if (!removingTracking) setRemoveTrackingModalOpen(false);
+            }}
+          >
+            <div
+              className="w-full max-w-md rounded-2xl border border-slate-200 bg-white p-6 shadow-xl"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <h2 id="remove-tracking-modal-title" className="text-lg font-bold text-slate-900">
+                Remove tracking ID?
+              </h2>
+              <p className="mt-2 text-sm text-slate-600">Are you sure you want to remove the order tracking ID?</p>
+              <div className="mt-6 flex flex-wrap justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={() => setRemoveTrackingModalOpen(false)}
+                  disabled={removingTracking}
+                  className="rounded-xl px-4 py-2.5 text-sm font-semibold text-slate-600 hover:bg-slate-100 disabled:opacity-50"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={confirmRemoveTrackingId}
+                  disabled={removingTracking}
+                  className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-2.5 text-sm font-semibold text-rose-800 hover:bg-rose-100 disabled:opacity-50"
+                >
+                  {removingTracking ? "Removing…" : "Remove"}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Top summary — dense, all key facts */}
         <div className="overflow-hidden rounded-2xl border border-slate-800/20 bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 text-white shadow-xl shadow-slate-900/25">
@@ -624,6 +854,7 @@ export default function OrderDetails() {
             <dl className="grid grid-cols-1 gap-0 sm:grid-cols-2 lg:grid-cols-3">
               <DetailCell label="Order number" value={order.order_number} />
               <DetailCell label="Order ID" value={order.id} />
+              <DetailCell label="Order tracking ID" value={order.order_tracking_id?.trim() ? order.order_tracking_id : "—"} />
               {order.user_id != null && <DetailCell label="User ID" value={order.user_id} />}
               <DetailCell label="Customer name" value={dash(order.user_name)} />
               <DetailCell

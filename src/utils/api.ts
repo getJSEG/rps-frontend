@@ -365,6 +365,13 @@ export const ordersAPI = {
     });
   },
 
+  updateOrderTrackingId: async (id: string, orderTrackingId: string | null) => {
+    return apiCall(`/orders/admin/${id}/order-tracking`, {
+      method: 'PUT',
+      body: JSON.stringify({ orderTrackingId }),
+    });
+  },
+
   deleteAdmin: async (id: string) => {
     return apiCall(`/orders/admin/${id}`, { method: 'DELETE' });
   },
