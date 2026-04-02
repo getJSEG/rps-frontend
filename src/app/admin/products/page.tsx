@@ -7,7 +7,7 @@ import Image from "next/image";
 import AdminNavbar from "../../components/AdminNavbar";
 import { canAccessAdminPanel, isAuthenticated } from "../../../utils/roles";
 import { getProductImageUrl, productsAPI } from "../../../utils/api";
-import { FiEdit, FiTrash2 } from "react-icons/fi";
+import { FiEdit, FiTrash2, FiChevronUp, FiChevronDown } from "react-icons/fi";
 
 type Tab = "products" | "categories" | "subcategories";
 
@@ -41,6 +41,8 @@ interface Product {
   min_charge: number | null;
   material: string | null;
   image_url: string | null;
+  /** Ordered photos; first is used for listings (`image_url`). */
+  gallery_images?: string[] | null;
   is_new: boolean;
   is_active: boolean;
   sku: string | null;
@@ -85,7 +87,9 @@ export default function AdminProductsPage() {
   const [prodPricePerSqft, setProdPricePerSqft] = useState("");
   const [prodMinCharge, setProdMinCharge] = useState("");
   const [prodMaterial, setProdMaterial] = useState("");
-  const [prodImageUrl, setProdImageUrl] = useState("");
+  /** Ordered product photos; first is listing thumbnail. */
+  const [prodGalleryUrls, setProdGalleryUrls] = useState<string[]>([]);
+  const [prodImageUrlInput, setProdImageUrlInput] = useState("");
   const [prodSku, setProdSku] = useState("");
   const [prodIsNew, setProdIsNew] = useState(false);
   const [prodIsActive, setProdIsActive] = useState(true);
@@ -275,19 +279,25 @@ export default function AdminProductsPage() {
     }
   };
 
-  const handleProductImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    if (!file.type.startsWith("image/")) {
-      showMsg("error", "Please select an image file (JPEG, PNG, GIF, WebP).");
+  const handleProductImagesUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (!files?.length) return;
+    const list = Array.from(files).filter((f) => f.type.startsWith("image/"));
+    if (!list.length) {
+      showMsg("error", "Please select image files (JPEG, PNG, GIF, WebP).");
+      e.target.value = "";
       return;
     }
     setUploadingImage(true);
     try {
-      const res = await productsAPI.uploadImage(file);
-      if (res?.url) {
-        setProdImageUrl(res.url);
-        showMsg("success", "Image uploaded.");
+      const urls: string[] = [];
+      for (const file of list) {
+        const res = await productsAPI.uploadImage(file);
+        if (res?.url) urls.push(res.url);
+      }
+      if (urls.length) {
+        setProdGalleryUrls((prev) => [...prev, ...urls]);
+        showMsg("success", urls.length === 1 ? "Image uploaded." : `${urls.length} images uploaded.`);
       }
     } catch (err: unknown) {
       showMsg("error", err instanceof Error ? err.message : "Upload failed");
@@ -295,6 +305,32 @@ export default function AdminProductsPage() {
       setUploadingImage(false);
       e.target.value = "";
     }
+  };
+
+  const moveGallery = (index: number, dir: -1 | 1) => {
+    setProdGalleryUrls((prev) => {
+      const j = index + dir;
+      if (j < 0 || j >= prev.length) return prev;
+      const next = [...prev];
+      [next[index], next[j]] = [next[j], next[index]];
+      return next;
+    });
+  };
+
+  const removeGalleryAt = (index: number) => {
+    setProdGalleryUrls((prev) => prev.filter((_, i) => i !== index));
+  };
+
+  const addGalleryUrlFromInput = () => {
+    const u = prodImageUrlInput.trim();
+    if (!u) return;
+    if (!u.startsWith("http") && !u.startsWith("/")) {
+      showMsg("error", "URL must start with http(s) or /");
+      return;
+    }
+    setProdGalleryUrls((prev) => [...prev, u]);
+    setProdImageUrlInput("");
+    showMsg("success", "Image URL added.");
   };
 
   useEffect(() => {
@@ -410,7 +446,8 @@ export default function AdminProductsPage() {
         price_per_sqft: prodPricePerSqft === "" ? null : parseFloat(prodPricePerSqft),
         min_charge: prodMinCharge === "" ? null : parseFloat(prodMinCharge),
         material: prodMaterial.trim() || undefined,
-        image_url: prodImageUrl.trim() || undefined,
+        gallery_images: prodGalleryUrls,
+        image_url: prodGalleryUrls[0]?.trim() || undefined,
         sku: prodSku.trim() || undefined,
         is_new: prodIsNew,
         is_active: prodIsActive,
@@ -433,7 +470,8 @@ export default function AdminProductsPage() {
       setProdPricePerSqft("");
       setProdMinCharge("");
       setProdMaterial("");
-      setProdImageUrl("");
+      setProdGalleryUrls([]);
+      setProdImageUrlInput("");
       setProdSku("");
       setProdIsNew(false);
       setProdIsActive(true);
@@ -497,7 +535,17 @@ export default function AdminProductsPage() {
     setProdPricePerSqft(p.price_per_sqft != null ? String(p.price_per_sqft) : "");
     setProdMinCharge(p.min_charge != null ? String(p.min_charge) : "");
     setProdMaterial(p.material || "");
-    setProdImageUrl(p.image_url || "");
+    {
+      const g = p.gallery_images;
+      let urls: string[] = [];
+      if (Array.isArray(g)) urls = g.map((x) => String(x || "").trim()).filter(Boolean);
+      else if (g && typeof g === "object" && !Array.isArray(g)) {
+        /* ignore */
+      }
+      if (!urls.length && p.image_url) urls = [p.image_url];
+      setProdGalleryUrls(urls);
+    }
+    setProdImageUrlInput("");
     setProdSku(p.sku || "");
     setProdIsNew(p.is_new);
     setProdIsActive(p.is_active);
@@ -526,7 +574,8 @@ export default function AdminProductsPage() {
     setProdPricePerSqft("");
     setProdMinCharge("");
     setProdMaterial("");
-    setProdImageUrl("");
+    setProdGalleryUrls([]);
+    setProdImageUrlInput("");
     setProdSku("");
     setProdIsNew(false);
     setProdIsActive(true);
@@ -797,45 +846,109 @@ export default function AdminProductsPage() {
                           onChange={(e) => setProdMaterial(e.target.value)}
                           className={inputClass}
                         />
-                        <div className="space-y-2">
-                          <p className="text-sm font-medium text-slate-700">Product image (file or URL)</p>
-                        </div>
-                        <div className="hidden min-h-[1.25rem] md:block" aria-hidden />
-                        <div className="flex min-w-0 flex-wrap items-center gap-2">
-                          <label className="shrink-0 cursor-pointer rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-700 shadow-sm transition hover:border-slate-300 hover:bg-slate-50">
-                            {uploadingImage ? "Uploading…" : "Choose image file"}
+                        <div className="md:col-span-2 space-y-2">
+                          <p className="text-sm font-medium text-slate-700">Product photos</p>
+                          <p className="text-xs text-slate-500">
+                            Upload multiple images. The first photo is used on product listings and category grids; all photos appear on the product detail page.
+                          </p>
+                          <div className="flex min-w-0 flex-wrap items-center gap-2">
+                            <label className="shrink-0 cursor-pointer rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-700 shadow-sm transition hover:border-slate-300 hover:bg-slate-50">
+                              {uploadingImage ? "Uploading…" : "Add image files"}
+                              <input
+                                type="file"
+                                multiple
+                                accept="image/jpeg,image/jpg,image/png,image/gif,image/webp"
+                                className="hidden"
+                                disabled={uploadingImage}
+                                onChange={handleProductImagesUpload}
+                              />
+                            </label>
+                            <span className="shrink-0 text-sm text-slate-400">or add URL</span>
                             <input
-                              type="file"
-                              accept="image/jpeg,image/jpg,image/png,image/gif,image/webp"
-                              className="hidden"
-                              disabled={uploadingImage}
-                              onChange={handleProductImageUpload}
+                              type="text"
+                              placeholder="https://… or /uploads/…"
+                              value={prodImageUrlInput}
+                              onChange={(e) => setProdImageUrlInput(e.target.value)}
+                              onKeyDown={(e) => {
+                                if (e.key === "Enter") {
+                                  e.preventDefault();
+                                  addGalleryUrlFromInput();
+                                }
+                              }}
+                              className="min-w-0 flex-1 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm shadow-sm outline-none focus:border-sky-400 focus:ring-2 focus:ring-sky-400/25"
                             />
-                          </label>
-                          <span className="shrink-0 text-sm text-slate-400">or</span>
-                          <input
-                            type="text"
-                            placeholder="Image URL (e.g. /image.jpg)"
-                            value={prodImageUrl}
-                            onChange={(e) => setProdImageUrl(e.target.value)}
-                            className="min-w-0 flex-1 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm shadow-sm outline-none focus:border-sky-400 focus:ring-2 focus:ring-sky-400/25"
-                          />
+                            <button
+                              type="button"
+                              onClick={addGalleryUrlFromInput}
+                              className="shrink-0 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-700 shadow-sm hover:bg-slate-50"
+                            >
+                              Add URL
+                            </button>
+                          </div>
+                          {prodGalleryUrls.length > 0 ? (
+                            <ul className="mt-3 flex flex-wrap gap-3">
+                              {prodGalleryUrls.map((url, idx) => (
+                                <li
+                                  key={`${url}-${idx}`}
+                                  className="flex flex-col items-center gap-1 rounded-lg border border-slate-200 bg-white p-2 shadow-sm"
+                                >
+                                  {isValidImageSrc(url) ? (
+                                    <div className="relative h-20 w-20 overflow-hidden rounded-md border border-slate-100 bg-slate-100">
+                                      <Image
+                                        src={getProductImageSrc(url)}
+                                        alt=""
+                                        width={80}
+                                        height={80}
+                                        className="h-full w-full object-cover"
+                                        unoptimized
+                                      />
+                                    </div>
+                                  ) : (
+                                    <div className="flex h-20 w-20 items-center justify-center rounded-md bg-slate-100 text-xs text-slate-500">Invalid</div>
+                                  )}
+                                  <span className="max-w-[7rem] truncate text-center text-[10px] font-medium text-sky-800">
+                                    {idx === 0 ? "Listing image" : `Photo ${idx + 1}`}
+                                  </span>
+                                  <div className="flex items-center gap-0.5">
+                                    <button
+                                      type="button"
+                                      title="Move up"
+                                      disabled={idx === 0}
+                                      onClick={() => moveGallery(idx, -1)}
+                                      className="rounded p-1 text-slate-600 hover:bg-slate-100 disabled:opacity-30"
+                                    >
+                                      <FiChevronUp size={16} aria-hidden />
+                                    </button>
+                                    <button
+                                      type="button"
+                                      title="Move down"
+                                      disabled={idx >= prodGalleryUrls.length - 1}
+                                      onClick={() => moveGallery(idx, 1)}
+                                      className="rounded p-1 text-slate-600 hover:bg-slate-100 disabled:opacity-30"
+                                    >
+                                      <FiChevronDown size={16} aria-hidden />
+                                    </button>
+                                    <button
+                                      type="button"
+                                      title="Remove"
+                                      onClick={() => removeGalleryAt(idx)}
+                                      className="rounded p-1 text-rose-600 hover:bg-rose-50"
+                                    >
+                                      <FiTrash2 size={16} aria-hidden />
+                                    </button>
+                                  </div>
+                                </li>
+                              ))}
+                            </ul>
+                          ) : null}
                         </div>
                         <input
                           type="text"
                           placeholder="SKU"
                           value={prodSku}
                           onChange={(e) => setProdSku(e.target.value)}
-                          className={`${inputClass} md:self-center`}
+                          className={`${inputClass} md:col-span-2 md:max-w-md`}
                         />
-                        {prodImageUrl && isValidImageSrc(prodImageUrl) ? (
-                          <>
-                            <div className="h-20 w-20 overflow-hidden rounded-lg border border-slate-200 bg-slate-100">
-                              <Image src={getProductImageSrc(prodImageUrl)} alt="" width={80} height={80} className="h-full w-full object-cover" unoptimized />
-                            </div>
-                            <div className="hidden md:block" aria-hidden />
-                          </>
-                        ) : null}
                       </div>
                       {/* <div className="flex items-center gap-6">
                         <label className="group flex cursor-pointer items-center gap-2 text-sm text-slate-700 transition-colors">

@@ -85,15 +85,22 @@ function cartBadgeCount(items: unknown[]): number {
 function CartIconLink({ count }: { count: number }) {
   const label = count > 0 ? `Shopping cart, ${count} items` : "Shopping cart";
   return (
-    <Link href="/cart" className="text-blue-400 hover:text-blue-500 transition-colors relative" aria-label={label}>
-      <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden>
-        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H17m0 0a2 2 0 100 4 2 2 0 000-4zm-8 2a2 2 0 11-4 0 2 2 0 014 0z" />
-      </svg>
-      {count > 0 && (
-        <span className="absolute -top-2 -right-2 bg-red-500 text-white text-xs font-bold rounded-full min-w-[1.25rem] h-5 px-0.5 flex items-center justify-center">
-          {count > 99 ? "99+" : count}
-        </span>
-      )}
+    <Link
+      href="/cart"
+      className="relative inline-flex shrink-0 items-center justify-center overflow-visible p-1.5 text-blue-400 transition-colors hover:text-blue-500"
+      style={{ WebkitTapHighlightColor: "transparent" }}
+      aria-label={label}
+    >
+      <span className="relative inline-flex h-6 w-6 items-center justify-center">
+        <svg className="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden>
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H17m0 0a2 2 0 100 4 2 2 0 000-4zm-8 2a2 2 0 11-4 0 2 2 0 014 0z" />
+        </svg>
+        {count > 0 && (
+          <span className="absolute -right-1 -top-1 z-10 flex h-5 min-w-[1.25rem] items-center justify-center rounded-full bg-red-500 px-0.5 text-xs font-bold text-white shadow-sm">
+            {count > 99 ? "99+" : count}
+          </span>
+        )}
+      </span>
     </Link>
   );
 }
@@ -398,9 +405,8 @@ export default function Navbar() {
                     {loginError}
                   </p>
                 )}
-                <div className="flex items-center gap-2">
-                <CartIconLink count={cartCount} />
-                <div className="flex items-center gap-1.5 rounded-sm border border-slate-200 bg-white/90 p-1">
+                <div className="flex min-w-0 items-center justify-end gap-2">
+                <div className="flex min-w-0 items-center gap-1.5 rounded-sm border border-slate-200 bg-white/90 p-1">
                   <input
                     type="email"
                     value={email}
@@ -445,10 +451,11 @@ export default function Navbar() {
                     Register
                   </a>
                 </div>
+                <CartIconLink count={cartCount} />
                 </div>
               </div>
             ) : (
-              <div className="flex items-center gap-4 shrink-0">
+              <div className="flex min-w-0 shrink-0 items-center gap-4">
                 {/* Search Icon */}
                 <div className="relative" ref={searchRef}>
                   <button

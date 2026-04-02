@@ -35,6 +35,8 @@ interface Product {
   price?: string;
   image?: string;
   image_url?: string;
+  /** Ordered image URLs; first matches listing thumbnail (`image_url`). */
+  gallery_images?: string[];
   isNew?: boolean;
   is_new?: boolean;
   category_slug?: string;
@@ -46,6 +48,17 @@ interface Product {
   price_per_sqft?: number;
   min_charge?: number;
   properties?: ProductProperty[];
+}
+
+function normalizeProductGalleryImages(product: Product | null): string[] {
+  if (!product) return [];
+  const g = product.gallery_images;
+  if (Array.isArray(g) && g.length) {
+    return g.map((u) => String(u || "").trim()).filter(Boolean);
+  }
+  const raw = product.image_url || product.image;
+  if (raw) return [String(raw).trim()];
+  return [];
 }
 
 interface SavedAddress {
@@ -172,6 +185,7 @@ function ProductDetailContent() {
   const [shippingService, setShippingService] = useState("Ground");
   const [activeTab, setActiveTab] = useState("description");
   const [selectedImageIndex, setSelectedImageIndex] = useState(0);
+  const [selectedProductImageIndex, setSelectedProductImageIndex] = useState(0);
   const [expandedFAQ, setExpandedFAQ] = useState<number | null>(null);
   const [relatedProducts, setRelatedProducts] = useState<Product[]>([]);
   const [loadingRelated, setLoadingRelated] = useState(false);
@@ -244,6 +258,7 @@ function ProductDetailContent() {
 
   useEffect(() => {
     setSelectedImageIndex(0);
+    setSelectedProductImageIndex(0);
     setSelectedSubcategory(null);
   }, [productId]);
 
@@ -457,10 +472,19 @@ function ProductDetailContent() {
           ? jobsPayload[0].jobName
           : `${jobsPayload[0].jobName} (+${jobsPayload.length - 1} more)`;
 
+      // Cart/checkout always show the listing image (first photo), not whichever gallery thumb is selected on this page.
+      const listingGallery = normalizeProductGalleryImages(product);
+      const firstListingRaw =
+        listingGallery.length > 0
+          ? listingGallery[0]
+          : product?.image_url || product?.image;
+      const productImageForCart =
+        getProductImageUrl(firstListingRaw ? String(firstListingRaw).trim() : "") || "";
+
       const cartItem = {
         productId: productId,
         productName: productName,
-        productImage: imageSrc,
+        productImage: productImageForCart,
         width: widthInches,
         height: heightInches,
         areaSqFt: parseFloat(areaSqFt.toFixed(2)),
@@ -566,7 +590,12 @@ function ProductDetailContent() {
 
   const displayShipTo = pickDisplayShippingAddress(savedAddresses);
 
-  const productImageRaw = product?.image_url || product?.image;
+  const productGalleryUrls = normalizeProductGalleryImages(product);
+  const idx = Math.min(selectedProductImageIndex, Math.max(0, productGalleryUrls.length - 1));
+  const productImageRaw =
+    productGalleryUrls.length > 0
+      ? productGalleryUrls[idx]
+      : product?.image_url || product?.image;
   const imageSrc = getProductImageUrl(productImageRaw) || '';
   const isProductImageBackendUpload = productImageRaw && String(productImageRaw).trim().startsWith("/uploads/");
   const productName = product?.name || "Product";
@@ -586,7 +615,7 @@ function ProductDetailContent() {
     return [];
   })();
   const hasProductProperties = productProperties.some((x) => (x?.key && String(x.key).trim()) || (x?.value && String(x.value).trim()));
-  
+
   /** Strip thumbnails only — hero image always uses this product’s `imageSrc` (not the first product per subcategory from the list API). */
   const subcategoryThumbnails = subcategories.length > 0 
     ? subcategories.map(sub => ({
@@ -717,6 +746,39 @@ function ProductDetailContent() {
               </div>
             
             </div>
+
+            {/* Product photo gallery (admin multi-upload) */}
+            {productGalleryUrls.length > 1 && (
+              <div className="mb-4">
+                <p className="mb-2 text-xs font-medium text-gray-600">Photos</p>
+                <div className="flex gap-2 overflow-x-auto pb-2">
+                  {productGalleryUrls.map((raw, gidx) => {
+                    const thumbSrc = getProductImageUrl(raw) || "";
+                    const isBack = raw && String(raw).trim().startsWith("/uploads/");
+                    return (
+                      <button
+                        key={`${raw}-${gidx}`}
+                        type="button"
+                        onClick={() => setSelectedProductImageIndex(gidx)}
+                        className={`relative h-20 w-20 shrink-0 overflow-hidden rounded-lg border-2 transition-colors ${
+                          idx === gidx ? "border-sky-600 ring-2 ring-sky-200" : "border-gray-200 hover:border-gray-400"
+                        }`}
+                      >
+                        {thumbSrc ? (
+                          isBack ? (
+                            <img src={thumbSrc} alt="" className="h-full w-full object-cover" />
+                          ) : (
+                            <Image src={thumbSrc} alt="" fill className="object-cover" sizes="80px" />
+                          )
+                        ) : (
+                          <div className="h-full w-full bg-gray-200" />
+                        )}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
 
             {/* Subcategories Thumbnail Gallery */}
             {subcategories.length > 0 && (
