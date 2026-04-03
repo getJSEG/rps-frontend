@@ -5,6 +5,14 @@ import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { ordersAPI, cartAPI, getProductImageUrl } from "../../utils/api";
 import { isAuthenticated } from "../../utils/roles";
+import {
+  canonicalOrderStatus,
+  customerOrderProgressFirstStepLabel,
+  customerOrderProgressKind,
+  customerOrderStatusDescription,
+  customerOrderStatusTitle,
+  isRefundLikeStatus,
+} from "../../utils/orderStatuses";
 
 const LIST_LIMIT = 15;
 
@@ -99,10 +107,7 @@ function formatLineSizeInches(w: unknown, h: unknown): string | null {
 
 function formatStatus(status: string | null | undefined): string {
   if (!status) return "Unknown";
-  return status
-    .split("_")
-    .map((w) => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase())
-    .join(" ");
+  return customerOrderStatusTitle(status);
 }
 
 function formatPaymentMethod(method: string | null | undefined): string {
@@ -114,12 +119,18 @@ function formatPaymentMethod(method: string | null | undefined): string {
 }
 
 function statusBadgeClass(status: string | null | undefined): string {
-  const s = (status || "").toLowerCase();
-  if (s === "delivered" || s === "complete") return "bg-emerald-100 text-emerald-800";
-  if (s === "shipped") return "bg-violet-100 text-violet-800";
-  if (s === "processing") return "bg-blue-100 text-blue-800";
-  if (s === "pending_payment" || s === "pending") return "bg-amber-100 text-amber-900";
-  if (s === "cancelled" || s === "refund") return "bg-red-100 text-red-800";
+  const c = canonicalOrderStatus(status);
+  if (c === "completed") return "bg-emerald-100 text-emerald-800";
+  if (c === "shipped") return "bg-violet-100 text-violet-800";
+  if (c === "printing" || c === "trimming" || c === "reprint") return "bg-blue-100 text-blue-800";
+  if (
+    c === "pending_payment" ||
+    c === "awaiting_artwork" ||
+    c === "awaiting_customer_approval"
+  )
+    return "bg-amber-100 text-amber-900";
+  if (c === "on_hold" || c === "cancelled") return "bg-orange-100 text-orange-900";
+  if (c === "awaiting_refund" || c === "refunded") return "bg-red-100 text-red-800";
   return "bg-slate-100 text-slate-800";
 }
 
@@ -178,49 +189,64 @@ function contactLines(order: OrderRow): string[] {
 }
 
 function OrderProgressBar({ status }: { status: string | null | undefined }) {
-  const s = (status || "").toLowerCase();
+  const kind = customerOrderProgressKind(status);
+  if (kind === "cancelled") {
+    return null;
+  }
+  const firstLabel = customerOrderProgressFirstStepLabel(status);
   const steps = [
-    { label: "Ordered", active: true },
-    { label: "Processing", active: s === "processing" || s === "shipped" || s === "delivered" || s === "complete" },
-    { label: "Shipped", active: s === "shipped" || s === "delivered" || s === "complete" },
-    { label: "Delivered", active: s === "delivered" || s === "complete" },
+    { label: firstLabel, min: 1 },
+    { label: "Printing", min: 2 },
+    { label: "Trimming", min: 3 },
+    { label: "Shipped", min: 4 },
+    { label: "Completed", min: 5 },
   ];
-  if (s === "pending_payment") {
-    steps[1].active = false;
-    steps[2].active = false;
-    steps[3].active = false;
-  }
-  if (s === "cancelled" || s === "refund") {
+  const stage = kind === "awaiting_payment" ? 0 : kind.stage;
+  if (kind === "awaiting_payment") {
     return (
-      <p className="text-sm text-red-700 font-medium mt-3">This order is {formatStatus(s).toLowerCase()}.</p>
-    );
-  }
-  return (
-    <div className="mt-4">
-      <p className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-2">Order progress</p>
-      {s === "pending_payment" && (
+      <div>
         <p className="text-sm text-amber-800 bg-amber-50 border border-amber-100 rounded-md px-3 py-2 mb-3">
           Awaiting payment confirmation. This usually updates within a few moments after you pay.
         </p>
-      )}
-      <div className="flex flex-wrap gap-2 sm:gap-0 sm:justify-between">
-        {steps.map((step, i) => (
-          <div key={step.label} className="flex items-center gap-2 flex-1 min-w-[4.5rem]">
-            <div
-              className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-xs font-bold ${
-                step.active ? "bg-[#0B6BCB] text-white" : "bg-gray-200 text-gray-500"
-              }`}
-            >
-              {i + 1}
+        <div className="flex flex-wrap gap-2 sm:gap-0 sm:justify-between opacity-60">
+          {steps.map((step, i) => (
+            <div key={`step-${i}`} className="flex items-center gap-2 flex-1 min-w-[4.5rem]">
+              <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-xs font-bold bg-gray-200 text-gray-500">
+                {i + 1}
+              </div>
+              <span className="text-xs sm:text-sm text-gray-500">{step.label}</span>
+              {i < steps.length - 1 && (
+                <div className="hidden sm:block flex-1 h-0.5 mx-1 bg-gray-200 min-w-[8px]" aria-hidden />
+              )}
             </div>
-            <span className={`text-xs sm:text-sm ${step.active ? "text-gray-900 font-medium" : "text-gray-500"}`}>
-              {step.label}
-            </span>
-            {i < steps.length - 1 && (
-              <div className="hidden sm:block flex-1 h-0.5 mx-1 bg-gray-200 min-w-[8px]" aria-hidden />
-            )}
-          </div>
-        ))}
+          ))}
+        </div>
+      </div>
+    );
+  }
+  return (
+    <div>
+      <div className="flex flex-wrap gap-2 sm:gap-0 sm:justify-between">
+        {steps.map((step, i) => {
+          const active = stage >= step.min;
+          return (
+            <div key={`step-${i}`} className="flex items-center gap-2 flex-1 min-w-[4.5rem]">
+              <div
+                className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-xs font-bold ${
+                  active ? "bg-[#0B6BCB] text-white" : "bg-gray-200 text-gray-500"
+                }`}
+              >
+                {i + 1}
+              </div>
+              <span className={`text-xs sm:text-sm ${active ? "text-gray-900 font-medium" : "text-gray-500"}`}>
+                {step.label}
+              </span>
+              {i < steps.length - 1 && (
+                <div className="hidden sm:block flex-1 h-0.5 mx-1 bg-gray-200 min-w-[8px]" aria-hidden />
+              )}
+            </div>
+          );
+        })}
       </div>
     </div>
   );
@@ -249,11 +275,22 @@ function AddressBlock({ title, lines }: { title: string; lines: string[] }) {
 
 function matchesFilter(order: OrderRow, filterOption: string): boolean {
   if (filterOption === "All") return true;
-  const s = (order.status || "").toLowerCase();
-  if (filterOption === "Pending") return s === "pending" || s === "pending_payment" || s === "approval_needed";
-  if (filterOption === "Processing") return s === "processing";
-  if (filterOption === "Shipped") return s === "shipped";
-  if (filterOption === "Delivered") return s === "delivered" || s === "complete";
+  const raw = (order.status || "").toLowerCase().replace(/\s+/g, "_");
+  const c = canonicalOrderStatus(order.status);
+  if (filterOption === "Pre-production") {
+    return (
+      raw === "pending_payment" ||
+      c === "awaiting_artwork" ||
+      c === "on_hold" ||
+      c === "awaiting_customer_approval"
+    );
+  }
+  if (filterOption === "Production") {
+    return c === "printing" || c === "trimming" || c === "reprint";
+  }
+  if (filterOption === "Shipped") return c === "shipped";
+  if (filterOption === "Complete") return c === "completed";
+  if (filterOption === "Refund") return isRefundLikeStatus(order.status);
   return true;
 }
 
@@ -396,10 +433,11 @@ export default function Orders() {
                     className="w-full sm:w-44 appearance-none bg-gray-50 border border-gray-300 rounded-lg px-3 py-2 text-sm text-gray-800 focus:outline-none focus:ring-2 focus:ring-[#0B6BCB] pr-8"
                   >
                     <option value="All">All statuses</option>
-                    <option value="Pending">Pending</option>
-                    <option value="Processing">Processing</option>
+                    <option value="Pre-production">Pre-production</option>
+                    <option value="Production">Production</option>
                     <option value="Shipped">Shipped</option>
-                    <option value="Delivered">Delivered</option>
+                    <option value="Complete">Complete</option>
+                    <option value="Refund">Refund</option>
                   </select>
                   <div className="absolute inset-y-0 right-2 flex items-center pointer-events-none text-gray-500">▾</div>
                 </div>
@@ -548,6 +586,23 @@ export default function Orders() {
 
                   {isOpen && (
                     <div className="border-t border-gray-100 px-4 py-5 sm:px-5 bg-gray-50/40 space-y-6">
+                      <div className="space-y-3 pb-1">
+                        {(() => {
+                          const desc = customerOrderStatusDescription(order.status);
+                          if (!desc) return null;
+                          return (
+                            <div className="rounded-lg border border-gray-200 bg-white px-3 py-3 text-sm text-gray-800">
+                              <p className="text-[11px] font-semibold uppercase tracking-wide text-gray-500 mb-1">
+                                Status details
+                              </p>
+                              <p>{desc}</p>
+                            </div>
+                          );
+                        })()}
+                        <h3 className="text-sm font-semibold text-gray-900">Order status</h3>
+                        <OrderProgressBar status={order.status} />
+                      </div>
+
                       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-sm">
                         <div>
                           <span className="text-gray-500">Payment status</span>
@@ -579,8 +634,6 @@ export default function Orders() {
                           </div>
                         )}
                       </div>
-
-                      <OrderProgressBar status={order.status} />
 
                       {(contact.length > 0 || parseGuestCheckout(order.guest_checkout)?.email) && (
                         <div>

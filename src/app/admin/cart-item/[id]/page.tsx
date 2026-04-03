@@ -7,6 +7,7 @@ import Image from "next/image";
 import AdminNavbar from "../../../components/AdminNavbar";
 import { canAccessAdminPanel, isAuthenticated } from "../../../../utils/roles";
 import { ordersAPI } from "../../../../utils/api";
+import { ADMIN_ORDER_STATUS_OPTIONS } from "../../../../utils/orderStatuses";
 
 interface CartItemType {
   id?: string;
@@ -33,22 +34,13 @@ export default function CartItemDetailPage() {
   const [item, setItem] = useState<CartItemType | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [status, setStatus] = useState<string>("pending");
+  const [status, setStatus] = useState<string>("awaiting_artwork");
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [saveSuccess, setSaveSuccess] = useState<string | null>(null);
   const [savedOrderId, setSavedOrderId] = useState<string | null>(null);
 
-  // Pending, In Process, Complete for main flow; Refund-tab statuses for Refunds page
-  const statusOptions = [
-    { value: "pending", label: "Pending" },
-    { value: "processing", label: "In Process" },
-    { value: "complete", label: "Complete" },
-    { value: "refund", label: "Refund" },
-    { value: "cancelled", label: "Cancelled" },
-    { value: "approval_needed", label: "Approval Needed" },
-    { value: "shipped", label: "Shipped" },
-  ];
+  const statusOptions = ADMIN_ORDER_STATUS_OPTIONS;
 
   useEffect(() => {
     if (typeof window === "undefined") return;

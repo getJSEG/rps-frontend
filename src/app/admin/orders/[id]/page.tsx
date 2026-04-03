@@ -7,6 +7,11 @@ import Link from "next/link";
 import { ordersAPI, getProductImageUrl } from "../../../../utils/api";
 import AdminNavbar from "../../../components/AdminNavbar";
 import { canAccessAdminPanel, isAuthenticated, getUserRole } from "../../../../utils/roles";
+import {
+  ADMIN_ORDER_STATUS_OPTIONS,
+  adminOrderStatusLabel,
+  isOrderStatusLocked,
+} from "../../../../utils/orderStatuses";
 
 interface OrderItem {
   id: string;
@@ -97,10 +102,7 @@ function formatMoney(n: number) {
 }
 
 function formatStatus(status: string) {
-  return status
-    .split("_")
-    .map((w) => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase())
-    .join(" ");
+  return adminOrderStatusLabel(status);
 }
 
 function formatPaymentMethod(m: string) {
@@ -237,7 +239,7 @@ export default function OrderDetails() {
         id: String(d.id),
         user_id: d.user_id != null ? String(d.user_id) : null,
         order_number: String(d.order_number || `ORD-${d.id}`),
-        status: String(d.status || "pending"),
+        status: String(d.status || "awaiting_artwork"),
         total_amount: parseFloat(String(d.total_amount)) || 0,
         payment_method: String(d.payment_method || "N/A"),
         payment_status: d.payment_status != null ? String(d.payment_status) : undefined,
@@ -372,17 +374,7 @@ export default function OrderDetails() {
     return () => document.removeEventListener("mousedown", onDown);
   }, [showStatusDropdown]);
 
-  const statusOptions = [
-    { value: "pending_payment", label: "Pending payment" },
-    { value: "pending", label: "Pending" },
-    { value: "processing", label: "Processing" },
-    { value: "shipped", label: "Shipped" },
-    { value: "delivered", label: "Delivered" },
-    { value: "complete", label: "Complete" },
-    { value: "approval_needed", label: "Approval needed" },
-    { value: "refund", label: "Refund" },
-    { value: "cancelled", label: "Cancelled" },
-  ];
+  const statusOptions = ADMIN_ORDER_STATUS_OPTIONS;
 
   const handleStatusUpdate = async (newStatus: string) => {
     if (!order) return;
@@ -462,12 +454,21 @@ export default function OrderDetails() {
   };
 
   const getStatusStyles = (status: string) => {
-    const s = status.toLowerCase();
-    if (s === "processing" || s === "shipped") return "bg-sky-50 text-sky-900 ring-sky-200/80";
-    if (s === "complete" || s === "delivered") return "bg-emerald-50 text-emerald-900 ring-emerald-200/80";
-    if (s === "cancelled" || s === "canceled" || s === "refund") return "bg-rose-50 text-rose-900 ring-rose-200/80";
-    if (s === "pending" || s === "pending_payment" || s === "approval_needed")
+    const s = status.toLowerCase().replace(/\s+/g, "_");
+    if (s === "shipped") return "bg-violet-50 text-violet-900 ring-violet-200/80";
+    if (s === "completed" || s === "complete" || s === "delivered") return "bg-emerald-50 text-emerald-900 ring-emerald-200/80";
+    if (s === "awaiting_refund" || s === "refunded" || s === "refund") return "bg-rose-50 text-rose-900 ring-rose-200/80";
+    if (s === "on_hold" || s === "cancelled" || s === "canceled") return "bg-orange-50 text-orange-950 ring-orange-200/80";
+    if (
+      s === "pending_payment" ||
+      s === "awaiting_artwork" ||
+      s === "awaiting_customer_approval" ||
+      s === "approval_needed" ||
+      s === "pending"
+    )
       return "bg-amber-50 text-amber-950 ring-amber-200/80";
+    if (s === "printing" || s === "trimming" || s === "reprint" || s === "processing")
+      return "bg-sky-50 text-sky-900 ring-sky-200/80";
     return "bg-slate-100 text-slate-800 ring-slate-200/80";
   };
 
@@ -560,32 +561,51 @@ export default function OrderDetails() {
           </button>
           <div className="flex flex-wrap gap-2">
             <div className="relative" ref={statusDropdownRef}>
-              <button
-                type="button"
-                onClick={() => setShowStatusDropdown(!showStatusDropdown)}
-                disabled={updatingStatus}
-                className={`inline-flex items-center gap-2 rounded-xl px-4 py-2.5 text-sm font-semibold shadow-sm ring-1 transition ${getStatusStyles(
-                  order.status
-                )} ${updatingStatus ? "opacity-60" : ""}`}
-              >
-                {updatingStatus ? "Updating…" : formatStatus(order.status)}
-                <svg className="h-4 w-4 opacity-70" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                </svg>
-              </button>
-              {showStatusDropdown && (
-                <div className="absolute right-0 z-30 mt-2 max-h-72 w-56 overflow-auto rounded-xl border border-slate-200 bg-white py-1 shadow-xl">
-                  {statusOptions.map((option) => (
-                    <button
-                      key={option.value}
-                      type="button"
-                      onClick={() => handleStatusUpdate(option.value)}
-                      className="w-full px-4 py-2.5 text-left text-sm text-slate-700 hover:bg-slate-50"
-                    >
-                      {option.label}
-                    </button>
-                  ))}
+              {isOrderStatusLocked(order.status) ? (
+                <div
+                  className={`inline-flex items-center gap-2 rounded-xl px-4 py-2.5 text-sm font-semibold shadow-sm ring-1 ${getStatusStyles(order.status)}`}
+                  title="Completed orders cannot be moved to another status."
+                >
+                  <svg className="h-4 w-4 shrink-0 opacity-80" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden>
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                      d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"
+                    />
+                  </svg>
+                  {formatStatus(order.status)}
                 </div>
+              ) : (
+                <>
+                  <button
+                    type="button"
+                    onClick={() => setShowStatusDropdown(!showStatusDropdown)}
+                    disabled={updatingStatus}
+                    className={`inline-flex items-center gap-2 rounded-xl px-4 py-2.5 text-sm font-semibold shadow-sm ring-1 transition ${getStatusStyles(
+                      order.status
+                    )} ${updatingStatus ? "opacity-60" : ""}`}
+                  >
+                    {updatingStatus ? "Updating…" : formatStatus(order.status)}
+                    <svg className="h-4 w-4 opacity-70" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                    </svg>
+                  </button>
+                  {showStatusDropdown && (
+                    <div className="absolute right-0 z-30 mt-2 max-h-72 w-64 overflow-auto rounded-xl border border-slate-200 bg-white py-1 shadow-xl">
+                      {statusOptions.map((option) => (
+                        <button
+                          key={option.value}
+                          type="button"
+                          onClick={() => handleStatusUpdate(option.value)}
+                          className="w-full px-4 py-2.5 text-left text-sm text-slate-700 hover:bg-slate-50"
+                        >
+                          {option.label}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </>
               )}
             </div>
             <button

@@ -8,6 +8,7 @@ import { ordersAPI, productsAPI, cartAPI } from "../../utils/api";
 import AdminNavbar from "./AdminNavbar";
 import { canAccessAdminPanel, isAuthenticated, getUserRole } from "../../utils/roles";
 import { FiTrash2 } from "react-icons/fi";
+import { adminOrderStatusLabel, canonicalOrderStatus } from "../../utils/orderStatuses";
 
 interface OrderItem {
   id: string;
@@ -145,8 +146,10 @@ export default function AdminPanel() {
       try {
         setLoading(true);
         
+        // Always load the first chunk from the API; table pagination is client-side only.
+        // Passing UI currentPage as API page would skip rows (e.g. page 2 → offset 1000).
         const response = await ordersAPI.getAllAdmin({
-          page: currentPage,
+          page: 1,
           limit: 1000,
         });
 
@@ -193,7 +196,7 @@ export default function AdminPanel() {
                 orderDate: orderDate,
                 paymentType: order.payment_method || "N/A",
                 amount: parseFloat(order.total_amount || 0),
-                status: (order.status || "pending").toLowerCase(),
+                status: (order.status || "awaiting_artwork").toLowerCase(),
                 items: order.items || [],
                 user_email,
                 user_name,
@@ -225,7 +228,11 @@ export default function AdminPanel() {
     };
 
     fetchOrders();
-  }, [accessGranted, activeTab, currentPage, router]);
+  }, [accessGranted, activeTab, router]);
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchQuery]);
 
   // Load all users' cart items from API when admin (backend returns all carts); else fallback to localStorage
   useEffect(() => {
@@ -337,7 +344,7 @@ export default function AdminPanel() {
         }),
     paymentType: "Pending",
     amount: cartItem.total || cartItem.totalPrice || cartItem.subtotal || 0,
-    status: "pending", // Cart items are always pending
+    status: "awaiting_artwork",
     items: [{
       id: cartItem.id,
       product_id: cartItem.productId,
@@ -362,20 +369,32 @@ export default function AdminPanel() {
       // Show all orders and cart items
       filtered = combinedItems;
     } else if (activeTab === "In Progress") {
-      filtered = combinedItems.filter(order => {
-        const statusLower = order.status.toLowerCase();
-        return statusLower === "processing" || statusLower === "shipped";
+      filtered = combinedItems.filter((order) => {
+        const c = canonicalOrderStatus(order.status);
+        return (
+          c === "printing" ||
+          c === "trimming" ||
+          c === "reprint" ||
+          c === "shipped" ||
+          c === "awaiting_artwork" ||
+          c === "awaiting_customer_approval"
+        );
       });
     } else if (activeTab === "Pending") {
-      // Show pending orders and all cart items (cart items are always pending)
-      filtered = combinedItems.filter(order => {
-        const statusLower = order.status.toLowerCase();
-        return statusLower === "pending" || statusLower === "approval needed" || order.isCartItem;
+      // Show pre-production orders and all cart items (cart items use awaiting_artwork placeholder)
+      filtered = combinedItems.filter((order) => {
+        const c = canonicalOrderStatus(order.status);
+        return (
+          order.isCartItem ||
+          c === "pending_payment" ||
+          c === "awaiting_artwork" ||
+          c === "on_hold"
+        );
       });
     } else if (activeTab === "Complete") {
-      filtered = combinedItems.filter(order => {
-        const statusLower = order.status.toLowerCase();
-        return statusLower === "complete" || statusLower === "delivered";
+      filtered = combinedItems.filter((order) => {
+        const c = canonicalOrderStatus(order.status);
+        return c === "completed";
       });
     }
 
@@ -398,60 +417,41 @@ export default function AdminPanel() {
 
   const filteredOrders = getFilteredOrders();
   const totalPages = Math.ceil(filteredOrders.length / itemsPerPage);
+
+  useEffect(() => {
+    if (totalPages > 0 && currentPage > totalPages) {
+      setCurrentPage(totalPages);
+    }
+  }, [totalPages, currentPage]);
+
   const startIndex = (currentPage - 1) * itemsPerPage;
   const endIndex = startIndex + itemsPerPage;
   const paginatedOrders = filteredOrders.slice(startIndex, endIndex);
 
   const getStatusColor = (status: string) => {
-    const statusLower = status.toLowerCase();
-    switch (statusLower) {
-      case "processing":
-      case "complete":
-      case "approved":
-      case "shipped":
-      case "delivered":
-        return "bg-emerald-50 text-emerald-800 ring-1 ring-emerald-200/80";
-      case "cancelled":
-      case "canceled":
-        return "bg-rose-50 text-rose-800 ring-1 ring-rose-200/80";
-      case "pending":
-      case "approval needed":
-        return "bg-amber-50 text-amber-900 ring-1 ring-amber-200/80";
-      default:
-        return "bg-slate-100 text-slate-700 ring-1 ring-slate-200/80";
-    }
+    const c = canonicalOrderStatus(status);
+    if (c === "completed" || c === "shipped") return "bg-emerald-50 text-emerald-800 ring-1 ring-emerald-200/80";
+    if (c === "awaiting_refund" || c === "refunded") return "bg-rose-50 text-rose-800 ring-1 ring-rose-200/80";
+    if (c === "on_hold" || c === "cancelled") return "bg-orange-50 text-orange-900 ring-1 ring-orange-200/80";
+    if (
+      c === "pending_payment" ||
+      c === "awaiting_artwork" ||
+      c === "awaiting_customer_approval"
+    )
+      return "bg-amber-50 text-amber-900 ring-1 ring-amber-200/80";
+    if (c === "printing" || c === "trimming" || c === "reprint")
+      return "bg-sky-50 text-sky-900 ring-1 ring-sky-200/80";
+    return "bg-slate-100 text-slate-700 ring-1 ring-slate-200/80";
   };
 
-  const formatStatus = (status: string) => {
-    const statusLower = status.toLowerCase();
-    switch (statusLower) {
-      case "processing":
-        return "Processing";
-      case "complete":
-        return "Complete";
-      case "pending":
-        return "Pending";
-      case "shipped":
-        return "Shipped";
-      case "delivered":
-        return "Delivered";
-      case "approval needed":
-      case "approval_needed":
-        return "Approval Needed";
-      case "cancelled":
-      case "canceled":
-        return "Cancelled";
-      default:
-        return status.charAt(0).toUpperCase() + status.slice(1);
-    }
-  };
+  const formatStatus = (status: string) => adminOrderStatusLabel(status);
 
   /** Same pill as Status column; map payment row to a status key for shared colors. */
   const paymentKeyForTag = (order: { isCartItem?: boolean; paymentType?: string }) => {
-    if (order.isCartItem) return "pending";
+    if (order.isCartItem) return "awaiting_artwork";
     const p = (order.paymentType || "").toLowerCase();
-    if (p === "stripe") return "processing";
-    if (p === "manual" || p === "admin_cart") return "pending";
+    if (p === "stripe") return "printing";
+    if (p === "manual" || p === "admin_cart") return "awaiting_artwork";
     return "unknown";
   };
 
@@ -534,7 +534,7 @@ export default function AdminPanel() {
                       <tr
                         key={order.id}
                         onClick={() => router.push(orderDetailUrl)}
-                        className={`cursor-pointer transition-colors hover:bg-slate-50/90 ${isCart ? "bg-amber-50/40" : ""} ${order.status.toLowerCase() === "complete" ? "bg-sky-50/30" : ""}`}
+                        className={`cursor-pointer transition-colors hover:bg-slate-50/90 ${isCart ? "bg-amber-50/40" : ""} ${canonicalOrderStatus(order.status) === "completed" ? "bg-sky-50/30" : ""}`}
                       >
                         <td className="px-4 py-4 whitespace-nowrap sm:px-6">
                           <div className="flex items-center gap-3">
@@ -701,8 +701,8 @@ export default function AdminPanel() {
             )}
             <button
               type="button"
-              onClick={() => setCurrentPage((prev) => Math.min(totalPages, prev + 1))}
-              disabled={currentPage === totalPages}
+              onClick={() => setCurrentPage((prev) => Math.min(Math.max(1, totalPages), prev + 1))}
+              disabled={totalPages === 0 || currentPage === totalPages}
               className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-sm font-medium text-slate-700 shadow-sm transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40"
             >
               Next

@@ -8,7 +8,10 @@ import { ordersAPI } from "../../../utils/api";
 import AdminNavbar from "../../components/AdminNavbar";
 import { canAccessAdminPanel, isAuthenticated } from "../../../utils/roles";
 
-const REFUND_ONLY_STATUS = "refund";
+function isRefundQueueStatus(raw: string): boolean {
+  const s = raw.toLowerCase().replace(/\s+/g, "_");
+  return s === "awaiting_refund" || s === "refund";
+}
 
 interface OrderItem {
   id: string;
@@ -61,7 +64,7 @@ export default function RefundsPage() {
           const refundOrders: OrderRow[] = response.orders
             .filter((o: any) => {
               const s = (o.status || "").toLowerCase().replace(/\s+/g, "_");
-              return s === REFUND_ONLY_STATUS;
+              return isRefundQueueStatus(s);
             })
             .map((order: any) => {
               const firstItem = order.items?.[0];
@@ -107,13 +110,14 @@ export default function RefundsPage() {
 
   const getStatusColor = (status: string) => {
     const s = status.toLowerCase().replace(/\s+/g, "_");
-    if (s === "refund") return "bg-rose-50 text-rose-800 ring-1 ring-rose-200/80";
+    if (s === "awaiting_refund" || s === "refund") return "bg-rose-50 text-rose-800 ring-1 ring-rose-200/80";
     return "bg-slate-100 text-slate-700 ring-1 ring-slate-200/80";
   };
 
   const formatStatus = (status: string) => {
     const s = status.toLowerCase().replace(/\s+/g, "_");
-    if (s === "refund") return "Refund";
+    if (s === "awaiting_refund") return "Awaiting refund";
+    if (s === "refund") return "Refund (legacy)";
     return status.charAt(0).toUpperCase() + status.slice(1);
   };
 
@@ -136,7 +140,7 @@ export default function RefundsPage() {
         <div className="border-b border-slate-100 px-5 py-5 sm:px-6">
           <h2 className="text-lg font-semibold text-slate-900">Filtered orders</h2>
           <p className="mt-1 max-w-2xl text-sm text-slate-500">
-            Only orders with status <span className="font-medium text-slate-700">Refund</span>. Change status on the order detail page.
+            Only orders with status <span className="font-medium text-slate-700">Awaiting refund</span> (or legacy Refund). Change status on the order detail page.
           </p>
         </div>
         <div className="overflow-x-auto">
