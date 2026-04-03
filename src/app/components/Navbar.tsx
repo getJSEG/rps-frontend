@@ -255,6 +255,7 @@ export default function Navbar() {
         setCategories(nextCategories);
         if (typeof window !== "undefined") {
           localStorage.setItem("navbarCategories", JSON.stringify(nextCategories));
+          window.dispatchEvent(new Event("navbarCategoriesUpdated"));
         }
       } catch {
         if (!mounted) return;

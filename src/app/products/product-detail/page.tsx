@@ -17,6 +17,7 @@ import {
   type ShippingRates,
 } from "../../../utils/api";
 import { isAuthenticated } from "../../../utils/roles";
+import { SITE_TAB_TITLE, pageTitle } from "../../../utils/tabTitle";
 import { FiArrowLeft, FiEdit, FiTrash2, FiX } from "react-icons/fi";
 
 /** One artwork per job popup image in `public`. */
@@ -255,6 +256,27 @@ function ProductDetailContent() {
 
     fetchProduct();
   }, [productId]);
+
+  useEffect(() => {
+    if (!productId) {
+      document.title = SITE_TAB_TITLE;
+      return;
+    }
+    const name = product?.name?.trim();
+    if (name) {
+      document.title = pageTitle(name);
+      return;
+    }
+    if (!loading) {
+      document.title = pageTitle("Product");
+    }
+  }, [productId, product?.name, loading]);
+
+  useEffect(() => {
+    return () => {
+      document.title = SITE_TAB_TITLE;
+    };
+  }, []);
 
   useEffect(() => {
     setSelectedImageIndex(0);
