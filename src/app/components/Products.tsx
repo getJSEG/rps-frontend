@@ -269,7 +269,10 @@ export default function Products({ forcedCategorySlug = null }: { forcedCategory
             {unit != null ? (
               <p className="text-lg font-bold text-gray-900">${unit.toFixed(2)}</p>
             ) : ppsf != null ? (
-              <p className="text-sm text-gray-700">${ppsf.toFixed(2)}/ft²</p>
+              <div className="mt-1 flex items-center justify-between gap-3 border-t border-gray-200 pt-2">
+                <p className="text-sm font-semibold text-gray-800">Starting at</p>
+                <p className="text-sm font-semibold text-gray-800">${ppsf.toFixed(2)} per ft²</p>
+              </div>
             ) : (
               <p className="text-sm text-gray-700">Price on request</p>
             )}

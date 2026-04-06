@@ -43,8 +43,10 @@ function getBackendBaseUrl(): string {
 /** Convert product/category image URL to full URL (for /uploads/ paths from backend) */
 export function getProductImageUrl(url: string | null | undefined): string {
   if (!url || typeof url !== 'string') return '';
-  const u = url.trim();
+  let u = url.trim();
   if (!u) return '';
+  // DB/API sometimes store "uploads/..." without leading slash
+  if (u.startsWith('uploads/')) u = `/${u}`;
   if (u.startsWith('/uploads/')) {
     const base = getBackendBaseUrl();
     return base + u;
@@ -241,6 +243,20 @@ export const productsAPI = {
   
   getById: async (id: string) => {
     return apiCall(`/products/${id}`);
+  },
+  previewPrice: async (
+    id: string,
+    payload: {
+      width?: number;
+      height?: number;
+      size_option_id?: number;
+      sizeOptionId?: number;
+    }
+  ) => {
+    return apiCall(`/products/${id}/price-preview`, {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    });
   },
   
   getCategories: async () => {

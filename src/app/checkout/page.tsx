@@ -67,8 +67,25 @@ interface CartItem {
   product_id?: string;
   jobName?: string;
   job_name?: string;
+  width?: number;
+  height?: number;
+  print_size_label?: string;
   jobs?: Array<{ jobName?: string; quantity?: number; unitPrice?: number; lineSubtotal?: number }>;
   [key: string]: unknown;
+}
+
+function checkoutItemLineSubtotal(item: CartItem): number {
+  if (item.subtotal != null) return Number(item.subtotal);
+  const jobs = item.jobs;
+  if (Array.isArray(jobs) && jobs.length > 0) {
+    const fallbackUnit = Number(item.unitPrice) || 0;
+    return jobs.reduce((sum, line) => {
+      if (line.lineSubtotal != null) return sum + Number(line.lineSubtotal);
+      const up = Number(line.unitPrice) || fallbackUnit;
+      return sum + up * (Number(line.quantity) || 0);
+    }, 0);
+  }
+  return (Number(item.unitPrice) || 0) * (Number(item.quantity) || 1);
 }
 
 interface StripeElementsRef {
@@ -292,10 +309,7 @@ export default function CheckoutPage() {
     };
   }, [clientSecret]);
 
-  const subtotal = cartItems.reduce((sum, i) => {
-    if (i.subtotal != null) return sum + Number(i.subtotal);
-    return sum + (Number(i.unitPrice) || 0) * (Number(i.quantity) || 1);
-  }, 0);
+  const subtotal = cartItems.reduce((sum, i) => sum + checkoutItemLineSubtotal(i), 0);
   const shipping = cartItems.reduce(
     (sum, i) => sum + shippingAmountForService(shippingRates, i.shippingService),
     0
@@ -661,6 +675,34 @@ export default function CheckoutPage() {
 
               <div>
                 <h2 className="text-lg font-bold text-gray-900 mb-4">Order Summary</h2>
+                <div className="mb-4 space-y-3 border-b border-gray-200 pb-4">
+                  {cartItems.map((item, idx) => {
+                    const name = item.productName ?? item.product_name ?? "Product";
+                    const w = Number(item.width ?? 0);
+                    const h = Number(item.height ?? 0);
+                    const pl =
+                      typeof item.print_size_label === "string" ? item.print_size_label.trim() : "";
+                    const sizeLine =
+                      pl || (w > 0 && h > 0) ? (pl || `${w}" × ${h}"`) : "—";
+                    const lineSub = checkoutItemLineSubtotal(item);
+                    return (
+                      <div
+                        key={String(item.id ?? idx)}
+                        className="flex flex-wrap items-start justify-between gap-2 border-b border-gray-100 pb-3 last:border-0 last:pb-0"
+                      >
+                        <div className="min-w-0 flex-1">
+                          <p className="font-medium text-gray-900">{name}</p>
+                          <p className="text-sm text-gray-600">
+                            Size: <span className="tabular-nums text-gray-800">{sizeLine}</span>
+                          </p>
+                        </div>
+                        <p className="shrink-0 text-sm font-semibold tabular-nums text-gray-900">
+                          ${lineSub.toFixed(2)}
+                        </p>
+                      </div>
+                    );
+                  })}
+                </div>
                 <div className="space-y-2 mb-4">
                   <div className="flex justify-between text-gray-700">
                     <span>Subtotal:</span>

@@ -46,9 +46,37 @@ interface Product {
   dimensions?: string;
   sizes?: string[];
   material?: string;
-  price_per_sqft?: number;
+  /** API may send DECIMAL as string */
+  price_per_sqft?: number | string;
   min_charge?: number;
+  pricing_mode?: "fixed" | "area";
+  size_mode?: "predefined" | "custom";
+  base_unit?: "inch";
+  min_width?: number | null;
+  max_width?: number | null;
+  min_height?: number | null;
+  max_height?: number | null;
+  size_options?: Array<{
+    id: number;
+    label: string;
+    width: number;
+    height: number;
+    unit_price: number | null;
+    is_default?: boolean;
+  }>;
   properties?: ProductProperty[];
+}
+
+interface PreviewPricing {
+  unitPrice: number;
+  width: number;
+  height: number;
+  areaSqft: number;
+  pricing_mode: "fixed" | "area";
+  size_mode: "predefined" | "custom";
+  sizeOptionId: number | null;
+  sizeOptionLabel: string | null;
+  minApplied: boolean;
 }
 
 function normalizeProductGalleryImages(product: Product | null): string[] {
@@ -60,6 +88,28 @@ function normalizeProductGalleryImages(product: Product | null): string[] {
   const raw = product.image_url || product.image;
   if (raw) return [String(raw).trim()];
   return [];
+}
+
+/** Same parsing as product listing cards (`Products.tsx`): `price` wins over `price_per_sqft`. */
+function parseProductMoney(value: string | number | null | undefined): number | null {
+  if (value == null || value === "") return null;
+  if (typeof value === "number" && !Number.isNaN(value)) return value;
+  const n = parseFloat(String(value).trim().replace(/[$,\s]/g, ""));
+  return Number.isNaN(n) ? null : n;
+}
+
+/** Align with storefront listing when `pricing_mode` is missing or stale in the payload. */
+function inferPricingModeForProduct(product: Product | null): "fixed" | "area" {
+  if (!product) return "fixed";
+  const explicit = String(product.pricing_mode || "").trim().toLowerCase();
+  if (explicit === "fixed" || explicit === "area") return explicit;
+  const sizeMode = String(product.size_mode || "custom").toLowerCase();
+  if (sizeMode === "predefined") return "fixed";
+  const unit = parseProductMoney(product.price);
+  if (unit != null) return "fixed";
+  const ppsf = Number(product.price_per_sqft);
+  if (Number.isFinite(ppsf) && ppsf > 0) return "area";
+  return "fixed";
 }
 
 interface SavedAddress {
@@ -173,6 +223,8 @@ function ProductDetailContent() {
   const [addingToCart, setAddingToCart] = useState(false);
   const [width, setWidth] = useState("0");
   const [height, setHeight] = useState("0");
+  const [previewPricing, setPreviewPricing] = useState<PreviewPricing | null>(null);
+  const [previewLoading, setPreviewLoading] = useState(false);
   const [jobs, setJobs] = useState<ProductJobRow[]>(() => [
     { id: newProductJobRowId(), jobName: "", quantity: "1" },
   ]);
@@ -218,9 +270,12 @@ function ProductDetailContent() {
     setJobs((prev) => prev.map((j) => (j.id === id ? { ...j, ...patch } : j)));
   };
 
-  // Default pricing values (can be overridden by product data)
-  const pricePerSqFt = product?.price_per_sqft || 3.63;
-  const minCharge = product?.min_charge || 8.0;
+  // Default pricing values (can be overridden by product data); DECIMAL often arrives as string.
+  const pricePerSqFtNum = Number(product?.price_per_sqft);
+  const pricePerSqFt =
+    Number.isFinite(pricePerSqFtNum) && pricePerSqFtNum > 0 ? pricePerSqFtNum : 3.63;
+  const minChargeNum = Number(product?.min_charge);
+  const minCharge = Number.isFinite(minChargeNum) && minChargeNum >= 0 ? minChargeNum : 8.0;
   const sameDayFee = 8.0;
 
   // Fetch product data - Reset and fetch when productId changes
@@ -232,7 +287,6 @@ function ProductDetailContent() {
         fetchedProductForRef.current = null;
         return;
       }
-      if (fetchedProductForRef.current === String(productId)) return;
       fetchedProductForRef.current = String(productId);
 
       try {
@@ -283,6 +337,11 @@ function ProductDetailContent() {
     setSelectedProductImageIndex(0);
     setSelectedSubcategory(null);
   }, [productId]);
+
+  useEffect(() => {
+    if (!product) return;
+    setPreviewPricing(null);
+  }, [product]);
 
   useEffect(() => {
     let cancelled = false;
@@ -417,12 +476,52 @@ function ProductDetailContent() {
     fetchSubcategoryProducts();
   }, [selectedSubcategory, product?.category_slug, productId]);
 
-  // Calculate area in square feet (shared by all jobs on this configuration)
-  const widthInches = parseFloat(width) || 0;
-  const heightInches = parseFloat(height) || 0;
-  const areaSqFt = (widthInches * heightInches) / 144;
-  const basePrice = Math.max(areaSqFt * pricePerSqFt, minCharge);
-  const unitPrice = basePrice;
+  useEffect(() => {
+    if (!productId || !product) return;
+    const widthInches = parseFloat(width) || 0;
+    const heightInches = parseFloat(height) || 0;
+    if (widthInches <= 0 || heightInches <= 0) {
+      setPreviewPricing(null);
+      return;
+    }
+    let cancelled = false;
+    const timer = setTimeout(async () => {
+      try {
+        setPreviewLoading(true);
+        const response = await productsAPI.previewPrice(String(productId), {
+          width: widthInches,
+          height: heightInches,
+        });
+        if (!cancelled && response?.pricing) {
+          setPreviewPricing(response.pricing);
+        }
+      } catch {
+        if (!cancelled) setPreviewPricing(null);
+      } finally {
+        if (!cancelled) setPreviewLoading(false);
+      }
+    }, 250);
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
+  }, [productId, product, width, height]);
+
+  // Calculate displayed pricing (server preview preferred, fallback mirrors product mode)
+  const widthInches = previewPricing?.width ?? (parseFloat(width) || 0);
+  const heightInches = previewPricing?.height ?? (parseFloat(height) || 0);
+  const areaSqFt = previewPricing?.areaSqft ?? ((widthInches * heightInches) / 144);
+  const productPricingMode = inferPricingModeForProduct(product ?? null);
+  const fallbackFixedFromOption = null;
+  const listFixedUnit = parseProductMoney(product?.price);
+  const fallbackFixedFromProduct = listFixedUnit != null ? listFixedUnit : 0;
+  const fallbackAreaPrice = Math.max(areaSqFt * pricePerSqFt, minCharge);
+  const fallbackPrice =
+    productPricingMode === "fixed"
+      ? (fallbackFixedFromOption != null ? fallbackFixedFromOption : fallbackFixedFromProduct)
+      : fallbackAreaPrice;
+  const unitPrice = previewPricing?.unitPrice ?? fallbackPrice;
+  const displayPricingMode: "fixed" | "area" = previewPricing?.pricing_mode ?? productPricingMode;
   const jobLines = jobs.map((j) => {
     const qtyNum = Math.max(0, Math.floor(parseFloat(j.quantity) || 0));
     return {
@@ -477,18 +576,18 @@ function ProductDetailContent() {
 
       const jobsPayload = jobs.map((j) => {
         const q = Math.max(1, parseInt(j.quantity, 10) || 1);
-        const up = parseFloat(unitPrice.toFixed(2));
+        const up = unitPrice;
         return {
           jobName: j.jobName.trim(),
           quantity: q,
           unitPrice: up,
-          lineSubtotal: parseFloat((up * q).toFixed(2)),
+          lineSubtotal: up * q,
         };
       });
       const totalQty = jobsPayload.reduce((s, j) => s + j.quantity, 0);
       const subtotalNum = jobsPayload.reduce((s, j) => s + j.lineSubtotal, 0);
-      const shippingNum = parseFloat(shippingCost.toFixed(2));
-      const totalNum = parseFloat((subtotalNum + shippingNum).toFixed(2));
+      const shippingNum = shippingCost;
+      const totalNum = subtotalNum + shippingNum;
       const legacyJobName =
         jobsPayload.length === 1
           ? jobsPayload[0].jobName
@@ -509,7 +608,7 @@ function ProductDetailContent() {
         productImage: productImageForCart,
         width: widthInches,
         height: heightInches,
-        areaSqFt: parseFloat(areaSqFt.toFixed(2)),
+        areaSqFt: areaSqFt,
         jobs: jobsPayload,
         quantity: totalQty,
         jobName: legacyJobName,
@@ -524,13 +623,14 @@ function ProductDetailContent() {
         reinforcedStrip: reinforcedStrip,
         carryBag: carryBag,
         sandbag: sandbag,
-        unitPrice: parseFloat(unitPrice.toFixed(2)),
+        unitPrice: unitPrice,
         subtotal: subtotalNum,
         shippingCost: shippingNum,
         total: totalNum,
         pricePerSqFt: pricePerSqFt,
         minCharge: minCharge,
         material: productMaterial,
+        pricing_snapshot: previewPricing ?? undefined,
         timestamp: new Date().toISOString()
       };
 
@@ -846,14 +946,32 @@ function ProductDetailContent() {
 
             {/* Price */}
             <div className="mb-6">
-                {width && height && parseFloat(width) > 0 && parseFloat(height) > 0 ? (
+                {widthInches > 0 && heightInches > 0 ? (
                   <div>
                     <p className="text-lg font-semibold text-gray-900">
-                      ${basePrice.toFixed(2)}
+                      ${unitPrice.toFixed(2)}
                     </p>
-                    <p className="text-sm text-gray-600 mt-1">
-                      Based on {width}" × {height}" ({areaSqFt.toFixed(2)} sq ft)
-                    </p>
+                    {displayPricingMode === "area" ? (
+                      <>
+                        <p className="text-sm text-gray-600 mt-1">
+                          Based on {widthInches}" × {heightInches}" ({areaSqFt.toFixed(4)} sq ft)
+                        </p>
+                        <p className="text-sm text-gray-600 mt-1">
+                          Size in feet: {(widthInches / 12).toFixed(2)} ft × {(heightInches / 12).toFixed(2)} ft
+                        </p>
+                      </>
+                    ) : (
+                      <p className="text-sm text-gray-600 mt-1">
+                        Size: {widthInches}" × {heightInches}" ({(widthInches / 12).toFixed(2)} ft ×{" "}
+                        {(heightInches / 12).toFixed(2)} ft)
+                      </p>
+                    )}
+                    {previewPricing?.minApplied ? (
+                      <p className="text-xs text-amber-700 mt-1">Minimum charge applied.</p>
+                    ) : null}
+                    {previewLoading ? (
+                      <p className="text-xs text-gray-500 mt-1">Updating live quote…</p>
+                    ) : null}
                   </div>
                 ) : null}
             </div>
@@ -952,7 +1070,7 @@ function ProductDetailContent() {
                 </select>
               </div>
             </div> */}
-            {/* Custom Size */}
+            {/* Size — width & height (inches) */}
             <div className="mb-6 p-4 border border-gray-200 rounded-lg">
               <div className="grid grid-cols-2 gap-4 mb-4">
                 <div>
@@ -1024,10 +1142,11 @@ function ProductDetailContent() {
                         />
                       </div>
                       <div className="shrink-0">
-                        <label className="block text-sm font-medium text-gray-700 mb-2">Price</label>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">Line total</label>
                         <div
                           className="inline-flex max-w-full min-h-[42px] items-center overflow-x-auto whitespace-nowrap rounded-lg border border-gray-300 bg-gray-50 px-3 py-2 text-black tabular-nums [scrollbar-width:thin]"
                           aria-readonly="true"
+                          title="Based on unit price × quantity"
                         >
                           ${linePrice.toFixed(2)}
                         </div>
@@ -1485,6 +1604,8 @@ function ProductDetailContent() {
             ) : (
               <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
                 {relatedProducts.map((relatedProduct) => {
+                  const relatedPpsf = Number(relatedProduct.price_per_sqft);
+                  const hasRelatedPpsf = Number.isFinite(relatedPpsf) && relatedPpsf > 0;
                   const handleSelectProduct = (e?: React.MouseEvent) => {
                     if (e) {
                       e.preventDefault();
@@ -1569,8 +1690,8 @@ function ProductDetailContent() {
                         <div className="flex items-center justify-between">
                           {relatedProduct.price ? (
                             <p className="text-lg font-bold text-gray-900">${relatedProduct.price}</p>
-                          ) : relatedProduct.price_per_sqft ? (
-                            <p className="text-sm text-gray-700">${relatedProduct.price_per_sqft.toFixed(2)}/ft²</p>
+                          ) : hasRelatedPpsf ? (
+                            <p className="text-sm text-gray-700">Starting at ${relatedPpsf.toFixed(2)} per ft²</p>
                           ) : (
                             <p className="text-sm text-gray-700">Price on request</p>
                           )}

@@ -39,6 +39,14 @@ interface Product {
   price: number | null;
   price_per_sqft: number | null;
   min_charge: number | null;
+  pricing_mode?: "fixed" | "area" | null;
+  size_mode?: "predefined" | "custom" | null;
+  base_unit?: "inch" | null;
+  min_width?: number | null;
+  max_width?: number | null;
+  min_height?: number | null;
+  max_height?: number | null;
+  size_options?: Array<{ id?: number; label: string; width: number; height: number; unit_price: number | null; is_default?: boolean }> | null;
   material: string | null;
   image_url: string | null;
   /** Ordered photos; first is used for listings (`image_url`). */
@@ -86,6 +94,12 @@ export default function AdminProductsPage() {
   const [prodPrice, setProdPrice] = useState("");
   const [prodPricePerSqft, setProdPricePerSqft] = useState("");
   const [prodMinCharge, setProdMinCharge] = useState("");
+  const [prodPricingMode, setProdPricingMode] = useState<"" | "fixed" | "area">("");
+  const [prodBaseUnit, setProdBaseUnit] = useState<"inch">("inch");
+  const [prodMinWidth, setProdMinWidth] = useState("");
+  const [prodMaxWidth, setProdMaxWidth] = useState("");
+  const [prodMinHeight, setProdMinHeight] = useState("");
+  const [prodMaxHeight, setProdMaxHeight] = useState("");
   const [prodMaterial, setProdMaterial] = useState("");
   /** Ordered product photos; first is listing thumbnail. */
   const [prodGalleryUrls, setProdGalleryUrls] = useState<string[]>([]);
@@ -434,6 +448,10 @@ export default function AdminProductsPage() {
       showMsg("error", "Product name is required");
       return;
     }
+    if (prodPricingMode !== "fixed" && prodPricingMode !== "area") {
+      showMsg("error", "Please select a price type");
+      return;
+    }
     setSaving(true);
     try {
       const payload = {
@@ -442,9 +460,23 @@ export default function AdminProductsPage() {
         description: prodDescription.trim() || undefined,
         category_id: prodCategoryId === "" ? null : parseInt(prodCategoryId),
         subcategory: prodSubcategory.trim() || undefined,
-        price: prodPrice === "" ? null : parseFloat(prodPrice),
-        price_per_sqft: prodPricePerSqft === "" ? null : parseFloat(prodPricePerSqft),
+        price:
+          prodPricingMode === "fixed" ? (prodPrice === "" ? null : parseFloat(prodPrice)) : null,
+        price_per_sqft:
+          prodPricingMode === "area"
+            ? prodPricePerSqft === ""
+              ? null
+              : parseFloat(prodPricePerSqft)
+            : null,
         min_charge: prodMinCharge === "" ? null : parseFloat(prodMinCharge),
+        pricing_mode: prodPricingMode as "fixed" | "area",
+        size_mode: "custom" as const,
+        base_unit: prodBaseUnit,
+        min_width: prodMinWidth === "" ? null : parseFloat(prodMinWidth),
+        max_width: prodMaxWidth === "" ? null : parseFloat(prodMaxWidth),
+        min_height: prodMinHeight === "" ? null : parseFloat(prodMinHeight),
+        max_height: prodMaxHeight === "" ? null : parseFloat(prodMaxHeight),
+        size_options: [],
         material: prodMaterial.trim() || undefined,
         gallery_images: prodGalleryUrls,
         image_url: prodGalleryUrls[0]?.trim() || undefined,
@@ -469,6 +501,12 @@ export default function AdminProductsPage() {
       setProdPrice("");
       setProdPricePerSqft("");
       setProdMinCharge("");
+      setProdPricingMode("");
+      setProdBaseUnit("inch");
+      setProdMinWidth("");
+      setProdMaxWidth("");
+      setProdMinHeight("");
+      setProdMaxHeight("");
       setProdMaterial("");
       setProdGalleryUrls([]);
       setProdImageUrlInput("");
@@ -531,9 +569,18 @@ export default function AdminProductsPage() {
       setProdCategoryId("");
       setProdSubcategory(p.subcategory || "");
     }
-    setProdPrice(p.price != null ? String(p.price) : "");
-    setProdPricePerSqft(p.price_per_sqft != null ? String(p.price_per_sqft) : "");
     setProdMinCharge(p.min_charge != null ? String(p.min_charge) : "");
+    const pm = p.pricing_mode;
+    const isFixed = pm === "fixed";
+    const isArea = pm === "area";
+    setProdPricingMode(isFixed || isArea ? pm : "");
+    setProdPrice(isArea ? "" : p.price != null ? String(p.price) : "");
+    setProdPricePerSqft(isFixed ? "" : p.price_per_sqft != null ? String(p.price_per_sqft) : "");
+    setProdBaseUnit("inch");
+    setProdMinWidth(p.min_width != null ? String(p.min_width) : "");
+    setProdMaxWidth(p.max_width != null ? String(p.max_width) : "");
+    setProdMinHeight(p.min_height != null ? String(p.min_height) : "");
+    setProdMaxHeight(p.max_height != null ? String(p.max_height) : "");
     setProdMaterial(p.material || "");
     {
       const g = p.gallery_images;
@@ -573,6 +620,12 @@ export default function AdminProductsPage() {
     setProdPrice("");
     setProdPricePerSqft("");
     setProdMinCharge("");
+    setProdPricingMode("");
+    setProdBaseUnit("inch");
+    setProdMinWidth("");
+    setProdMaxWidth("");
+    setProdMinHeight("");
+    setProdMaxHeight("");
     setProdMaterial("");
     setProdGalleryUrls([]);
     setProdImageUrlInput("");
@@ -585,6 +638,8 @@ export default function AdminProductsPage() {
 
   const inputClass =
     "w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm shadow-sm outline-none transition focus:border-sky-400 focus:ring-2 focus:ring-sky-400/25";
+  const inputClassDisabled =
+    `${inputClass} disabled:cursor-not-allowed disabled:bg-slate-50 disabled:text-slate-400`;
   const selectClass =
     `${inputClass} disabled:cursor-not-allowed disabled:bg-slate-50 disabled:text-slate-400`;
 
@@ -814,13 +869,36 @@ export default function AdminProductsPage() {
                           </option>
                         ))}
                       </select>
+                      <select
+                        value={prodPricingMode}
+                        onChange={(e) => {
+                          const v = e.target.value as "" | "fixed" | "area";
+                          setProdPricingMode(v);
+                          if (v === "fixed") setProdPricePerSqft("");
+                          if (v === "area") setProdPrice("");
+                        }}
+                        className={selectClass}
+                        aria-label="Price type"
+                      >
+                        <option value="" disabled hidden>
+                          Price type
+                        </option>
+                        <option value="fixed">fixed</option>
+                        <option value="area">per square feet</option>
+                      </select>
                       <input
                         type="number"
                         step="0.01"
                         placeholder="Price"
                         value={prodPrice}
                         onChange={(e) => setProdPrice(e.target.value)}
-                        className={inputClass}
+                        className={inputClassDisabled}
+                        disabled={prodPricingMode === "area"}
+                        title={
+                          prodPricingMode === "area"
+                            ? "Not used for per square foot pricing"
+                            : undefined
+                        }
                       />
                       <input
                         type="number"
@@ -828,25 +906,69 @@ export default function AdminProductsPage() {
                         placeholder="Price per sq ft"
                         value={prodPricePerSqft}
                         onChange={(e) => setProdPricePerSqft(e.target.value)}
+                        className={inputClassDisabled}
+                        disabled={prodPricingMode === "fixed"}
+                        title={
+                          prodPricingMode === "fixed"
+                            ? "Not used for fixed pricing"
+                            : undefined
+                        }
+                      />
+                      <input
+                        type="number"
+                        step="0.01"
+                        placeholder="Min charge"
+                        value={prodMinCharge}
+                        onChange={(e) => setProdMinCharge(e.target.value)}
                         className={inputClass}
                       />
-                      <div className="md:col-span-2 grid grid-cols-1 gap-4 md:grid-cols-2">
-                        <input
-                          type="number"
-                          step="0.01"
-                          placeholder="Min charge"
-                          value={prodMinCharge}
-                          onChange={(e) => setProdMinCharge(e.target.value)}
-                          className={inputClass}
-                        />
-                        <input
-                          type="text"
-                          placeholder="Material"
-                          value={prodMaterial}
-                          onChange={(e) => setProdMaterial(e.target.value)}
-                          className={inputClass}
-                        />
-                        <div className="md:col-span-2 space-y-2">
+                      <input
+                        type="text"
+                        placeholder="Material"
+                        value={prodMaterial}
+                        onChange={(e) => setProdMaterial(e.target.value)}
+                        className={inputClass}
+                      />
+                      <input
+                        type="number"
+                        step="0.01"
+                        placeholder="Min width (inches)"
+                        value={prodMinWidth}
+                        onChange={(e) => setProdMinWidth(e.target.value)}
+                        className={inputClass}
+                      />
+                      <input
+                        type="number"
+                        step="0.01"
+                        placeholder="Max width (inches)"
+                        value={prodMaxWidth}
+                        onChange={(e) => setProdMaxWidth(e.target.value)}
+                        className={inputClass}
+                      />
+                      <input
+                        type="number"
+                        step="0.01"
+                        placeholder="Min height (inches)"
+                        value={prodMinHeight}
+                        onChange={(e) => setProdMinHeight(e.target.value)}
+                        className={inputClass}
+                      />
+                      <input
+                        type="number"
+                        step="0.01"
+                        placeholder="Max height (inches)"
+                        value={prodMaxHeight}
+                        onChange={(e) => setProdMaxHeight(e.target.value)}
+                        className={inputClass}
+                      />
+                      <input
+                        type="text"
+                        placeholder="SKU"
+                        value={prodSku}
+                        onChange={(e) => setProdSku(e.target.value)}
+                        className={inputClass}
+                      />
+                      <div className="md:col-span-2 space-y-2">
                           <p className="text-sm font-medium text-slate-700">Product photos</p>
                           <p className="text-xs text-slate-500">
                             Upload multiple images. The first photo is used on product listings and category grids; all photos appear on the product detail page.
@@ -942,14 +1064,6 @@ export default function AdminProductsPage() {
                             </ul>
                           ) : null}
                         </div>
-                        <input
-                          type="text"
-                          placeholder="SKU"
-                          value={prodSku}
-                          onChange={(e) => setProdSku(e.target.value)}
-                          className={`${inputClass} md:col-span-2 md:max-w-md`}
-                        />
-                      </div>
                       {/* <div className="flex items-center gap-6">
                         <label className="group flex cursor-pointer items-center gap-2 text-sm text-slate-700 transition-colors">
                           <div className="relative flex items-center justify-center">

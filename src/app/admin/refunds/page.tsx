@@ -3,8 +3,7 @@
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import Image from "next/image";
-import { ordersAPI } from "../../../utils/api";
+import { ordersAPI, getProductImageUrl } from "../../../utils/api";
 import AdminNavbar from "../../components/AdminNavbar";
 import { canAccessAdminPanel, isAuthenticated } from "../../../utils/roles";
 
@@ -69,7 +68,7 @@ export default function RefundsPage() {
             .map((order: any) => {
               const firstItem = order.items?.[0];
               const productName = firstItem?.product_name || order.order_number || "N/A";
-              const productImage = firstItem?.product_image || null;
+              const productImage = firstItem?.product_image || firstItem?.image_url || null;
               const productId = firstItem?.product_id?.toString() || null;
               return {
                 id: String(order.id),
@@ -181,13 +180,10 @@ export default function RefundsPage() {
                       <div className="flex items-center gap-3">
                         <div className="flex h-14 w-12 shrink-0 items-center justify-center overflow-hidden rounded-lg border border-slate-200 bg-slate-100">
                           {order.productImage ? (
-                            <Image
-                              src={order.productImage}
-                              alt={order.productName}
-                              width={48}
-                              height={56}
+                            <img
+                              src={getProductImageUrl(order.productImage)}
+                              alt=""
                               className="h-full w-full object-cover"
-                              unoptimized
                             />
                           ) : (
                             <span className="text-xs text-slate-400">—</span>

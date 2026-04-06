@@ -67,13 +67,24 @@ function getDisplayNameFromUser(user: any): string {
   return "";
 }
 
-/** Total units across cart lines (falls back to line count if quantities are missing). */
+/**
+ * Badge count for the cart icon.
+ * - One cart row = one card on /cart. For print jobs, `quantity` is often the sum of all job
+ *   quantities (e.g. 5 jobs × qty 1 → quantity 5), which inflated the badge vs. one card.
+ * - If the row has a `jobs` array (multi-job configuration), count that row as 1.
+ * - Otherwise use `quantity` (simple lines with a single line qty).
+ */
 function cartBadgeCount(items: unknown[]): number {
   if (!Array.isArray(items) || items.length === 0) return 0;
   let sum = 0;
   for (const raw of items) {
     const row = raw && typeof raw === "object" ? (raw as Record<string, unknown>) : null;
     if (!row) continue;
+    const jobs = row.jobs;
+    if (Array.isArray(jobs) && jobs.length > 0) {
+      sum += 1;
+      continue;
+    }
     const q = row.quantity;
     const n = q != null && q !== "" ? Number(q) : NaN;
     if (Number.isFinite(n) && n > 0) sum += n;
@@ -112,48 +123,19 @@ export default function Navbar() {
   const [isUserDropdownOpen, setIsUserDropdownOpen] = useState(false);
   const [isSearchOpen, setIsSearchOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
-  const [isLoggedIn, setIsLoggedIn] = useState(() => {
-    if (typeof window === "undefined") return false;
-    return localStorage.getItem("isLoggedIn") === "true";
-  });
-  const [userName, setUserName] = useState(() => {
-    if (typeof window === "undefined") return "";
-    const loggedIn = localStorage.getItem("isLoggedIn") === "true";
-    if (!loggedIn) return "";
-    const userStr = localStorage.getItem("user");
-    if (!userStr) return "";
-    try {
-      const user = JSON.parse(userStr);
-      return getDisplayNameFromUser(user);
-    } catch {
-      return "";
-    }
-  });
-  const [cartCount, setCartCount] = useState(() => {
-    if (typeof window === "undefined") return 0;
-    const cached = localStorage.getItem("cartCount");
-    const parsed = cached != null ? Number(cached) : NaN;
-    return Number.isFinite(parsed) && parsed >= 0 ? parsed : 0;
-  });
-  const [email, setEmail] = useState(() => {
-    if (typeof window !== 'undefined') {
-      return localStorage.getItem("registeredEmail") || "";
-    }
-    return "";
-  });
-  const [password, setPassword] = useState(() => {
-    if (typeof window !== 'undefined') {
-      return localStorage.getItem("registeredPassword") || "";
-    }
-    return "";
-  });
+  // SSR + first client render must match — never read localStorage in useState initializers.
+  const [isLoggedIn, setIsLoggedIn] = useState(false);
+  const [userName, setUserName] = useState("");
+  const [cartCount, setCartCount] = useState(0);
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
   const [loginError, setLoginError] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const userDropdownRef = useRef<HTMLDivElement>(null);
   const searchRef = useRef<HTMLDivElement>(null);
   const didInitialCartFetchRef = useRef(false);
   const loginCheckInvocationRef = useRef(0);
-  const [categories, setCategories] = useState<Category[]>(() => readCachedNavbarCategories());
+  const [categories, setCategories] = useState<Category[]>([]);
 
   // Cart count from API (JWT or guest X-Guest-Session-Id)
   const updateCartCount = async () => {
@@ -209,7 +191,14 @@ export default function Navbar() {
     checkLoginStatus();
     if (!effectiveSkipCartCountFetch && !didInitialCartFetchRef.current) {
       didInitialCartFetchRef.current = true;
-      updateCartCount(); // Initial cart count
+      try {
+        const cached = localStorage.getItem("cartCount");
+        const parsed = cached != null ? Number(cached) : NaN;
+        if (Number.isFinite(parsed) && parsed >= 0) setCartCount(parsed);
+      } catch {
+        /* ignore */
+      }
+      void updateCartCount();
     }
 
     // Listen for custom login status change event
@@ -245,6 +234,10 @@ export default function Navbar() {
   }, [effectiveSkipCartCountFetch]);
 
   useEffect(() => {
+    const cached = readCachedNavbarCategories();
+    if (cached.length > 0) {
+      setCategories(cached);
+    }
     let mounted = true;
     const loadCategories = async () => {
       try {
@@ -262,7 +255,7 @@ export default function Navbar() {
         setCategories((prev) => (prev.length > 0 ? prev : []));
       }
     };
-    loadCategories();
+    void loadCategories();
     return () => {
       mounted = false;
     };

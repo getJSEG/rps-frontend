@@ -42,6 +42,7 @@ interface CartItem {
   userEmail?: string;
   userName?: string;
   userId?: number;
+  print_size_label?: string;
   [key: string]: any;
 }
 
@@ -246,13 +247,19 @@ export default function CartPage() {
                             Added {item.timestamp ? new Date(item.timestamp).toLocaleString('en-US', { weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }) : '—'}
                           </p>
                         </div>
-                        {item.width > 0 && item.height > 0 && (
+                        {(item.width > 0 && item.height > 0) || (item.print_size_label && String(item.print_size_label).trim()) ? (
                           <div className="shrink-0 rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-right">
                             <p className="text-[10px] font-semibold uppercase tracking-wide text-gray-500">Print size</p>
-                            <p className="text-sm font-semibold tabular-nums text-gray-900">{item.width}" × {item.height}"</p>
-                            <p className="text-xs text-gray-500">{item.areaSqFt.toFixed(2)} sq ft</p>
+                            <p className="text-sm font-semibold tabular-nums text-gray-900">
+                              {typeof item.print_size_label === "string" && item.print_size_label.trim()
+                                ? item.print_size_label.trim()
+                                : `${item.width}" × ${item.height}"`}
+                            </p>
+                            {item.width > 0 && item.height > 0 ? (
+                              <p className="text-xs text-gray-500">{Number(item.areaSqFt || 0).toFixed(2)} sq ft</p>
+                            ) : null}
                           </div>
-                        )}
+                        ) : null}
                       </div>
 
                       <div className="text-sm text-gray-600">
@@ -270,9 +277,7 @@ export default function CartPage() {
                                     <span className="font-medium text-gray-900">{j.jobName || `Job ${ji + 1}`}</span>
                                     <span className="text-gray-600">
                                       Qty <span className="tabular-nums font-medium text-gray-800">{j.quantity}</span>
-                                      {item.jobs!.length > 1 ? (
-                                        <span className="ml-2 tabular-nums font-medium text-gray-900">${lineAmt.toFixed(2)}</span>
-                                      ) : null}
+                                      <span className="ml-2 tabular-nums font-medium text-gray-900">${lineAmt.toFixed(2)}</span>
                                     </span>
                                   </li>
                                 );

@@ -3,10 +3,9 @@
 import { useState, useEffect } from "react";
 import { useRouter, useParams } from "next/navigation";
 import Link from "next/link";
-import Image from "next/image";
 import AdminNavbar from "../../../components/AdminNavbar";
 import { canAccessAdminPanel, isAuthenticated } from "../../../../utils/roles";
-import { ordersAPI } from "../../../../utils/api";
+import { ordersAPI, getProductImageUrl } from "../../../../utils/api";
 import { ADMIN_ORDER_STATUS_OPTIONS } from "../../../../utils/orderStatuses";
 
 interface CartItemType {
@@ -244,13 +243,10 @@ export default function CartItemDetailPage() {
           <div className="flex flex-wrap gap-6">
             <div className="flex h-40 w-32 shrink-0 items-center justify-center overflow-hidden rounded-xl border border-slate-200 bg-slate-100">
               {item.productImage ? (
-                <Image
-                  src={item.productImage}
-                  alt={productName}
-                  width={128}
-                  height={160}
-                  className="w-full h-full object-cover"
-                  unoptimized
+                <img
+                  src={getProductImageUrl(item.productImage)}
+                  alt=""
+                  className="h-full w-full object-cover"
                 />
               ) : (
                 <div className="w-full h-full bg-red-600 flex flex-col items-center justify-center text-white p-2">

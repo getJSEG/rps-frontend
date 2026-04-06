@@ -3,8 +3,7 @@
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import Image from "next/image";
-import { ordersAPI, productsAPI, cartAPI } from "../../utils/api";
+import { ordersAPI, productsAPI, cartAPI, getProductImageUrl } from "../../utils/api";
 import AdminNavbar from "./AdminNavbar";
 import { canAccessAdminPanel, isAuthenticated, getUserRole } from "../../utils/roles";
 import { FiTrash2 } from "react-icons/fi";
@@ -299,9 +298,15 @@ export default function AdminPanel() {
           uniqueProductIds.map(async (productId) => {
             try {
               const response = await productsAPI.getById(productId as string);
-              if (response.product && response.product.image_url) {
-                imageMap[productId as string] = response.product.image_url;
+              const p = response?.product;
+              if (!p) return;
+              const gallery = p.gallery_images;
+              let fromGallery = "";
+              if (Array.isArray(gallery) && gallery.length > 0) {
+                fromGallery = String(gallery[0] ?? "").trim();
               }
+              const raw = (p.image_url && String(p.image_url).trim()) || fromGallery;
+              if (raw) imageMap[productId as string] = raw;
             } catch (error) {
               console.error(`Error fetching product ${productId}:`, error);
             }
@@ -546,15 +551,13 @@ export default function AdminPanel() {
                               }}
                             >
                               {(() => {
-                                const imageUrl = order.productImage || (order.productId && productImages[order.productId]);
+                                const raw = order.productImage || (order.productId && productImages[order.productId]);
+                                const imageUrl = raw ? getProductImageUrl(raw) : "";
                                 return imageUrl ? (
-                                  <Image
+                                  <img
                                     src={imageUrl}
-                                    alt={order.productName}
-                                    width={48}
-                                    height={56}
-                                    className="w-full h-full object-cover"
-                                    unoptimized
+                                    alt=""
+                                    className="h-full w-full object-cover"
                                   />
                                 ) : (
                                 <div className="w-12 h-14 bg-yellow-200 border border-yellow-300 rounded flex flex-col items-center justify-center relative overflow-hidden">
