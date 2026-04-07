@@ -13,8 +13,11 @@ import {
   cartAPI,
   addressesAPI,
   shippingRatesAPI,
-  shippingAmountForService,
+  storePickupAddressesAPI,
+  shippingAmountForMethod,
+  type ShippingMethod,
   type ShippingRates,
+  type StorePickupAddress,
 } from "../../../utils/api";
 import { isAuthenticated } from "../../../utils/roles";
 import { SITE_TAB_TITLE, pageTitle } from "../../../utils/tabTitle";
@@ -234,8 +237,11 @@ function ProductDetailContent() {
   const [sandbag, setSandbag] = useState("No");
   const [fullWall, setFullWall] = useState("1 Full Wall");
   const [halfWall, setHalfWall] = useState("1 Half Wall (Single Sided)");
-  const [shipping, setShipping] = useState("blind-drop");
+  const [shippingMode, setShippingMode] = useState<"blind_drop_ship" | "store_pickup">("blind_drop_ship");
   const [shippingService, setShippingService] = useState("Ground");
+  const [shippingMethods, setShippingMethods] = useState<ShippingMethod[]>([]);
+  const [storePickupAddresses, setStorePickupAddresses] = useState<StorePickupAddress[]>([]);
+  const [storePickupAddressId, setStorePickupAddressId] = useState("");
   const [activeTab, setActiveTab] = useState("description");
   const [selectedImageIndex, setSelectedImageIndex] = useState(0);
   const [selectedProductImageIndex, setSelectedProductImageIndex] = useState(0);
@@ -349,14 +355,48 @@ function ProductDetailContent() {
       try {
         const res = await shippingRatesAPI.get();
         if (!cancelled && res?.rates) setShippingRates(res.rates);
+        if (!cancelled) {
+          const methods = Array.isArray(res?.methods) ? res.methods : [];
+          setShippingMethods(methods);
+          if (methods.length > 0) {
+            setShippingService((prev) =>
+              methods.some((m) => String(m.name).trim().toLowerCase() === String(prev).trim().toLowerCase())
+                ? prev
+                : methods[0].name
+            );
+          }
+        }
       } catch {
-        if (!cancelled) setShippingRates(null);
+        if (!cancelled) {
+          setShippingRates(null);
+          setShippingMethods([]);
+        }
       }
     })();
     return () => {
       cancelled = true;
     };
   }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await storePickupAddressesAPI.getPublic();
+        if (!cancelled && Array.isArray(res?.addresses)) {
+          setStorePickupAddresses(res.addresses);
+          if (res.addresses[0] && !storePickupAddressId) {
+            setStorePickupAddressId(String(res.addresses[0].id));
+          }
+        }
+      } catch {
+        if (!cancelled) setStorePickupAddresses([]);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [storePickupAddressId]);
 
   useEffect(() => {
     if (!jobArtworkInfoOpen) return;
@@ -531,7 +571,10 @@ function ProductDetailContent() {
     };
   });
   const subtotal = jobLines.reduce((sum, line) => sum + line.lineSubtotal, 0);
-  const shippingCost = shippingAmountForService(shippingRates, shippingService);
+  const shippingCost =
+    shippingMode === "store_pickup"
+      ? 0
+      : shippingAmountForMethod(shippingMethods, shippingService, shippingRates);
   const total = subtotal + shippingCost;
 
   // Handle Add to Cart (logged-in or guest via X-Guest-Session-Id from api.ts)
@@ -613,8 +656,13 @@ function ProductDetailContent() {
         quantity: totalQty,
         jobName: legacyJobName,
         turnaround: "free-same-day",
-        shipping: shipping,
+        shippingMode,
+        shipping: shippingMode === "store_pickup" ? "store-pickup" : "blind-drop",
         shippingService: shippingService,
+        storePickupAddressId:
+          shippingMode === "store_pickup" && storePickupAddressId
+            ? Number(storePickupAddressId)
+            : undefined,
         emailProof: false,
         fullWall: fullWallQty,
         halfWall: halfWallQty,
@@ -1204,7 +1252,7 @@ function ProductDetailContent() {
                 <div className="space-y-3" />
               </div>
 
-              {shippingUserLoggedIn ? (
+              {shippingUserLoggedIn && shippingMode !== "store_pickup" ? (
                 /* Ship to — from address book */
                 <div className="mb-4 p-3 bg-gray-50 rounded-lg relative min-w-0 max-w-full">
                   <div className="flex justify-between items-start gap-2 mb-2">
@@ -1243,30 +1291,78 @@ function ProductDetailContent() {
                     </div>
                   )}
                 </div>
-              ) : (
+              ) : shippingMode !== "store_pickup" ? (
                 <div className="mb-4 rounded-lg border border-dashed border-gray-200 bg-gray-50/80 px-3 py-3">
                   <p className="text-sm text-gray-700">
                     You’ll enter your full shipping address at checkout. Choose a service below to see the estimated
                     shipping charge for this item.
                   </p>
                 </div>
-              )}
+              ) : null}
 
-              {/* Shipping Service */}
               <div className="mb-4">
-                <label className="block text-sm font-medium text-gray-700 mb-2">Shipping Service</label>
-                <div className="flex items-center gap-2">
-                  <select
-                    value={shippingService}
-                    onChange={(e) => setShippingService(e.target.value)}
-                    className="flex-1 px-4 py-2 border border-gray-300 rounded-lg  text-black focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  >
-                    <option>Ground</option>
-                    <option>Express</option>
-                    <option>Overnight</option>
-                  </select>
-                  <span className="text-gray-900 font-medium">${shippingCost.toFixed(2)}</span>
+                <div className="mb-3 flex flex-wrap items-center gap-5">
+                  <label className="inline-flex items-center gap-2 text-sm text-gray-900">
+                    <input
+                      type="radio"
+                      name="shipping-mode"
+                      checked={shippingMode === "blind_drop_ship"}
+                      onChange={() => setShippingMode("blind_drop_ship")}
+                    />
+                    Blind Drop Ship
+                  </label>
+                  <label className="inline-flex items-center gap-2 text-sm text-gray-900">
+                    <input
+                      type="radio"
+                      name="shipping-mode"
+                      checked={shippingMode === "store_pickup"}
+                      onChange={() => setShippingMode("store_pickup")}
+                    />
+                    Store Pickup
+                  </label>
                 </div>
+                {shippingMode === "blind_drop_ship" ? (
+                  <>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">Shipping Service</label>
+                    <div className="flex items-center gap-2">
+                      <select
+                        value={shippingService}
+                        onChange={(e) => setShippingService(e.target.value)}
+                        className="flex-1 px-4 py-2 border border-gray-300 rounded-lg  text-black focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      >
+                        {shippingMethods.length > 0 ? (
+                          shippingMethods.map((m) => (
+                            <option key={m.id} value={m.name}>
+                              {m.name}
+                            </option>
+                          ))
+                        ) : (
+                          <>
+                            <option>Ground</option>
+                            <option>Express</option>
+                            <option>Overnight</option>
+                          </>
+                        )}
+                      </select>
+                      <span className="text-gray-900 font-medium">${shippingCost.toFixed(2)}</span>
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">Pickup Address</label>
+                    <select
+                      value={storePickupAddressId}
+                      onChange={(e) => setStorePickupAddressId(e.target.value)}
+                      className="w-full px-4 py-2 border border-gray-300 rounded-lg text-black focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    >
+                      {storePickupAddresses.map((a) => (
+                        <option key={a.id} value={a.id}>
+                          {a.label} - {a.city}, {a.state}
+                        </option>
+                      ))}
+                    </select>
+                  </>
+                )}
               </div>
 
               {/* Estimated Delivery */}
@@ -1284,10 +1380,12 @@ function ProductDetailContent() {
                 <span className="text-gray-700">Subtotal</span>
                 <span className="text-gray-900 font-medium">${subtotal.toFixed(2)}</span>
               </div>
-              <div className="flex justify-between mb-2">
-                <span className="text-gray-700">Shipping ({shippingService})</span>
-                <span className="text-gray-900 font-medium">${shippingCost.toFixed(2)}</span>
-              </div>
+              {shippingMode === "blind_drop_ship" ? (
+                <div className="flex justify-between mb-2">
+                  <span className="text-gray-700">Shipping ({shippingService})</span>
+                  <span className="text-gray-900 font-medium">${shippingCost.toFixed(2)}</span>
+                </div>
+              ) : null}
               <div className="flex justify-between pt-2 border-t border-gray-300">
                 <span className="text-gray-900 font-bold">Total</span>
                 <span className="text-gray-900 font-bold text-xl">${total.toFixed(2)}</span>

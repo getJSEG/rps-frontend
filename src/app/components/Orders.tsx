@@ -72,6 +72,7 @@ type OrderRow = {
   billing_country?: string | null;
   shipping_method?: string | null;
   shipping_charge?: number | string | null;
+  shipping_mode?: string | null;
 };
 
 function parseGuestCheckout(raw: OrderRow["guest_checkout"]): GuestCheckout | null {
@@ -135,6 +136,19 @@ function statusBadgeClass(status: string | null | undefined): string {
 }
 
 function shippingLines(order: OrderRow): string[] {
+  const mode = String(order.shipping_mode || "").toLowerCase();
+  if (mode === "store_pickup" || mode === "store-pickup") {
+    const gc = parseGuestCheckout(order.guest_checkout);
+    const sa = gc?.shippingAddress;
+    if (sa?.street_address) {
+      return [
+        sa.street_address,
+        sa.address_line2 || undefined,
+        [sa.city, sa.state, sa.postcode].filter(Boolean).join(", "),
+        sa.country || undefined,
+      ].filter(Boolean) as string[];
+    }
+  }
   if (order.shipping_street_address) {
     const lines = [
       order.shipping_street_address,
@@ -544,6 +558,7 @@ export default function Orders() {
               const bill = billingLines(order);
               const contact = contactLines(order);
               const shippingMethodLabel = order.shipping_method?.trim() || null;
+              const isStorePickup = String(order.shipping_mode || "").toLowerCase() === "store_pickup";
 
               return (
                 <li
@@ -649,7 +664,7 @@ export default function Orders() {
                       )}
 
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        <AddressBlock title="Ship to" lines={ship} />
+                        <AddressBlock title={isStorePickup ? "Store pickup address" : "Ship to"} lines={ship} />
                         <AddressBlock title="Bill to" lines={bill.length > 0 ? bill : ship} />
                       </div>
 

@@ -13,8 +13,11 @@ import {
   authAPI,
   cardsAPI,
   shippingRatesAPI,
-  shippingAmountForService,
+  storePickupAddressesAPI,
+  shippingAmountForMethod,
+  type ShippingMethod,
   type ShippingRates,
+  type StorePickupAddress,
 } from "../../utils/api";
 import { isAuthenticated } from "../../utils/roles";
 
@@ -64,6 +67,8 @@ interface CartItem {
   unit_price?: number;
   subtotal?: number;
   shippingService?: string;
+  shippingMode?: string;
+  storePickupAddressId?: number;
   product_id?: string;
   jobName?: string;
   job_name?: string;
@@ -134,6 +139,8 @@ export default function CheckoutPage() {
   const [guestPhone, setGuestPhone] = useState("");
   const [savingAddress, setSavingAddress] = useState(false);
   const [shippingRates, setShippingRates] = useState<ShippingRates | null>(null);
+  const [shippingMethods, setShippingMethods] = useState<ShippingMethod[]>([]);
+  const [storePickupAddresses, setStorePickupAddresses] = useState<StorePickupAddress[]>([]);
 
   const loadCartFromApi = useCallback(async () => {
     setCartItems(await fetchCartItemsFromApi());
@@ -156,6 +163,21 @@ export default function CheckoutPage() {
       if (!cancelled) {
         setCartItems(items);
         setLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await storePickupAddressesAPI.getPublic();
+        if (!cancelled && Array.isArray(res?.addresses)) setStorePickupAddresses(res.addresses);
+      } catch {
+        if (!cancelled) setStorePickupAddresses([]);
       }
     })();
     return () => {
@@ -189,6 +211,7 @@ export default function CheckoutPage() {
       try {
         const res = await shippingRatesAPI.get();
         if (!c && res?.rates) setShippingRates(res.rates);
+        if (!c) setShippingMethods(Array.isArray(res?.methods) ? res.methods : []);
       } catch {
         /* defaults used */
       }
@@ -310,11 +333,24 @@ export default function CheckoutPage() {
   }, [clientSecret]);
 
   const subtotal = cartItems.reduce((sum, i) => sum + checkoutItemLineSubtotal(i), 0);
+  const shippingMode =
+    cartItems.length > 0 && cartItems.every((i) => String(i.shippingMode || "").toLowerCase() === "store_pickup")
+      ? "store_pickup"
+      : "blind_drop_ship";
   const shipping = cartItems.reduce(
-    (sum, i) => sum + shippingAmountForService(shippingRates, i.shippingService),
+    (sum, i) =>
+      shippingMode === "store_pickup"
+        ? 0
+        : sum + shippingAmountForMethod(shippingMethods, i.shippingService, shippingRates),
     0
   );
   const total = subtotal + shipping;
+  const selectedStorePickupId =
+    shippingMode === "store_pickup" ? Number(cartItems[0]?.storePickupAddressId || 0) : 0;
+  const selectedStorePickup =
+    shippingMode === "store_pickup"
+      ? storePickupAddresses.find((a) => Number(a.id) === selectedStorePickupId) || null
+      : null;
 
   const loggedInCheckout = isAuthenticated();
   const guestEmailOk = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(guestEmail.trim());
@@ -650,27 +686,29 @@ export default function CheckoutPage() {
                     </div>
                   )}
                 </div>
-                <div>
-                  <h2 className="text-lg font-bold text-gray-700 mb-3">Shipping Address</h2>
-                  {addressLoading ? (
-                    <p className="text-gray-500 text-sm">Loading...</p>
-                  ) : !isAuthenticated() ? (
-                    <p className="text-gray-500 text-sm">We ship to the address you entered under Billing.</p>
-                  ) : shippingAddress ? (
-                    <div className="p-4 bg-gray-50 rounded-lg border border-gray-200 text-gray-800 text-sm space-y-1">
-                      {shippingAddress.id === billingAddress?.id && <p className="text-gray-500 italic mb-1">Same as billing</p>}
-                      <p>{shippingAddress.street_address}</p>
-                      {shippingAddress.address_line2 && <p>{shippingAddress.address_line2}</p>}
-                      <p>{shippingAddress.city}, {shippingAddress.state} {shippingAddress.postcode}</p>
-                      <p>{shippingAddress.country}</p>
-                    </div>
-                  ) : (
-                    <p className="text-gray-500 text-sm">Same as billing (add a billing address above).</p>
-                  )}
-                  {isAuthenticated() && shippingAddress && (
-                    <Link href="/address-book" className="text-sm text-gray-600 hover:text-gray-700 mt-1 inline-block">Change</Link>
-                  )}
-                </div>
+                {shippingMode !== "store_pickup" && (
+                  <div>
+                    <h2 className="text-lg font-bold text-gray-700 mb-3">Shipping Address</h2>
+                    {addressLoading ? (
+                      <p className="text-gray-500 text-sm">Loading...</p>
+                    ) : !isAuthenticated() ? (
+                      <p className="text-gray-500 text-sm">We ship to the address you entered under Billing.</p>
+                    ) : shippingAddress ? (
+                      <div className="p-4 bg-gray-50 rounded-lg border border-gray-200 text-gray-800 text-sm space-y-1">
+                        {shippingAddress.id === billingAddress?.id && <p className="text-gray-500 italic mb-1">Same as billing</p>}
+                        <p>{shippingAddress.street_address}</p>
+                        {shippingAddress.address_line2 && <p>{shippingAddress.address_line2}</p>}
+                        <p>{shippingAddress.city}, {shippingAddress.state} {shippingAddress.postcode}</p>
+                        <p>{shippingAddress.country}</p>
+                      </div>
+                    ) : (
+                      <p className="text-gray-500 text-sm">Same as billing (add a billing address above).</p>
+                    )}
+                    {isAuthenticated() && shippingAddress && (
+                      <Link href="/address-book" className="text-sm text-gray-600 hover:text-gray-700 mt-1 inline-block">Change</Link>
+                    )}
+                  </div>
+                )}
               </div>
 
               <div>
@@ -708,10 +746,12 @@ export default function CheckoutPage() {
                     <span>Subtotal:</span>
                     <span>${subtotal.toFixed(2)}</span>
                   </div>
-                  <div className="flex justify-between text-gray-700">
-                    <span>Shipping:</span>
-                    <span>${shipping.toFixed(2)}</span>
-                  </div>
+                  {shippingMode !== "store_pickup" && (
+                    <div className="flex justify-between text-gray-700">
+                      <span>Shipping:</span>
+                      <span>${shipping.toFixed(2)}</span>
+                    </div>
+                  )}
                 </div>
                 <div className="border-t border-gray-300 pt-3 mb-4">
                   <div className="flex justify-between text-xl font-bold text-gray-700">

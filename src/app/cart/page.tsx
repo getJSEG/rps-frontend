@@ -10,7 +10,8 @@ import {
   getProductImageUrl,
   cartAPI,
   shippingRatesAPI,
-  shippingAmountForService,
+  shippingAmountForMethod,
+  type ShippingMethod,
   type ShippingRates,
 } from "../../utils/api";
 import { FiTrash2 } from "react-icons/fi";
@@ -37,6 +38,7 @@ interface CartItem {
   total: number;
   unitPrice?: number;
   subtotal?: number;
+  shippingMode?: string;
   shippingCost?: number;
   tax?: number;
   userEmail?: string;
@@ -44,6 +46,19 @@ interface CartItem {
   userId?: number;
   print_size_label?: string;
   [key: string]: any;
+}
+
+function isStorePickupMode(mode: unknown): boolean {
+  const m = String(mode || "").trim().toLowerCase();
+  return m === "store_pickup" || m === "store-pickup" || m === "store pickup";
+}
+
+function isStorePickupItem(item: CartItem): boolean {
+  return (
+    isStorePickupMode(item.shippingMode) ||
+    isStorePickupMode(item.shipping) ||
+    (item.storePickupAddressId != null && String(item.storePickupAddressId) !== "")
+  );
 }
 
 /** Subtotal for one cart row (sums job lines when `jobs` is set). */
@@ -66,6 +81,7 @@ export default function CartPage() {
   const [cartItems, setCartItems] = useState<CartItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [shippingRates, setShippingRates] = useState<ShippingRates | null>(null);
+  const [shippingMethods, setShippingMethods] = useState<ShippingMethod[]>([]);
   // const [isAdminView, setIsAdminView] = useState(false);
   const hasInitializedRef = useRef(false);
 
@@ -103,6 +119,7 @@ export default function CartPage() {
       try {
         const res = await shippingRatesAPI.get();
         if (!c && res?.rates) setShippingRates(res.rates);
+        if (!c) setShippingMethods(Array.isArray(res?.methods) ? res.methods : []);
       } catch {
         /* keep null → defaults in shippingAmountForService */
       }
@@ -144,9 +161,11 @@ export default function CartPage() {
         updatedItem.subtotal = unit * newQuantity;
       }
 
-      const ship = shippingAmountForService(shippingRates, updatedItem.shippingService);
-      updatedItem.shippingCost = ship;
-      updatedItem.total = (updatedItem.subtotal != null ? updatedItem.subtotal : cartItemLineSubtotal(updatedItem)) + ship;
+      const ship = shippingAmountForMethod(shippingMethods, updatedItem.shippingService, shippingRates);
+      const effectiveShip = isStorePickupItem(updatedItem) ? 0 : ship;
+      updatedItem.shippingCost = effectiveShip;
+      updatedItem.total =
+        (updatedItem.subtotal != null ? updatedItem.subtotal : cartItemLineSubtotal(updatedItem)) + effectiveShip;
 
       await cartAPI.update(itemId, updatedItem);
       setCartItems((prev) => prev.map((i) => (i.id === itemId ? updatedItem : i)));
@@ -158,7 +177,10 @@ export default function CartPage() {
 
   const calculateTotal = () => {
     return cartItems.reduce((sum, item) => {
-      return sum + cartItemLineSubtotal(item) + shippingAmountForService(shippingRates, item.shippingService);
+      const ship = isStorePickupItem(item)
+        ? 0
+        : shippingAmountForMethod(shippingMethods, item.shippingService, shippingRates);
+      return sum + cartItemLineSubtotal(item) + ship;
     }, 0);
   };
 
@@ -179,10 +201,12 @@ export default function CartPage() {
   }
 
   const subtotalSum = cartItems.reduce((sum, item) => sum + cartItemLineSubtotal(item), 0);
-  const shippingSum = cartItems.reduce(
-    (sum, item) => sum + shippingAmountForService(shippingRates, item.shippingService),
-    0
-  );
+  const shippingSum = cartItems.reduce((sum, item) => {
+    const ship = isStorePickupItem(item)
+      ? 0
+      : shippingAmountForMethod(shippingMethods, item.shippingService, shippingRates);
+    return sum + ship;
+  }, 0);
 
   return (
     <>
@@ -209,7 +233,9 @@ export default function CartPage() {
               {/* Product line cards */}
               <div className="mb-6 space-y-5">
                 {cartItems.map((item, index) => {
-                  const shipLine = shippingAmountForService(shippingRates, item.shippingService);
+                  const shipLine = isStorePickupItem(item)
+                    ? 0
+                    : shippingAmountForMethod(shippingMethods, item.shippingService, shippingRates);
                   return (
                   <div
                     key={item.id}
@@ -329,11 +355,17 @@ export default function CartPage() {
                     </div>
 
                     <div className="flex shrink-0 flex-col justify-center gap-3 border-t border-gray-200 pt-4 text-sm lg:w-52 lg:border-l lg:border-t-0 lg:pl-6 lg:pt-0">
-                      {item.shippingService && (
+                      {(item.shippingService || isStorePickupItem(item)) && (
                         <div>
-                          <p className="text-xs font-medium uppercase tracking-wide text-gray-500">Shipping</p>
+                          <p className="text-xs font-medium uppercase tracking-wide text-gray-500">
+                            {isStorePickupItem(item) ? "Pickup" : "Shipping"}
+                          </p>
                           <p className="mt-1 text-gray-800">
-                            <span className="font-medium">{item.shippingService}</span>
+                            <span className="font-medium">
+                              {isStorePickupItem(item)
+                                ? "Store Pickup"
+                                : item.shippingService}
+                            </span>
                             <span className="ml-1 font-semibold tabular-nums text-gray-900">${shipLine.toFixed(2)}</span>
                           </p>
                         </div>

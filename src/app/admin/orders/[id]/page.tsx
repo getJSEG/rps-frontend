@@ -76,6 +76,7 @@ interface Order {
   customer_phone?: string;
   shipping_method?: string | null;
   shipping_charge?: number;
+  shipping_mode?: string | null;
   /** Optional carrier / shipment ID (DB: order_tracking_id). */
   order_tracking_id?: string | null;
 }
@@ -294,6 +295,7 @@ export default function OrderDetails() {
         user_name: mergedUserName,
         customer_phone: mergedCustomerPhone,
         shipping_method: d.shipping_method != null ? String(d.shipping_method) : undefined,
+        shipping_mode: d.shipping_mode != null ? String(d.shipping_mode) : undefined,
         shipping_charge:
           d.shipping_charge != null && d.shipping_charge !== ""
             ? parseFloat(String(d.shipping_charge)) || 0
@@ -528,6 +530,7 @@ export default function OrderDetails() {
   const shipGuest = linesFromGuestAddr(guest?.shippingAddress);
   const billGuest = linesFromGuestAddr(guest?.billingAddress);
   const shipLines = shipDb.length ? shipDb : shipGuest;
+  const isStorePickup = String(order.shipping_mode || "").toLowerCase() === "store_pickup";
   const billLines = billDb.length ? billDb : billGuest.length ? billGuest : shipGuest;
 
   const hasDbAddressIds = Boolean(order.shipping_address_id || order.billing_address_id);
@@ -920,17 +923,21 @@ export default function OrderDetails() {
 
           {guestOnlyAddresses ? (
             <div className="border-t border-slate-200 p-5">
-              <h3 className="text-xs font-bold uppercase tracking-wide text-slate-500">Delivery address</h3>
+              <h3 className="text-xs font-bold uppercase tracking-wide text-slate-500">
+                {isStorePickup ? "Store pickup address" : "Delivery address"}
+              </h3>
               <p className="mt-1 text-xs text-slate-500">From guest checkout (not linked to saved address IDs)</p>
               <div className={`mt-4 grid gap-4 ${billingDiffersFromShipping ? "sm:grid-cols-2" : ""}`}>
-                <FormattedAddressCard title="Shipping" lines={shipGuest} />
+                <FormattedAddressCard title={isStorePickup ? "Store pickup address" : "Shipping"} lines={shipGuest} />
                 {billingDiffersFromShipping ? <FormattedAddressCard title="Billing" lines={billGuest} /> : null}
               </div>
             </div>
           ) : (
             <div className="grid gap-0 border-t border-slate-200 sm:grid-cols-2">
               <div className="border-b border-slate-200 p-5 sm:border-b-0 sm:border-r">
-                <h3 className="text-xs font-bold uppercase tracking-wide text-slate-500">Ship to</h3>
+                <h3 className="text-xs font-bold uppercase tracking-wide text-slate-500">
+                  {isStorePickup ? "Store pickup address" : "Ship to"}
+                </h3>
                 {shipLines.length ? (
                   <div className="mt-2 space-y-0.5 text-sm text-slate-800">
                     {shipLines.map((line, i) => (

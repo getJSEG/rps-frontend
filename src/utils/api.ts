@@ -55,6 +55,24 @@ export function getProductImageUrl(url: string | null | undefined): string {
 }
 
 export type ShippingRates = { ground: number; express: number; overnight: number };
+export type ShippingMethod = {
+  id: number;
+  name: string;
+  price: number;
+  is_active?: boolean;
+  sort_order?: number;
+};
+export type StorePickupAddress = {
+  id: number;
+  label: string;
+  street_address: string;
+  address_line2?: string | null;
+  city: string;
+  state: string;
+  postcode: string;
+  country: string;
+  is_active?: boolean;
+};
 
 const DEFAULT_SHIPPING_RATES: ShippingRates = { ground: 120.07, express: 0, overnight: 0 };
 
@@ -69,6 +87,18 @@ export function shippingAmountForService(
   if (s === "express") return Number(r.express) || 0;
   if (s === "overnight") return Number(r.overnight) || 0;
   return 0;
+}
+
+export function shippingAmountForMethod(
+  methods: ShippingMethod[] | null | undefined,
+  serviceLabel: string | undefined,
+  fallbackRates?: ShippingRates | null
+): number {
+  const label = String(serviceLabel || "").trim().toLowerCase();
+  const list = Array.isArray(methods) ? methods : [];
+  const matched = list.find((m) => String(m?.name || "").trim().toLowerCase() === label);
+  if (matched) return Number(matched.price) || 0;
+  return shippingAmountForService(fallbackRates, serviceLabel);
 }
 
 // Helper function for API calls
@@ -338,9 +368,28 @@ export const cartAPI = {
 };
 
 export const shippingRatesAPI = {
-  get: async (): Promise<{ rates: ShippingRates }> => apiCall('/shipping-rates'),
+  get: async (): Promise<{ rates: ShippingRates; methods?: ShippingMethod[] }> => apiCall('/shipping-rates'),
   update: async (rates: ShippingRates) =>
     apiCall('/shipping-rates', { method: 'PUT', body: JSON.stringify(rates) }),
+  getAdminMethods: async (): Promise<{ methods: ShippingMethod[] }> => apiCall('/shipping-rates/admin'),
+  createAdminMethod: async (data: { name: string; price: number; isActive?: boolean }) =>
+    apiCall('/shipping-rates/admin', { method: 'POST', body: JSON.stringify(data) }),
+  updateAdminMethod: async (
+    id: number | string,
+    data: { name?: string; price?: number; isActive?: boolean }
+  ) => apiCall(`/shipping-rates/admin/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
+  deleteAdminMethod: async (id: number | string) => apiCall(`/shipping-rates/admin/${id}`, { method: 'DELETE' }),
+};
+
+export const storePickupAddressesAPI = {
+  getPublic: async (): Promise<{ addresses: StorePickupAddress[] }> => apiCall('/store-pickup-addresses'),
+  getAdmin: async (): Promise<{ addresses: StorePickupAddress[] }> => apiCall('/store-pickup-addresses/admin'),
+  createAdmin: async (data: Record<string, unknown>) =>
+    apiCall('/store-pickup-addresses/admin', { method: 'POST', body: JSON.stringify(data) }),
+  updateAdmin: async (id: number | string, data: Record<string, unknown>) =>
+    apiCall(`/store-pickup-addresses/admin/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
+  deleteAdmin: async (id: number | string) =>
+    apiCall(`/store-pickup-addresses/admin/${id}`, { method: 'DELETE' }),
 };
 
 // Orders API
