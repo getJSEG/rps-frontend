@@ -342,6 +342,8 @@ export default function Orders() {
 
   const placed = searchParams.get("placed") === "1";
   const placedOrderId = searchParams.get("order");
+  const redirectStatus = (searchParams.get("redirect_status") || "").toLowerCase();
+  const paymentIntentId = searchParams.get("payment_intent");
 
   useEffect(() => {
     if (!placed || !placedOrderId) return;
@@ -355,6 +357,25 @@ export default function Orders() {
       } catch (_) {}
     })();
   }, [placed, placedOrderId]);
+
+  useEffect(() => {
+    if (!placed || !placedOrderId) return;
+    if (redirectStatus !== "succeeded") return;
+    if (!paymentIntentId) return;
+    const orderIdNum = Number(placedOrderId);
+    if (!Number.isFinite(orderIdNum) || orderIdNum <= 0) return;
+    const key = `stripe-confirmed-${orderIdNum}-${paymentIntentId}`;
+    if (typeof window !== "undefined" && sessionStorage.getItem(key)) return;
+
+    (async () => {
+      try {
+        await ordersAPI.confirmStripePayment(orderIdNum, paymentIntentId);
+        if (typeof window !== "undefined") sessionStorage.setItem(key, "1");
+      } catch (_) {
+        // Webhook may still update order shortly; keep UI usable even if fallback call fails.
+      }
+    })();
+  }, [placed, placedOrderId, redirectStatus, paymentIntentId]);
 
   useEffect(() => {
     if (placedOrderId && authReady && loggedIn) {

@@ -470,6 +470,14 @@ export const ordersAPI = {
       body: JSON.stringify(body),
     });
   },
+
+  /** Confirm succeeded Stripe PaymentIntent and mark order paid (fallback when webhook is delayed/missed). */
+  confirmStripePayment: async (orderId: number, paymentIntentId: string) => {
+    return apiCall('/orders/confirm-stripe-payment', {
+      method: 'POST',
+      body: JSON.stringify({ orderId, paymentIntentId }),
+    });
+  },
 };
 
 // Admin Employees API
