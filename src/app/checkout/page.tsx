@@ -406,7 +406,7 @@ export default function CheckoutPage() {
         } catch (_) {}
         localStorage.removeItem("cart");
         window.dispatchEvent(new Event("cartUpdated"));
-        router.push(`/orders?placed=1&order=${res.orderId}`);
+        router.push(`/upload?placed=1&order=${res.orderId}`);
         return;
       }
       if (!res.clientSecret) {
@@ -445,7 +445,7 @@ export default function CheckoutPage() {
       const { error: err } = await stripe.confirmPayment({
         elements: elementsRef.current.elements,
         confirmParams: {
-          return_url: `${typeof window !== "undefined" ? window.location.origin : ""}/orders?placed=1&order=${orderId}`,
+          return_url: `${typeof window !== "undefined" ? window.location.origin : ""}/upload?placed=1&order=${orderId}`,
         },
       });
       if (err) setError(err.message || "Payment failed");

@@ -496,6 +496,10 @@ export default function Navbar() {
                   )}
                 </div>
 
+                <Link href="/upload" className="text-gray-700 hover:text-gray-900 text-sm font-medium transition-colors">
+                  Upload
+                </Link>
+
                 <Link href="/orders" className="text-gray-700 hover:text-gray-900 text-sm font-medium transition-colors">
                   Orders
                 </Link>

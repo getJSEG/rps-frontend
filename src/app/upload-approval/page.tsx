@@ -1,12 +1,12 @@
 import Navbar from "../components/Navbar";
-import MyArtworks from "../components/MyArtworks";
+import UploadApproval from "../components/UploadApproval";
 import Footer from "../components/Footer";
 
-export default function MyArtworksPage() {
+export default function UploadApprovalPage() {
   return (
     <>
       <Navbar />
-      <MyArtworks />
+      <UploadApproval />
       <Footer />
     </>
   );
