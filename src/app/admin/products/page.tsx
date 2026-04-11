@@ -3,7 +3,6 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import Image from "next/image";
 import AdminNavbar from "../../components/AdminNavbar";
 import { canAccessAdminPanel, isAuthenticated } from "../../../utils/roles";
 import { getProductImageUrl, productsAPI } from "../../../utils/api";
@@ -55,6 +54,17 @@ interface Product {
   is_active: boolean;
   sku: string | null;
   properties?: ProductProperty[] | null;
+}
+
+/** First image for admin list: gallery order matches storefront when `image_url` is out of sync. */
+function primaryProductListImage(p: Pick<Product, "image_url" | "gallery_images">): string | null {
+  const g = p.gallery_images;
+  if (Array.isArray(g) && g.length) {
+    const first = g.map((x) => String(x || "").trim()).find(Boolean);
+    if (first) return first;
+  }
+  const u = p.image_url?.trim();
+  return u || null;
 }
 
 function descriptionPreview(html: string | null | undefined): string {
@@ -274,7 +284,12 @@ export default function AdminProductsPage() {
   const isValidImageSrc = (url: string | null | undefined) => {
     if (!url || typeof url !== "string") return false;
     const u = url.trim();
-    return u.length > 0 && (u.startsWith("http") || u.startsWith("/"));
+    if (!u) return false;
+    const lower = u.toLowerCase();
+    if (lower.startsWith("http://") || lower.startsWith("https://")) return true;
+    if (u.startsWith("/")) return true;
+    if (lower.startsWith("uploads/")) return true;
+    return false;
   };
 
   const handleProductDelete = async (id: number, name: string) => {
@@ -1016,13 +1031,12 @@ export default function AdminProductsPage() {
                                 >
                                   {isValidImageSrc(url) ? (
                                     <div className="relative h-20 w-20 overflow-hidden rounded-md border border-slate-100 bg-slate-100">
-                                      <Image
+                                      <img
                                         src={getProductImageSrc(url)}
                                         alt=""
                                         width={80}
                                         height={80}
                                         className="h-full w-full object-cover"
-                                        unoptimized
                                       />
                                     </div>
                                   ) : (
@@ -1131,12 +1145,19 @@ export default function AdminProductsPage() {
                         <tbody className="divide-y divide-slate-100">
                           {products.map((p) => {
                             const descPlain = descriptionPreview(p.description);
+                            const listImg = primaryProductListImage(p);
                             return (
                             <tr key={p.id} className="transition-colors hover:bg-slate-50/80">
                               <td className="px-4 py-3">
-                                {p.image_url && isValidImageSrc(p.image_url) ? (
+                                {listImg && isValidImageSrc(listImg) ? (
                                   <div className="h-10 w-10 overflow-hidden rounded-lg border border-slate-200 bg-slate-100">
-                                    <Image src={getProductImageSrc(p.image_url)} alt="" width={40} height={40} className="h-full w-full object-cover" unoptimized />
+                                    <img
+                                      src={getProductImageSrc(listImg)}
+                                      alt=""
+                                      width={40}
+                                      height={40}
+                                      className="h-full w-full object-cover"
+                                    />
                                   </div>
                                 ) : (
                                   <span className="text-slate-400">—</span>
