@@ -15,9 +15,12 @@ import {
   shippingRatesAPI,
   storePickupAddressesAPI,
   shippingAmountForMethod,
+  effectiveOrderShipping,
+  orderQualifiesForFreeShipping,
   type ShippingMethod,
   type ShippingRates,
   type StorePickupAddress,
+  type FreeShippingPolicy,
 } from "../../../utils/api";
 import { isAuthenticated } from "../../../utils/roles";
 import { SITE_TAB_TITLE, pageTitle } from "../../../utils/tabTitle";
@@ -259,6 +262,10 @@ function ProductDetailContent() {
   const [savedAddresses, setSavedAddresses] = useState<SavedAddress[]>([]);
   const [addressesLoading, setAddressesLoading] = useState(false);
   const [shippingRates, setShippingRates] = useState<ShippingRates | null>(null);
+  const [freeShippingPolicy, setFreeShippingPolicy] = useState<FreeShippingPolicy>({
+    freeShippingEnabled: false,
+    freeShippingThreshold: 0,
+  });
   const [jobArtworkInfoOpen, setJobArtworkInfoOpen] = useState(false);
   const fetchedProductForRef = useRef<string | null>(null);
   const fetchedRelatedForRef = useRef<string | null>(null);
@@ -356,6 +363,10 @@ function ProductDetailContent() {
         const res = await shippingRatesAPI.get();
         if (!cancelled && res?.rates) setShippingRates(res.rates);
         if (!cancelled) {
+          setFreeShippingPolicy({
+            freeShippingEnabled: !!res?.freeShippingEnabled,
+            freeShippingThreshold: Math.max(0, Number(res?.freeShippingThreshold) || 0),
+          });
           const methods = Array.isArray(res?.methods) ? res.methods : [];
           setShippingMethods(methods);
           if (methods.length > 0) {
@@ -571,10 +582,21 @@ function ProductDetailContent() {
     };
   });
   const subtotal = jobLines.reduce((sum, line) => sum + line.lineSubtotal, 0);
-  const shippingCost =
+  const rawShippingCost =
     shippingMode === "store_pickup"
       ? 0
       : shippingAmountForMethod(shippingMethods, shippingService, shippingRates);
+  const shippingCost = effectiveOrderShipping(
+    rawShippingCost,
+    subtotal,
+    freeShippingPolicy,
+    shippingMode === "store_pickup"
+  );
+  const showFreeShippingLabel = orderQualifiesForFreeShipping(
+    subtotal,
+    freeShippingPolicy,
+    shippingMode === "store_pickup"
+  );
   const total = subtotal + shippingCost;
 
   // Handle Add to Cart (logged-in or guest via X-Guest-Session-Id from api.ts)
@@ -1344,8 +1366,27 @@ function ProductDetailContent() {
                           </>
                         )}
                       </select>
-                      <span className="text-gray-900 font-medium">${shippingCost.toFixed(2)}</span>
+                      <span
+                        className={`font-medium ${showFreeShippingLabel ? "text-emerald-700" : "text-gray-900"}`}
+                      >
+                        {showFreeShippingLabel ? "Free Shipping" : `$${shippingCost.toFixed(2)}`}
+                      </span>
                     </div>
+                    {freeShippingPolicy.freeShippingEnabled ? (
+                      <p className="mt-2 text-sm font-medium leading-snug text-rose-700">
+                        {freeShippingPolicy.freeShippingThreshold > 0 ? (
+                          <>
+                            Get free shipping on orders over{" "}
+                            <span className="font-bold tabular-nums text-black">
+                              ${freeShippingPolicy.freeShippingThreshold.toFixed(2)}
+                            </span>
+                            .
+                          </>
+                        ) : (
+                          <>Get free shipping on qualifying orders while this offer is running.</>
+                        )}
+                      </p>
+                    ) : null}
                   </>
                 ) : (
                   <>
@@ -1383,7 +1424,11 @@ function ProductDetailContent() {
               {shippingMode === "blind_drop_ship" ? (
                 <div className="flex justify-between mb-2">
                   <span className="text-gray-700">Shipping ({shippingService})</span>
-                  <span className="text-gray-900 font-medium">${shippingCost.toFixed(2)}</span>
+                  <span
+                    className={`font-medium ${showFreeShippingLabel ? "text-emerald-700" : "text-gray-900"}`}
+                  >
+                    {showFreeShippingLabel ? "Free Shipping" : `$${shippingCost.toFixed(2)}`}
+                  </span>
                 </div>
               ) : null}
               <div className="flex justify-between pt-2 border-t border-gray-300">

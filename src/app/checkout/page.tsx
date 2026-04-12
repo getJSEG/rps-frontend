@@ -14,10 +14,14 @@ import {
   cardsAPI,
   shippingRatesAPI,
   storePickupAddressesAPI,
-  shippingAmountForMethod,
+  effectiveOrderShipping,
+  orderQualifiesForFreeShipping,
+  stackedShippingFromCartItems,
+  mergedShippingFromCartItems,
   type ShippingMethod,
   type ShippingRates,
   type StorePickupAddress,
+  type FreeShippingPolicy,
 } from "../../utils/api";
 import { isAuthenticated } from "../../utils/roles";
 
@@ -140,6 +144,10 @@ export default function CheckoutPage() {
   const [savingAddress, setSavingAddress] = useState(false);
   const [shippingRates, setShippingRates] = useState<ShippingRates | null>(null);
   const [shippingMethods, setShippingMethods] = useState<ShippingMethod[]>([]);
+  const [freeShippingPolicy, setFreeShippingPolicy] = useState<FreeShippingPolicy>({
+    freeShippingEnabled: false,
+    freeShippingThreshold: 0,
+  });
   const [storePickupAddresses, setStorePickupAddresses] = useState<StorePickupAddress[]>([]);
 
   const loadCartFromApi = useCallback(async () => {
@@ -211,7 +219,13 @@ export default function CheckoutPage() {
       try {
         const res = await shippingRatesAPI.get();
         if (!c && res?.rates) setShippingRates(res.rates);
-        if (!c) setShippingMethods(Array.isArray(res?.methods) ? res.methods : []);
+        if (!c) {
+          setShippingMethods(Array.isArray(res?.methods) ? res.methods : []);
+          setFreeShippingPolicy({
+            freeShippingEnabled: !!res?.freeShippingEnabled,
+            freeShippingThreshold: Math.max(0, Number(res?.freeShippingThreshold) || 0),
+          });
+        }
       } catch {
         /* defaults used */
       }
@@ -337,13 +351,26 @@ export default function CheckoutPage() {
     cartItems.length > 0 && cartItems.every((i) => String(i.shippingMode || "").toLowerCase() === "store_pickup")
       ? "store_pickup"
       : "blind_drop_ship";
-  const shipping = cartItems.reduce(
-    (sum, i) =>
-      shippingMode === "store_pickup"
-        ? 0
-        : sum + shippingAmountForMethod(shippingMethods, i.shippingService, shippingRates),
-    0
+  const storePickupOrder = shippingMode === "store_pickup";
+  const stackedShipping = stackedShippingFromCartItems(
+    cartItems,
+    shippingMethods,
+    shippingRates,
+    storePickupOrder
   );
+  const mergedShipping = mergedShippingFromCartItems(
+    cartItems,
+    shippingMethods,
+    shippingRates,
+    storePickupOrder
+  );
+  const shipping = effectiveOrderShipping(mergedShipping, subtotal, freeShippingPolicy, storePickupOrder);
+  const showFreeShippingLabel =
+    !storePickupOrder && orderQualifiesForFreeShipping(subtotal, freeShippingPolicy, false);
+  const showMergedShippingDiscount =
+    !storePickupOrder &&
+    !showFreeShippingLabel &&
+    stackedShipping > mergedShipping + 0.005;
   const total = subtotal + shipping;
   const selectedStorePickupId =
     shippingMode === "store_pickup" ? Number(cartItems[0]?.storePickupAddressId || 0) : 0;
@@ -747,9 +774,20 @@ export default function CheckoutPage() {
                     <span>${subtotal.toFixed(2)}</span>
                   </div>
                   {shippingMode !== "store_pickup" && (
-                    <div className="flex justify-between text-gray-700">
+                    <div className="flex justify-between text-gray-700 items-baseline gap-2">
                       <span>Shipping:</span>
-                      <span>${shipping.toFixed(2)}</span>
+                      <span className="font-medium text-right">
+                        {showFreeShippingLabel ? (
+                          <span className="text-emerald-700">Free Shipping</span>
+                        ) : showMergedShippingDiscount ? (
+                          <>
+                            <span className="text-gray-500 line-through">${stackedShipping.toFixed(2)}</span>
+                            <span className="ml-2 text-emerald-600">${shipping.toFixed(2)}</span>
+                          </>
+                        ) : (
+                          <span className="text-gray-900">${shipping.toFixed(2)}</span>
+                        )}
+                      </span>
                     </div>
                   )}
                 </div>

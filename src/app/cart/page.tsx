@@ -11,8 +11,14 @@ import {
   cartAPI,
   shippingRatesAPI,
   shippingAmountForMethod,
+  effectiveOrderShipping,
+  orderQualifiesForFreeShipping,
+  stackedShippingFromCartItems,
+  mergedShippingFromCartItems,
+  perLineMergedShippingAllocations,
   type ShippingMethod,
   type ShippingRates,
+  type FreeShippingPolicy,
 } from "../../utils/api";
 import { FiTrash2 } from "react-icons/fi";
 
@@ -82,6 +88,10 @@ export default function CartPage() {
   const [loading, setLoading] = useState(true);
   const [shippingRates, setShippingRates] = useState<ShippingRates | null>(null);
   const [shippingMethods, setShippingMethods] = useState<ShippingMethod[]>([]);
+  const [freeShippingPolicy, setFreeShippingPolicy] = useState<FreeShippingPolicy>({
+    freeShippingEnabled: false,
+    freeShippingThreshold: 0,
+  });
   // const [isAdminView, setIsAdminView] = useState(false);
   const hasInitializedRef = useRef(false);
 
@@ -119,7 +129,13 @@ export default function CartPage() {
       try {
         const res = await shippingRatesAPI.get();
         if (!c && res?.rates) setShippingRates(res.rates);
-        if (!c) setShippingMethods(Array.isArray(res?.methods) ? res.methods : []);
+        if (!c) {
+          setShippingMethods(Array.isArray(res?.methods) ? res.methods : []);
+          setFreeShippingPolicy({
+            freeShippingEnabled: !!res?.freeShippingEnabled,
+            freeShippingThreshold: Math.max(0, Number(res?.freeShippingThreshold) || 0),
+          });
+        }
       } catch {
         /* keep null → defaults in shippingAmountForService */
       }
@@ -161,8 +177,23 @@ export default function CartPage() {
         updatedItem.subtotal = unit * newQuantity;
       }
 
-      const ship = shippingAmountForMethod(shippingMethods, updatedItem.shippingService, shippingRates);
-      const effectiveShip = isStorePickupItem(updatedItem) ? 0 : ship;
+      const nextItems = cartItems.map((i) => (i.id === itemId ? updatedItem : i));
+      const shipMode =
+        nextItems.length > 0 &&
+        nextItems.every((i) => String(i.shippingMode || "").trim().toLowerCase() === "store_pickup")
+          ? "store_pickup"
+          : "blind_drop_ship";
+      const subAll = nextItems.reduce((s, it) => s + cartItemLineSubtotal(it), 0);
+      const globalFree = orderQualifiesForFreeShipping(subAll, freeShippingPolicy, shipMode === "store_pickup");
+      const allocMap = perLineMergedShippingAllocations(
+        nextItems,
+        shippingMethods,
+        shippingRates,
+        shipMode === "store_pickup"
+      );
+      const mine = allocMap.get(String(updatedItem.id)) ?? { rawLine: 0, mergedShare: 0 };
+      const effectiveShip =
+        shipMode === "store_pickup" ? 0 : globalFree ? 0 : mine.mergedShare;
       updatedItem.shippingCost = effectiveShip;
       updatedItem.total =
         (updatedItem.subtotal != null ? updatedItem.subtotal : cartItemLineSubtotal(updatedItem)) + effectiveShip;
@@ -175,14 +206,7 @@ export default function CartPage() {
     }
   };
 
-  const calculateTotal = () => {
-    return cartItems.reduce((sum, item) => {
-      const ship = isStorePickupItem(item)
-        ? 0
-        : shippingAmountForMethod(shippingMethods, item.shippingService, shippingRates);
-      return sum + cartItemLineSubtotal(item) + ship;
-    }, 0);
-  };
+  const calculateTotal = () => subtotalSum + shippingSum;
 
   if (loading) {
     return (
@@ -201,12 +225,42 @@ export default function CartPage() {
   }
 
   const subtotalSum = cartItems.reduce((sum, item) => sum + cartItemLineSubtotal(item), 0);
-  const shippingSum = cartItems.reduce((sum, item) => {
-    const ship = isStorePickupItem(item)
-      ? 0
-      : shippingAmountForMethod(shippingMethods, item.shippingService, shippingRates);
-    return sum + ship;
-  }, 0);
+  const cartShippingMode =
+    cartItems.length > 0 &&
+    cartItems.every((i) => String(i.shippingMode || "").trim().toLowerCase() === "store_pickup")
+      ? "store_pickup"
+      : "blind_drop_ship";
+  const storePickupOrder = cartShippingMode === "store_pickup";
+  const stackedShippingSum = stackedShippingFromCartItems(
+    cartItems,
+    shippingMethods,
+    shippingRates,
+    storePickupOrder
+  );
+  const mergedShippingSum = mergedShippingFromCartItems(
+    cartItems,
+    shippingMethods,
+    shippingRates,
+    storePickupOrder
+  );
+  const shippingSum = effectiveOrderShipping(
+    mergedShippingSum,
+    subtotalSum,
+    freeShippingPolicy,
+    storePickupOrder
+  );
+  const showFreeShippingLabel =
+    !storePickupOrder && orderQualifiesForFreeShipping(subtotalSum, freeShippingPolicy, false);
+  const showMergedShippingDiscount =
+    !storePickupOrder &&
+    !showFreeShippingLabel &&
+    stackedShippingSum > mergedShippingSum + 0.005;
+  const lineAllocations = perLineMergedShippingAllocations(
+    cartItems,
+    shippingMethods,
+    shippingRates,
+    storePickupOrder
+  );
 
   return (
     <>
@@ -233,9 +287,15 @@ export default function CartPage() {
               {/* Product line cards */}
               <div className="mb-6 space-y-5">
                 {cartItems.map((item, index) => {
-                  const shipLine = isStorePickupItem(item)
-                    ? 0
-                    : shippingAmountForMethod(shippingMethods, item.shippingService, shippingRates);
+                  const alloc = lineAllocations.get(String(item.id)) ?? { rawLine: 0, mergedShare: 0 };
+                  const shipLineRaw = storePickupOrder ? 0 : alloc.rawLine;
+                  const shipLineMerged = storePickupOrder ? 0 : alloc.mergedShare;
+                  const shipLine = storePickupOrder ? 0 : showFreeShippingLabel ? 0 : shipLineMerged;
+                  const showLineMerge =
+                    !storePickupOrder &&
+                    !showFreeShippingLabel &&
+                    !isStorePickupItem(item) &&
+                    shipLineRaw > shipLineMerged + 0.005;
                   return (
                   <div
                     key={item.id}
@@ -366,7 +426,18 @@ export default function CartPage() {
                                 ? "Store Pickup"
                                 : item.shippingService}
                             </span>
-                            <span className="ml-1 font-semibold tabular-nums text-gray-900">${shipLine.toFixed(2)}</span>
+                            <span className="ml-1 font-semibold tabular-nums">
+                              {showFreeShippingLabel && !isStorePickupItem(item) ? (
+                                <span className="text-emerald-700">Free Shipping</span>
+                              ) : showLineMerge ? (
+                                <>
+                                  <span className="text-gray-500 line-through">${shipLineRaw.toFixed(2)}</span>
+                                  <span className="ml-2 text-emerald-600">${shipLineMerged.toFixed(2)}</span>
+                                </>
+                              ) : (
+                                <span className="text-gray-900">${shipLine.toFixed(2)}</span>
+                              )}
+                            </span>
                           </p>
                         </div>
                       )}
@@ -389,9 +460,20 @@ export default function CartPage() {
                       <span>Subtotal</span>
                       <span className="font-medium tabular-nums text-gray-900">${subtotalSum.toFixed(2)}</span>
                     </div>
-                    <div className="flex justify-between">
+                    <div className="flex justify-between items-baseline gap-2">
                       <span>Shipping</span>
-                      <span className="font-medium tabular-nums text-gray-900">${shippingSum.toFixed(2)}</span>
+                      <span className="font-medium tabular-nums text-right">
+                        {showFreeShippingLabel ? (
+                          <span className="text-emerald-700">Free Shipping</span>
+                        ) : showMergedShippingDiscount ? (
+                          <>
+                            <span className="text-gray-500 line-through">${stackedShippingSum.toFixed(2)}</span>
+                            <span className="ml-2 text-emerald-600">${shippingSum.toFixed(2)}</span>
+                          </>
+                        ) : (
+                          <span className="text-gray-900">${shippingSum.toFixed(2)}</span>
+                        )}
+                      </span>
                     </div>
                   </div>
                   <div className="mb-4 border-t border-gray-300 pt-3">

@@ -55,6 +55,25 @@ export function getProductImageUrl(url: string | null | undefined): string {
 }
 
 export type ShippingRates = { ground: number; express: number; overnight: number };
+
+/** Admin / public shipping-rates API: threshold order subtotal for waived shipping. */
+export type FreeShippingPolicy = {
+  freeShippingEnabled: boolean;
+  freeShippingThreshold: number;
+};
+
+export type ShippingRatesResponse = {
+  rates: ShippingRates;
+  methods?: ShippingMethod[];
+  freeShippingEnabled?: boolean;
+  freeShippingThreshold?: number;
+};
+
+export type ShippingRatesAdminPayload = ShippingRates & {
+  freeShippingEnabled?: boolean;
+  freeShippingThreshold?: number;
+};
+
 export type ShippingMethod = {
   id: number;
   name: string;
@@ -99,6 +118,163 @@ export function shippingAmountForMethod(
   const matched = list.find((m) => String(m?.name || "").trim().toLowerCase() === label);
   if (matched) return Number(matched.price) || 0;
   return shippingAmountForService(fallbackRates, serviceLabel);
+}
+
+function roundMoney2Client(n: number): number {
+  const x = Number(n);
+  if (!Number.isFinite(x)) return 0;
+  return Math.round(x * 100) / 100;
+}
+
+/** Normalize shipping service name for grouping (same method = one charge). */
+export function normalizeShippingServiceKey(
+  serviceLabel: string | null | undefined
+): string {
+  return String(serviceLabel || "").trim().toLowerCase();
+}
+
+export type CartLineShippingInput = {
+  id?: string | number;
+  shippingService?: string;
+  shipping_service?: string;
+  shippingMode?: string;
+  shipping_mode?: string;
+  shipping?: string;
+  storePickupAddressId?: unknown;
+  store_pickup_address_id?: unknown;
+};
+
+/** Matches cart page: line is store pickup → excluded from merged/stacked ship sums. */
+export function isCartLineStorePickup(item: CartLineShippingInput): boolean {
+  const mode = String(item.shippingMode ?? item.shipping_mode ?? "").trim().toLowerCase();
+  if (mode === "store_pickup" || mode === "store-pickup" || mode === "store pickup") return true;
+  const ship = String(item.shipping ?? "").trim().toLowerCase();
+  if (ship === "store-pickup" || ship === "store_pickup") return true;
+  const pid = item.storePickupAddressId ?? item.store_pickup_address_id;
+  if (pid != null && String(pid) !== "") return true;
+  return false;
+}
+
+/** Sum of list shipping if each line were charged separately (non-pickup lines only). */
+export function stackedShippingFromCartItems(
+  items: CartLineShippingInput[],
+  methods: ShippingMethod[] | null | undefined,
+  rates: ShippingRates | null | undefined,
+  storePickupOrder: boolean
+): number {
+  if (storePickupOrder || !Array.isArray(items)) return 0;
+  let sum = 0;
+  for (const it of items) {
+    if (isCartLineStorePickup(it)) continue;
+    sum += shippingAmountForMethod(
+      methods,
+      it.shippingService ?? it.shipping_service,
+      rates
+    );
+  }
+  return roundMoney2Client(sum);
+}
+
+/** One charge per distinct shipping method among shippable lines (Scenario 1 & 2). */
+export function mergedShippingFromCartItems(
+  items: CartLineShippingInput[],
+  methods: ShippingMethod[] | null | undefined,
+  rates: ShippingRates | null | undefined,
+  storePickupOrder: boolean
+): number {
+  if (storePickupOrder || !Array.isArray(items)) return 0;
+  const seen = new Set<string>();
+  let sum = 0;
+  for (const it of items) {
+    if (isCartLineStorePickup(it)) continue;
+    const key = normalizeShippingServiceKey(it.shippingService ?? it.shipping_service);
+    if (!key) continue;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    sum += shippingAmountForMethod(methods, it.shippingService ?? it.shipping_service, rates);
+  }
+  return roundMoney2Client(sum);
+}
+
+/** Per line: full list price for that method, and this line's share when the method is shared (for UI). */
+export function perLineMergedShippingAllocations(
+  items: CartLineShippingInput[],
+  methods: ShippingMethod[] | null | undefined,
+  rates: ShippingRates | null | undefined,
+  storePickupOrder: boolean
+): Map<string, { rawLine: number; mergedShare: number }> {
+  const byId = new Map<string, { rawLine: number; mergedShare: number }>();
+  if (!Array.isArray(items)) return byId;
+  if (storePickupOrder) {
+    for (const it of items) {
+      byId.set(String(it.id ?? ""), { rawLine: 0, mergedShare: 0 });
+    }
+    return byId;
+  }
+  const groups = new Map<string, CartLineShippingInput[]>();
+  for (const it of items) {
+    const id = String(it.id ?? "");
+    if (isCartLineStorePickup(it)) {
+      byId.set(id, { rawLine: 0, mergedShare: 0 });
+      continue;
+    }
+    const key = normalizeShippingServiceKey(it.shippingService ?? it.shipping_service);
+    if (!key) {
+      byId.set(id, { rawLine: 0, mergedShare: 0 });
+      continue;
+    }
+    if (!groups.has(key)) groups.set(key, []);
+    groups.get(key)!.push(it);
+  }
+  for (const [, group] of groups) {
+    const rep = group[0];
+    const linePrice = shippingAmountForMethod(
+      methods,
+      rep.shippingService ?? rep.shipping_service,
+      rates
+    );
+    const n = group.length;
+    const totalCents = Math.round(linePrice * 100);
+    const base = Math.floor(totalCents / n);
+    const rem = totalCents % n;
+    group.forEach((row, idx) => {
+      const cents = base + (idx < rem ? 1 : 0);
+      byId.set(String(row.id ?? ""), {
+        rawLine: roundMoney2Client(linePrice),
+        mergedShare: cents / 100,
+      });
+    });
+  }
+  for (const it of items) {
+    const id = String(it.id ?? "");
+    if (!byId.has(id)) byId.set(id, { rawLine: 0, mergedShare: 0 });
+  }
+  return byId;
+}
+
+/** True when cart qualifies for waived shipping (not store pickup). */
+export function orderQualifiesForFreeShipping(
+  orderSubtotal: number,
+  policy: FreeShippingPolicy | null | undefined,
+  storePickup: boolean
+): boolean {
+  if (storePickup) return false;
+  if (!policy?.freeShippingEnabled) return false;
+  const th = Number(policy.freeShippingThreshold);
+  if (!Number.isFinite(th) || th < 0) return false;
+  return orderSubtotal >= th;
+}
+
+/** Combined shipping $ after free-shipping rule (pass merged pre-threshold total, not store pickup). */
+export function effectiveOrderShipping(
+  preFreeShippingTotal: number,
+  orderSubtotal: number,
+  policy: FreeShippingPolicy | null | undefined,
+  storePickup: boolean
+): number {
+  if (storePickup) return 0;
+  if (orderQualifiesForFreeShipping(orderSubtotal, policy, false)) return 0;
+  return roundMoney2Client(preFreeShippingTotal);
 }
 
 // Helper function for API calls
@@ -368,9 +544,9 @@ export const cartAPI = {
 };
 
 export const shippingRatesAPI = {
-  get: async (): Promise<{ rates: ShippingRates; methods?: ShippingMethod[] }> => apiCall('/shipping-rates'),
-  update: async (rates: ShippingRates) =>
-    apiCall('/shipping-rates', { method: 'PUT', body: JSON.stringify(rates) }),
+  get: async (): Promise<ShippingRatesResponse> => apiCall('/shipping-rates'),
+  update: async (payload: ShippingRatesAdminPayload) =>
+    apiCall('/shipping-rates', { method: 'PUT', body: JSON.stringify(payload) }),
   getAdminMethods: async (): Promise<{ methods: ShippingMethod[] }> => apiCall('/shipping-rates/admin'),
   createAdminMethod: async (data: { name: string; price: number; isActive?: boolean }) =>
     apiCall('/shipping-rates/admin', { method: 'POST', body: JSON.stringify(data) }),
