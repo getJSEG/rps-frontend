@@ -93,6 +93,24 @@ export type StorePickupAddress = {
   is_active?: boolean;
 };
 
+export type Tax = {
+  id: number;
+  name: string;
+  percentage: number;
+  is_active: boolean;
+  created_at?: string;
+  updated_at?: string;
+};
+
+export type CartSummary = {
+  subtotal: number;
+  shipping: number;
+  taxAmount: number;
+  taxName: string | null;
+  taxPercentage: number;
+  total: number;
+};
+
 const DEFAULT_SHIPPING_RATES: ShippingRates = { ground: 120.07, express: 0, overnight: 0 };
 
 /** Match backend: Ground / Express / Overnight → admin-configured prices */
@@ -535,6 +553,7 @@ export const productsAPI = {
 // Cart API (role-based: user/employee = own cart, admin = all carts)
 export const cartAPI = {
   get: async () => apiCall('/cart'),
+  getSummary: async (): Promise<CartSummary> => apiCall('/cart/summary'),
   add: async (itemData: Record<string, unknown>) =>
     apiCall('/cart', { method: 'POST', body: JSON.stringify(itemData) }),
   remove: async (id: string) => apiCall(`/cart/${id}`, { method: 'DELETE' }),
@@ -566,6 +585,21 @@ export const storePickupAddressesAPI = {
     apiCall(`/store-pickup-addresses/admin/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
   deleteAdmin: async (id: number | string) =>
     apiCall(`/store-pickup-addresses/admin/${id}`, { method: 'DELETE' }),
+};
+
+export const taxesAPI = {
+  getActive: async (): Promise<{ tax: Tax | null }> => apiCall('/taxes/active'),
+  getAdmin: async (): Promise<{ taxes: Tax[] }> => apiCall('/taxes/admin'),
+  createAdmin: async (data: { name: string; percentage: number; isActive?: boolean }) =>
+    apiCall('/taxes/admin', { method: 'POST', body: JSON.stringify(data) }),
+  updateAdmin: async (
+    id: number | string,
+    data: { name?: string; percentage?: number; isActive?: boolean }
+  ) => apiCall(`/taxes/admin/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
+  activateAdmin: async (id: number | string) =>
+    apiCall(`/taxes/admin/${id}/activate`, { method: 'PUT' }),
+  deleteAdmin: async (id: number | string) =>
+    apiCall(`/taxes/admin/${id}`, { method: 'DELETE' }),
 };
 
 // Orders API

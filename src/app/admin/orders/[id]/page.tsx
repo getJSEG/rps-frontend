@@ -77,6 +77,10 @@ interface Order {
   shipping_method?: string | null;
   shipping_charge?: number;
   shipping_mode?: string | null;
+  subtotal_amount?: number;
+  tax_name?: string | null;
+  tax_percentage?: number;
+  tax_amount?: number;
   /** Optional carrier / shipment ID (DB: order_tracking_id). */
   order_tracking_id?: string | null;
 }
@@ -299,6 +303,19 @@ export default function OrderDetails() {
         shipping_charge:
           d.shipping_charge != null && d.shipping_charge !== ""
             ? parseFloat(String(d.shipping_charge)) || 0
+            : 0,
+        subtotal_amount:
+          d.subtotal_amount != null && d.subtotal_amount !== ""
+            ? parseFloat(String(d.subtotal_amount)) || 0
+            : undefined,
+        tax_name: d.tax_name != null ? String(d.tax_name) : null,
+        tax_percentage:
+          d.tax_percentage != null && d.tax_percentage !== ""
+            ? parseFloat(String(d.tax_percentage)) || 0
+            : 0,
+        tax_amount:
+          d.tax_amount != null && d.tax_amount !== ""
+            ? parseFloat(String(d.tax_amount)) || 0
             : 0,
         order_tracking_id:
           d.order_tracking_id != null && String(d.order_tracking_id).trim() !== ""
@@ -908,8 +925,13 @@ export default function OrderDetails() {
               <DetailCell label="Payment method" value={formatPaymentMethod(order.payment_method)} />
               <DetailCell label="Payment status" value={dash(order.payment_status)} />
               <DetailCell label="Total amount" value={`$${formatMoney(order.total_amount)}`} />
+              <DetailCell label="Subtotal" value={`$${formatMoney(order.subtotal_amount ?? linesSubtotal)}`} />
               <DetailCell label="Shipping service" value={dash(order.shipping_method)} />
               <DetailCell label="Shipping charge" value={`$${formatMoney(shipStored)}`} />
+              <DetailCell
+                label={`Tax${order.tax_name ? ` (${order.tax_name})` : ""}`}
+                value={`$${formatMoney(order.tax_amount ?? 0)}${order.tax_percentage ? ` (${formatMoney(order.tax_percentage)}%)` : ""}`}
+              />
               {(hasDbAddressIds || order.user_id != null) && (
                 <>
                   <DetailCell label="Shipping address ID" value={dash(order.shipping_address_id)} />
@@ -1039,6 +1061,15 @@ export default function OrderDetails() {
               <p className="text-sm text-slate-600">
                 Shipping ({dash(order.shipping_method)}){" "}
                 <span className="font-semibold text-slate-900">${formatMoney(shipStored)}</span>
+              </p>
+            )}
+            {!!(order.tax_amount ?? 0) && (
+              <p className="text-sm text-slate-600">
+                Tax{order.tax_name ? ` (${order.tax_name})` : ""}{" "}
+                <span className="font-semibold text-slate-900">
+                  ${formatMoney(order.tax_amount ?? 0)}
+                  {order.tax_percentage ? ` (${formatMoney(order.tax_percentage)}%)` : ""}
+                </span>
               </p>
             )}
             <p className="text-base font-bold text-slate-900">

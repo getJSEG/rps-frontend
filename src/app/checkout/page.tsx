@@ -22,6 +22,7 @@ import {
   type ShippingRates,
   type StorePickupAddress,
   type FreeShippingPolicy,
+  type CartSummary,
 } from "../../utils/api";
 import { isAuthenticated } from "../../utils/roles";
 
@@ -114,6 +115,7 @@ async function fetchCartItemsFromApi(): Promise<CartItem[]> {
 export default function CheckoutPage() {
   const router = useRouter();
   const [cartItems, setCartItems] = useState<CartItem[]>([]);
+  const [orderSummary, setOrderSummary] = useState<CartSummary | null>(null);
   const [loading, setLoading] = useState(true);
   const [paymentMethod, setPaymentMethod] = useState<string>("new");
   const [savedCards, setSavedCards] = useState<SavedCard[]>([]);
@@ -152,6 +154,12 @@ export default function CheckoutPage() {
 
   const loadCartFromApi = useCallback(async () => {
     setCartItems(await fetchCartItemsFromApi());
+    try {
+      const summary = await cartAPI.getSummary();
+      setOrderSummary(summary);
+    } catch {
+      setOrderSummary(null);
+    }
   }, []);
 
   const globalDefault = addresses.find((a) => a.is_default) ?? null;
@@ -170,6 +178,12 @@ export default function CheckoutPage() {
       const items = await fetchCartItemsFromApi();
       if (!cancelled) {
         setCartItems(items);
+        try {
+          const summary = await cartAPI.getSummary();
+          if (!cancelled) setOrderSummary(summary);
+        } catch {
+          if (!cancelled) setOrderSummary(null);
+        }
         setLoading(false);
       }
     })();
@@ -372,6 +386,11 @@ export default function CheckoutPage() {
     !showFreeShippingLabel &&
     stackedShipping > mergedShipping + 0.005;
   const total = subtotal + shipping;
+  const shownSubtotal = orderSummary?.subtotal ?? subtotal;
+  const shownShipping = orderSummary?.shipping ?? shipping;
+  const shownTax = orderSummary?.taxAmount ?? 0;
+  const shownTaxPercentage = orderSummary?.taxPercentage ?? 0;
+  const shownTotal = orderSummary?.total ?? total;
   const selectedStorePickupId =
     shippingMode === "store_pickup" ? Number(cartItems[0]?.storePickupAddressId || 0) : 0;
   const selectedStorePickup =
@@ -771,7 +790,7 @@ export default function CheckoutPage() {
                 <div className="space-y-2 mb-4">
                   <div className="flex justify-between text-gray-700">
                     <span>Subtotal:</span>
-                    <span>${subtotal.toFixed(2)}</span>
+                    <span>${shownSubtotal.toFixed(2)}</span>
                   </div>
                   {shippingMode !== "store_pickup" && (
                     <div className="flex justify-between text-gray-700 items-baseline gap-2">
@@ -782,19 +801,23 @@ export default function CheckoutPage() {
                         ) : showMergedShippingDiscount ? (
                           <>
                             <span className="text-gray-500 line-through">${stackedShipping.toFixed(2)}</span>
-                            <span className="ml-2 text-emerald-600">${shipping.toFixed(2)}</span>
+                            <span className="ml-2 text-emerald-600">${shownShipping.toFixed(2)}</span>
                           </>
                         ) : (
-                          <span className="text-gray-900">${shipping.toFixed(2)}</span>
+                          <span className="text-gray-900">${shownShipping.toFixed(2)}</span>
                         )}
                       </span>
                     </div>
                   )}
+                  <div className="flex justify-between text-gray-700">
+                    <span>Tax ({shownTaxPercentage.toFixed(2)}%):</span>
+                    <span>${shownTax.toFixed(2)}</span>
+                  </div>
                 </div>
                 <div className="border-t border-gray-300 pt-3 mb-4">
                   <div className="flex justify-between text-xl font-bold text-gray-700">
                     <span>Total:</span>
-                    <span>${total.toFixed(2)}</span>
+                    <span>${shownTotal.toFixed(2)}</span>
                   </div>
                 </div>
 
@@ -808,7 +831,7 @@ export default function CheckoutPage() {
                         disabled={processing}
                         className="flex-1 bg-blue-500 hover:bg-blue-600 disabled:bg-blue-300 text-white font-medium py-3 px-6 rounded-lg transition-colors"
                       >
-                        {processing ? "Processing…" : `Pay $${total.toFixed(2)}`}
+                        {processing ? "Processing…" : `Pay $${shownTotal.toFixed(2)}`}
                       </button>
                       <button type="button" onClick={cancelPayment} className="px-4 py-3 border border-gray-300 rounded-lg hover:bg-gray-50">
                         Cancel

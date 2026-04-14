@@ -13,6 +13,7 @@ import {
   cartAPI,
   addressesAPI,
   shippingRatesAPI,
+  taxesAPI,
   storePickupAddressesAPI,
   shippingAmountForMethod,
   effectiveOrderShipping,
@@ -21,6 +22,7 @@ import {
   type ShippingRates,
   type StorePickupAddress,
   type FreeShippingPolicy,
+  type Tax,
 } from "../../../utils/api";
 import { isAuthenticated } from "../../../utils/roles";
 import { SITE_TAB_TITLE, pageTitle } from "../../../utils/tabTitle";
@@ -266,6 +268,7 @@ function ProductDetailContent() {
     freeShippingEnabled: false,
     freeShippingThreshold: 0,
   });
+  const [activeTax, setActiveTax] = useState<Tax | null>(null);
   const [jobArtworkInfoOpen, setJobArtworkInfoOpen] = useState(false);
   const fetchedProductForRef = useRef<string | null>(null);
   const fetchedRelatedForRef = useRef<string | null>(null);
@@ -342,6 +345,21 @@ function ProductDetailContent() {
   useEffect(() => {
     return () => {
       document.title = SITE_TAB_TITLE;
+    };
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await taxesAPI.getActive();
+        if (!cancelled) setActiveTax(res?.tax ?? null);
+      } catch {
+        if (!cancelled) setActiveTax(null);
+      }
+    })();
+    return () => {
+      cancelled = true;
     };
   }, []);
 
@@ -598,6 +616,9 @@ function ProductDetailContent() {
     shippingMode === "store_pickup"
   );
   const total = subtotal + shippingCost;
+  const activeTaxPercentage = Number(activeTax?.percentage || 0);
+  const taxAmount = ((subtotal + shippingCost) * activeTaxPercentage) / 100;
+  const totalWithTax = total + taxAmount;
 
   // Handle Add to Cart (logged-in or guest via X-Guest-Session-Id from api.ts)
   const handleAddToCart = async () => {
@@ -1431,9 +1452,15 @@ function ProductDetailContent() {
                   </span>
                 </div>
               ) : null}
+              <div className="flex justify-between mb-2">
+                <span className="text-gray-700">
+                  Tax ({activeTaxPercentage.toFixed(2)}%)
+                </span>
+                <span className="text-gray-900 font-medium">${taxAmount.toFixed(2)}</span>
+              </div>
               <div className="flex justify-between pt-2 border-t border-gray-300">
                 <span className="text-gray-900 font-bold">Total</span>
-                <span className="text-gray-900 font-bold text-xl">${total.toFixed(2)}</span>
+                <span className="text-gray-900 font-bold text-xl">${totalWithTax.toFixed(2)}</span>
               </div>
             </div>
 

@@ -19,6 +19,7 @@ import {
   type ShippingMethod,
   type ShippingRates,
   type FreeShippingPolicy,
+  type CartSummary,
 } from "../../utils/api";
 import { FiTrash2 } from "react-icons/fi";
 
@@ -86,6 +87,7 @@ export default function CartPage() {
   const router = useRouter();
   const [cartItems, setCartItems] = useState<CartItem[]>([]);
   const [loading, setLoading] = useState(true);
+  const [orderSummary, setOrderSummary] = useState<CartSummary | null>(null);
   const [shippingRates, setShippingRates] = useState<ShippingRates | null>(null);
   const [shippingMethods, setShippingMethods] = useState<ShippingMethod[]>([]);
   const [freeShippingPolicy, setFreeShippingPolicy] = useState<FreeShippingPolicy>({
@@ -100,6 +102,12 @@ export default function CartPage() {
     try {
       const res = await cartAPI.get();
       setCartItems(Array.isArray(res?.cartItems) ? res.cartItems : []);
+      try {
+        const summary = await cartAPI.getSummary();
+        setOrderSummary(summary);
+      } catch {
+        setOrderSummary(null);
+      }
       // Admin cart view disabled on this page.
       // setIsAdminView(!!res?.isAdminView);
     } catch (error) {
@@ -206,7 +214,7 @@ export default function CartPage() {
     }
   };
 
-  const calculateTotal = () => subtotalSum + shippingSum;
+  const calculateTotal = () => orderSummary?.total ?? subtotalSum + shippingSum;
 
   if (loading) {
     return (
@@ -261,6 +269,10 @@ export default function CartPage() {
     shippingRates,
     storePickupOrder
   );
+  const shownSubtotal = orderSummary?.subtotal ?? subtotalSum;
+  const shownShipping = orderSummary?.shipping ?? shippingSum;
+  const shownTax = orderSummary?.taxAmount ?? 0;
+  const shownTaxPercentage = orderSummary?.taxPercentage ?? 0;
 
   return (
     <>
@@ -458,7 +470,7 @@ export default function CartPage() {
                   <div className="mb-4 space-y-2 text-sm text-gray-600">
                     <div className="flex justify-between">
                       <span>Subtotal</span>
-                      <span className="font-medium tabular-nums text-gray-900">${subtotalSum.toFixed(2)}</span>
+                      <span className="font-medium tabular-nums text-gray-900">${shownSubtotal.toFixed(2)}</span>
                     </div>
                     <div className="flex justify-between items-baseline gap-2">
                       <span>Shipping</span>
@@ -468,12 +480,16 @@ export default function CartPage() {
                         ) : showMergedShippingDiscount ? (
                           <>
                             <span className="text-gray-500 line-through">${stackedShippingSum.toFixed(2)}</span>
-                            <span className="ml-2 text-emerald-600">${shippingSum.toFixed(2)}</span>
+                            <span className="ml-2 text-emerald-600">${shownShipping.toFixed(2)}</span>
                           </>
                         ) : (
-                          <span className="text-gray-900">${shippingSum.toFixed(2)}</span>
+                          <span className="text-gray-900">${shownShipping.toFixed(2)}</span>
                         )}
                       </span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span>Tax ({shownTaxPercentage.toFixed(2)}%)</span>
+                      <span className="font-medium tabular-nums text-gray-900">${shownTax.toFixed(2)}</span>
                     </div>
                   </div>
                   <div className="mb-4 border-t border-gray-300 pt-3">

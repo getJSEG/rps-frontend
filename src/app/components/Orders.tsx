@@ -73,6 +73,10 @@ type OrderRow = {
   shipping_method?: string | null;
   shipping_charge?: number | string | null;
   shipping_mode?: string | null;
+  subtotal_amount?: number | string | null;
+  tax_name?: string | null;
+  tax_percentage?: number | string | null;
+  tax_amount?: number | string | null;
 };
 
 function parseGuestCheckout(raw: OrderRow["guest_checkout"]): GuestCheckout | null {
@@ -562,6 +566,9 @@ export default function Orders() {
               const orderTotal = Number(order.total_amount ?? 0);
               const shippingChargeNum = Number(order.shipping_charge ?? 0);
               const hasAdjust = Math.abs(subtotal + shippingChargeNum - orderTotal) > 0.02;
+              const orderTax = Number(order.tax_amount ?? 0);
+              const orderTaxPct = Number(order.tax_percentage ?? 0);
+              const orderSubtotal = Number(order.subtotal_amount ?? subtotal);
               const isOpen = !!expanded[order.id];
               const whenPlaced = order.created_at
                 ? new Date(order.created_at).toLocaleString(undefined, {
@@ -753,7 +760,7 @@ export default function Orders() {
                         <div className="w-full max-w-xs space-y-1 text-sm">
                           <div className="flex justify-between text-gray-600">
                             <span>Items subtotal</span>
-                            <span>${formatMoney(subtotal)}</span>
+                            <span>${formatMoney(orderSubtotal)}</span>
                           </div>
                           {shippingChargeNum > 0 && (
                             <div className="flex justify-between text-gray-600">
@@ -761,11 +768,13 @@ export default function Orders() {
                               <span>${formatMoney(shippingChargeNum)}</span>
                             </div>
                           )}
-                          {hasAdjust && (
-                            <p className="text-xs text-gray-500 text-right">
-                              Totals may differ slightly from line items due to rounding or adjustments.
-                            </p>
-                          )}
+                          <div className="flex justify-between text-gray-600">
+                            <span>
+                              Tax{orderTaxPct > 0 ? ` (${formatMoney(orderTaxPct)}%)` : ""}
+                              {order.tax_name ? ` - ${order.tax_name}` : ""}
+                            </span>
+                            <span>${formatMoney(orderTax)}</span>
+                          </div>
                           <div className="flex justify-between text-base font-bold text-gray-900 pt-2 border-t border-gray-200">
                             <span>Order total</span>
                             <span>${formatMoney(order.total_amount)}</span>
