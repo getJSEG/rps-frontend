@@ -694,6 +694,18 @@ export const ordersAPI = {
     });
   },
 
+  refundAdmin: async (id: string) => {
+    return apiCall(`/orders/admin/${id}/refund`, {
+      method: 'POST',
+    });
+  },
+
+  requestCancellation: async (id: string) => {
+    return apiCall(`/orders/${id}/request-cancellation`, {
+      method: 'POST',
+    });
+  },
+
   updateOrderTrackingId: async (id: string, orderTrackingId: string | null) => {
     return apiCall(`/orders/admin/${id}/order-tracking`, {
       method: 'PUT',

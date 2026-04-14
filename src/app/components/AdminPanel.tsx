@@ -94,12 +94,11 @@ export default function AdminPanel() {
   const [productImages, setProductImages] = useState<{ [key: string]: string }>({});
   const [accessGranted, setAccessGranted] = useState(false);
   const [removingId, setRemovingId] = useState<string | null>(null);
+  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
   const itemsPerPage = 10;
 
   const handleRemoveOrder = async (e: React.MouseEvent, order: { id: string; order_number: string; isCartItem?: boolean }) => {
     e.stopPropagation();
-    const label = order.isCartItem ? "this cart item" : `order ${order.order_number}`;
-    if (!window.confirm(`Remove ${label}? This cannot be undone.`)) return;
     setRemovingId(order.id);
     try {
       if (order.isCartItem) {
@@ -110,6 +109,7 @@ export default function AdminPanel() {
         await ordersAPI.deleteAdmin(order.id);
         setAllOrders((prev) => prev.filter((o) => o.id !== order.id));
       }
+      setConfirmDeleteId(null);
     } catch (err: any) {
       alert(err?.message || "Failed to remove.");
     } finally {
@@ -367,14 +367,25 @@ export default function AdminPanel() {
   const getFilteredOrders = () => {
     // Combine orders and cart items
     const combinedItems = [...allOrders, ...cartItemsAsOrders];
+    const excludedFromMain = new Set([
+      "cancellation_requested",
+      "awaiting_refund",
+      "refunded",
+      "refund",
+    ]);
+    const baseVisible = combinedItems.filter((order) => {
+      if (order.isCartItem) return true;
+      const c = canonicalOrderStatus(order.status);
+      return !excludedFromMain.has(c);
+    });
     let filtered = combinedItems;
 
     // Apply tab filter
     if (activeTab === "All Projects") {
       // Show all orders and cart items
-      filtered = combinedItems;
+      filtered = baseVisible;
     } else if (activeTab === "In Progress") {
-      filtered = combinedItems.filter((order) => {
+      filtered = baseVisible.filter((order) => {
         const c = canonicalOrderStatus(order.status);
         return (
           c === "printing" ||
@@ -387,7 +398,7 @@ export default function AdminPanel() {
       });
     } else if (activeTab === "Pending") {
       // Show pre-production orders and all cart items (cart items use awaiting_artwork placeholder)
-      filtered = combinedItems.filter((order) => {
+      filtered = baseVisible.filter((order) => {
         const c = canonicalOrderStatus(order.status);
         return (
           order.isCartItem ||
@@ -397,7 +408,7 @@ export default function AdminPanel() {
         );
       });
     } else if (activeTab === "Complete") {
-      filtered = combinedItems.filter((order) => {
+      filtered = baseVisible.filter((order) => {
         const c = canonicalOrderStatus(order.status);
         return c === "completed";
       });
@@ -615,20 +626,50 @@ export default function AdminPanel() {
                           </span>
                         </td>
                         <td className="px-4 py-4 whitespace-nowrap sm:px-6" onClick={(e) => e.stopPropagation()}>
-                          <button
-                            type="button"
-                            onClick={(e) => handleRemoveOrder(e, order)}
-                            disabled={removingId === order.id}
-                            title="Remove"
-                            aria-label={order.isCartItem ? "Remove from cart" : "Remove order"}
-                            className="inline-flex items-center justify-center rounded-lg p-1.5 font-medium text-rose-600 transition-colors hover:bg-rose-50 hover:text-rose-800 disabled:cursor-not-allowed disabled:opacity-50"
-                          >
-                            {removingId === order.id ? (
-                              <span className="inline-block h-[18px] w-[18px] animate-spin rounded-full border-2 border-rose-200 border-t-rose-600" />
-                            ) : (
-                              <FiTrash2 size={18} aria-hidden />
+                          <div className="relative inline-flex">
+                            <button
+                              type="button"
+                              onClick={() =>
+                                setConfirmDeleteId((prev) => (prev === order.id ? null : order.id))
+                              }
+                              disabled={removingId === order.id}
+                              title="Remove"
+                              aria-label={order.isCartItem ? "Remove from cart" : "Remove order"}
+                              className="inline-flex items-center justify-center rounded-lg p-1.5 font-medium text-rose-600 transition-colors hover:bg-rose-50 hover:text-rose-800 disabled:cursor-not-allowed disabled:opacity-50"
+                            >
+                              {removingId === order.id ? (
+                                <span className="inline-block h-[18px] w-[18px] animate-spin rounded-full border-2 border-rose-200 border-t-rose-600" />
+                              ) : (
+                                <FiTrash2 size={18} aria-hidden />
+                              )}
+                            </button>
+                            {confirmDeleteId === order.id && (
+                              <div className="absolute right-0 top-full z-20 mt-2 w-72 rounded-lg border border-slate-200 bg-white p-3 shadow-lg">
+                                <p className="text-xs text-slate-700">
+                                  {order.isCartItem
+                                    ? "Remove this cart item? This cannot be undone."
+                                    : "Are you sure you want to delete this order?"}
+                                </p>
+                                <div className="mt-3 flex justify-end gap-2">
+                                  <button
+                                    type="button"
+                                    onClick={() => setConfirmDeleteId(null)}
+                                    className="rounded-md px-2.5 py-1.5 text-xs font-semibold text-slate-600 hover:bg-slate-100"
+                                  >
+                                    No
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={(e) => handleRemoveOrder(e, order)}
+                                    disabled={removingId === order.id}
+                                    className="rounded-md border border-rose-200 bg-rose-50 px-2.5 py-1.5 text-xs font-semibold text-rose-800 hover:bg-rose-100 disabled:opacity-50"
+                                  >
+                                    Yes, remove
+                                  </button>
+                                </div>
+                              </div>
                             )}
-                          </button>
+                          </div>
                         </td>
                       </tr>
                     );

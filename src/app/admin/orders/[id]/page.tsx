@@ -198,6 +198,8 @@ export default function OrderDetails() {
   const [removingTracking, setRemovingTracking] = useState(false);
   const [removeTrackingModalOpen, setRemoveTrackingModalOpen] = useState(false);
   const [deleteOrderModalOpen, setDeleteOrderModalOpen] = useState(false);
+  const [refundModalOpen, setRefundModalOpen] = useState(false);
+  const [processingRefund, setProcessingRefund] = useState(false);
 
   const fetchOrder = useCallback(async () => {
     if (!orderId) {
@@ -425,6 +427,25 @@ export default function OrderDetails() {
     }
   };
 
+  const confirmRefundOrder = async () => {
+    if (!order) return;
+    try {
+      setProcessingRefund(true);
+      const response = await ordersAPI.refundAdmin(order.id);
+      if (response?.order?.status) {
+        setOrder((prev) => (prev ? { ...prev, status: String(response.order.status) } : null));
+      } else {
+        setOrder((prev) => (prev ? { ...prev, status: "refunded" } : null));
+      }
+      setRefundModalOpen(false);
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : "Failed to refund order";
+      alert(msg);
+    } finally {
+      setProcessingRefund(false);
+    }
+  };
+
   const openTrackingModal = () => {
     if (!order) return;
     setTrackingDraft(order.order_tracking_id?.trim() ? order.order_tracking_id : "");
@@ -563,6 +584,11 @@ export default function OrderDetails() {
   const updatedStr = order.updated_at
     ? new Date(order.updated_at).toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" })
     : "—";
+  const normalizedStatus = String(order.status || "")
+    .toLowerCase()
+    .trim()
+    .replace(/\s+/g, "_");
+  const canRefundFromAdmin = normalizedStatus === "awaiting_refund";
 
   return (
     <AdminNavbar title="Order details" subtitle={order.order_number}>
@@ -636,6 +662,16 @@ export default function OrderDetails() {
             >
               Delete order
             </button>
+            {canRefundFromAdmin && (
+              <button
+                type="button"
+                onClick={() => setRefundModalOpen(true)}
+                disabled={processingRefund}
+                className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-2.5 text-sm font-semibold text-emerald-800 hover:bg-emerald-100 disabled:opacity-50"
+              >
+                {processingRefund ? "Refunding…" : "Refund"}
+              </button>
+            )}
           </div>
         </div>
 
@@ -763,6 +799,48 @@ export default function OrderDetails() {
                   className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-2.5 text-sm font-semibold text-rose-800 hover:bg-rose-100 disabled:opacity-50"
                 >
                   {deleting ? "Deleting…" : "Delete order"}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {refundModalOpen && (
+          <div
+            className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="refund-order-modal-title"
+            onClick={() => {
+              if (!processingRefund) setRefundModalOpen(false);
+            }}
+          >
+            <div
+              className="w-full max-w-md rounded-2xl border border-slate-200 bg-white p-6 shadow-xl"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <h2 id="refund-order-modal-title" className="text-lg font-bold text-slate-900">
+                Process refund?
+              </h2>
+              <p className="mt-2 text-sm text-slate-600">
+                Are you sure you want to refund this order in Stripe? This action cannot be undone.
+              </p>
+              <div className="mt-6 flex flex-wrap justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={() => setRefundModalOpen(false)}
+                  disabled={processingRefund}
+                  className="rounded-xl px-4 py-2.5 text-sm font-semibold text-slate-600 hover:bg-slate-100 disabled:opacity-50"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={confirmRefundOrder}
+                  disabled={processingRefund}
+                  className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-2.5 text-sm font-semibold text-emerald-800 hover:bg-emerald-100 disabled:opacity-50"
+                >
+                  {processingRefund ? "Processing…" : "Yes, refund"}
                 </button>
               </div>
             </div>
