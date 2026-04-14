@@ -152,7 +152,7 @@ export default function ArtworkReviewErrorContent({
         <button
           type="button"
           onClick={() => router.push("/upload-approval")}
-          className="w-full max-w-xs rounded-md bg-sky-600 px-4 py-3 text-center text-sm font-semibold text-white shadow-sm transition-colors hover:bg-sky-700"
+          className="w-full   max-w-xs rounded-md bg-sky-600 px-4 py-3 text-center text-sm font-semibold text-white shadow-sm transition-colors hover:bg-sky-700"
         >
           Back to upload list
         </button>

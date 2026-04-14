@@ -12,6 +12,7 @@ import {
   IoMailOutline,
   IoBookOutline,
   IoLogOutOutline,
+  IoImageOutline,
 } from "react-icons/io5";
 import { toast } from "react-toastify";
 
@@ -551,6 +552,10 @@ export default function Navbar() {
                           <Link href="/address-book" className="flex items-center gap-2 rounded-sm px-1.5 py-1 text-[#0B6BCB] hover:bg-slate-100 hover:text-blue-800 text-sm whitespace-nowrap">
                             <IoBookOutline className="h-4 w-4 shrink-0 opacity-90" aria-hidden />
                             Address Book
+                          </Link>
+                          <Link href="/my-artworks" className="flex items-center gap-2 rounded-sm px-1.5 py-1 text-[#0B6BCB] hover:bg-slate-100 hover:text-blue-800 text-sm whitespace-nowrap">
+                            <IoImageOutline className="h-4 w-4 shrink-0 opacity-90" aria-hidden />
+                            My Artworks
                           </Link>
                           <button
                             type="button"
