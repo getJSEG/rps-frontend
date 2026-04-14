@@ -102,6 +102,26 @@ export type Tax = {
   updated_at?: string;
 };
 
+export type ArtworkUploadPayload = {
+  widthPx: number | null;
+  heightPx: number | null;
+  sizeBytes: number;
+  mimeType: string;
+  pdfPageCount?: number | null;
+};
+export type ArtworkRecord = {
+  id: number;
+  fileName: string;
+  mimeType: string;
+  sizeBytes: number;
+  widthPx: number | null;
+  heightPx: number | null;
+  pdfPageCount: number | null;
+  unit: "px";
+  url: string;
+  createdAt: string;
+};
+
 export type CartSummary = {
   subtotal: number;
   shipping: number;
@@ -600,6 +620,40 @@ export const taxesAPI = {
     apiCall(`/taxes/admin/${id}/activate`, { method: 'PUT' }),
   deleteAdmin: async (id: number | string) =>
     apiCall(`/taxes/admin/${id}`, { method: 'DELETE' }),
+};
+
+export const artworksAPI = {
+  upload: async (file: File, metadata: ArtworkUploadPayload) => {
+    const token = typeof window !== "undefined" ? localStorage.getItem("token") : null;
+    const formData = new FormData();
+    formData.append("file", file);
+    formData.append("widthPx", String(metadata.widthPx ?? ""));
+    formData.append("heightPx", String(metadata.heightPx ?? ""));
+    formData.append("sizeBytes", String(metadata.sizeBytes));
+    formData.append("mimeType", metadata.mimeType);
+    if (metadata.pdfPageCount != null) {
+      formData.append("pdfPageCount", String(metadata.pdfPageCount));
+    }
+
+    const res = await fetch(`${API_BASE_URL}/artworks/upload`, {
+      method: "POST",
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+      body: formData,
+    });
+
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      throw new Error(data.message || data.error || "Artwork upload failed");
+    }
+
+    return res.json() as Promise<ArtworkRecord>;
+  },
+  getMine: async () => {
+    return apiCall("/artworks/my") as Promise<{ artworks: ArtworkRecord[] }>;
+  },
+  delete: async (id: number | string) => {
+    return apiCall(`/artworks/${id}`, { method: "DELETE" }) as Promise<{ ok: boolean }>;
+  },
 };
 
 // Orders API
