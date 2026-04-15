@@ -36,6 +36,11 @@ interface ProductProperty {
   value: string;
 }
 
+interface ProductFaqItem {
+  question: string;
+  answer: string;
+}
+
 interface Product {
   id: string;
   name: string;
@@ -51,6 +56,10 @@ interface Product {
   category_slug?: string;
   category_name?: string;
   description?: string;
+  spec?: string | null;
+  file_setup?: string | null;
+  installation_guide?: string | null;
+  faq?: ProductFaqItem[] | string | null;
   dimensions?: string;
   sizes?: string[];
   material?: string;
@@ -813,6 +822,35 @@ function ProductDetailContent() {
   const isProductImageBackendUpload = productImageRaw && String(productImageRaw).trim().startsWith("/uploads/");
   const productName = product?.name || "Product";
   const productDescription = product?.description || "";
+  const productSpec = product?.spec || "";
+  const productFileSetup = product?.file_setup || "";
+  const productInstallationGuide = product?.installation_guide || "";
+  const productFaq: ProductFaqItem[] = (() => {
+    const f = product?.faq;
+    if (Array.isArray(f)) {
+      return f
+        .map((item) => ({
+          question: String(item?.question || "").trim(),
+          answer: String(item?.answer || "").trim(),
+        }))
+        .filter((item) => item.question || item.answer);
+    }
+    if (typeof f === "string") {
+      try {
+        const parsed = JSON.parse(f);
+        if (!Array.isArray(parsed)) return [];
+        return parsed
+          .map((item) => ({
+            question: String((item as ProductFaqItem)?.question || "").trim(),
+            answer: String((item as ProductFaqItem)?.answer || "").trim(),
+          }))
+          .filter((item) => item.question || item.answer);
+      } catch {
+        return [];
+      }
+    }
+    return [];
+  })();
   const productMaterial = product?.material || "15mil. White Canvas";
   const productProperties = (() => {
     const p = product?.properties;
@@ -993,8 +1031,8 @@ function ProductDetailContent() {
               </div>
             )}
 
-            {/* Subcategories Thumbnail Gallery */}
-            {subcategories.length > 0 && (
+            {/* Subcategories Thumbnail Gallery (show only when multiple subcategories exist) */}
+            {subcategories.length > 1 && (
               <div className="mb-6">
                 <div className="flex gap-2 overflow-x-auto pb-2">
                   {subcategoryThumbnails.map((sub, idx) => (
@@ -1577,145 +1615,60 @@ function ProductDetailContent() {
                   </table>
                 </div>
               )}
-              <div>
-                <h3 className="font-semibold text-gray-900 mb-2">
-                  Next Day Turnaround and Cut-off Time:
-                </h3>
-                <p className="mb-2">
-                  Order and submit artwork before 4pm PST ships next business day. Order after 4pm add 1 business day.
-                </p>
-                <p>Orders over 100 qty require 2 extra business days.</p>
-              </div>
-              <div>
-                <h3 className="font-semibold text-gray-900 mb-2">Same Day Turnaround:</h3>
-                <p>Not available for this product.</p>
-              </div>
-              <div>
-                <p>
-                  Unstretched artist canvas in custom height and width so customers can order and frame photos and art at any size. Our canvas has semi-gloss finish, designed for long-term and fade-resistant fine art reproduction. The polyester/cotton blend canvas is great for superior color quality.
-                </p>
-              </div>
+              {!productDescription && !hasProductProperties && (
+                <p className="text-gray-600">No description available for this product yet.</p>
+              )}
             </div>
           )}
 
           {activeTab === "spec" && (
             <div className="space-y-6 text-gray-700">
-              <div>
-                <h3 className="font-semibold text-gray-900 mb-2">Material:</h3>
-                <ul className="list-disc list-inside space-y-1">
-                  <li>6 oz. Tent Fabric (600x600 denier)</li>
-                  <li>40mm Aluminum Hex Hardware, aluminum wall thickness 1mm</li>
-                </ul>
-              </div>
+              {productSpec ? (
+                /^[\s]*</.test(productSpec) ? (
+                  <div
+                    className="prose prose-sm max-w-full min-w-0 break-words [overflow-wrap:anywhere] [&_*]:max-w-full [&_img]:max-w-full [&_img]:h-auto"
+                    dangerouslySetInnerHTML={{ __html: productSpec }}
+                  />
+                ) : (
+                  <p className="whitespace-pre-wrap break-words [overflow-wrap:anywhere]">{productSpec}</p>
+                )
+              ) : (
+                <p className="text-gray-600">No spec available for this product yet.</p>
+              )}
             </div>
           )}
 
           {activeTab === "file-setup" && (
             <div className="space-y-6 text-gray-700">
-              <div>
-                <h3 className="font-semibold text-gray-900 mb-4">File Setup</h3>
-                <ul className="list-disc list-inside space-y-2 mb-6">
-                  <li>Max File Upload Size: 300MB</li>
-                  <li>Submit artwork built to ordered size - Scaled artwork is automatically detected and fit to order</li>
-                  <li>Do not include crop marks or bleeds</li>
-                </ul>
-              </div>
-              <div>
-                <h3 className="font-semibold text-gray-900 mb-4">Additional Tips</h3>
-                <ul className="list-disc list-inside space-y-2 mb-6">
-                  <li>Do not submit with Pantones/Spot Colors - Convert to CMYK</li>
-                  <li>Convert live fonts to outlines</li>
-                  <li>Use provided design templates when available</li>
-                </ul>
-              </div>
-              <div>
-                <h3 className="font-semibold text-gray-900 mb-4">
-                  Template Download <a href="#" className="text-blue-600 text-sm font-normal">(Template User Guide)</a>
-                </h3>
-                <div className="overflow-x-auto">
-                  <table className="w-full border-collapse border border-gray-300">
-                    <thead>
-                      <tr className="bg-gray-100">
-                        <th className="border border-gray-300 px-4 py-2 text-left">Tent Products</th>
-                        <th className="border border-gray-300 px-4 py-2 text-left">
-                          <div className="flex items-center gap-2">
-                            <span className="text-red-600">PDF</span>
-                            <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
-                              <path fillRule="evenodd" d="M4 4a2 2 0 012-2h4.586A2 2 0 0112 2.586L15.414 6A2 2 0 0116 7.414V16a2 2 0 01-2 2H6a2 2 0 01-2-2V4z" clipRule="evenodd" />
-                            </svg>
-                          </div>
-                        </th>
-                        <th className="border border-gray-300 px-4 py-2 text-left">
-                          <div className="flex items-center gap-2">
-                            <span className="text-blue-600">Photoshop</span>
-                            <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
-                              <path d="M4 4a2 2 0 012-2h4.586A2 2 0 0112 2.586L15.414 6A2 2 0 0116 7.414V16a2 2 0 01-2 2H6a2 2 0 01-2-2V4z" />
-                            </svg>
-                          </div>
-                        </th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      <tr>
-                        <td className="border border-gray-300 px-4 py-3">
-                          <div className="flex items-center gap-3">
-                            <div className="w-16 h-16 bg-gray-200 rounded"></div>
-                            <span>Event Tent (Full Color)</span>
-                          </div>
-                        </td>
-                        <td className="border border-gray-300 px-4 py-3">
-                          <a href="#" className="text-blue-600 hover:text-blue-800">Canopy</a>
-                        </td>
-                        <td className="border border-gray-300 px-4 py-3">
-                          <a href="#" className="text-blue-600 hover:text-blue-800">Canopy</a>
-                        </td>
-                      </tr>
-                      <tr>
-                        <td className="border border-gray-300 px-4 py-3">
-                          <div className="flex items-center gap-3">
-                            <div className="w-16 h-16 bg-gray-200 rounded"></div>
-                            <span>Tent Full Wall (Full Color)</span>
-                          </div>
-                        </td>
-                        <td className="border border-gray-300 px-4 py-3">
-                          <a href="#" className="text-blue-600 hover:text-blue-800">Full Wall</a>
-                        </td>
-                        <td className="border border-gray-300 px-4 py-3">
-                          <a href="#" className="text-blue-600 hover:text-blue-800">Full Wall</a>
-                        </td>
-                      </tr>
-                      <tr>
-                        <td className="border border-gray-300 px-4 py-3">
-                          <div className="flex items-center gap-3">
-                            <div className="w-16 h-16 bg-gray-200 rounded"></div>
-                            <span>Tent Half Wall (Full Color)</span>
-                          </div>
-                        </td>
-                        <td className="border border-gray-300 px-4 py-3">
-                          <a href="#" className="text-blue-600 hover:text-blue-800">Half Wall</a>
-                        </td>
-                        <td className="border border-gray-300 px-4 py-3">
-                          <a href="#" className="text-blue-600 hover:text-blue-800">Half Wall</a>
-                        </td>
-                      </tr>
-                    </tbody>
-                  </table>
-                </div>
-              </div>
+              {productFileSetup ? (
+                /^[\s]*</.test(productFileSetup) ? (
+                  <div
+                    className="prose prose-sm max-w-full min-w-0 break-words [overflow-wrap:anywhere] [&_*]:max-w-full [&_img]:max-w-full [&_img]:h-auto"
+                    dangerouslySetInnerHTML={{ __html: productFileSetup }}
+                  />
+                ) : (
+                  <p className="whitespace-pre-wrap break-words [overflow-wrap:anywhere]">{productFileSetup}</p>
+                )
+              ) : (
+                <p className="text-gray-600">No file setup content available for this product yet.</p>
+              )}
             </div>
           )}
 
           {activeTab === "installation-guide" && (
             <div className="space-y-6 text-gray-700">
-              <div>
-                <h3 className="font-semibold text-gray-900 mb-4">Installation Guide</h3>
-                <a href="#" className="text-blue-600 hover:text-blue-800 flex items-center gap-2">
-                  <svg className="w-5 h-5 text-red-600" fill="currentColor" viewBox="0 0 20 20">
-                    <path fillRule="evenodd" d="M4 4a2 2 0 012-2h4.586A2 2 0 0112 2.586L15.414 6A2 2 0 0116 7.414V16a2 2 0 01-2 2H6a2 2 0 01-2-2V4z" clipRule="evenodd" />
-                  </svg>
-                  Event Tent Installation Guide
-                </a>
-              </div>
+              {productInstallationGuide ? (
+                /^[\s]*</.test(productInstallationGuide) ? (
+                  <div
+                    className="prose prose-sm max-w-full min-w-0 break-words [overflow-wrap:anywhere] [&_*]:max-w-full [&_img]:max-w-full [&_img]:h-auto"
+                    dangerouslySetInnerHTML={{ __html: productInstallationGuide }}
+                  />
+                ) : (
+                  <p className="whitespace-pre-wrap break-words [overflow-wrap:anywhere]">{productInstallationGuide}</p>
+                )
+              ) : (
+                <p className="text-gray-600">No installation guide available for this product yet.</p>
+              )}
             </div>
           )}
 
@@ -1723,39 +1676,37 @@ function ProductDetailContent() {
             <div className="space-y-6 text-gray-700">
               <div>
                 <h3 className="font-semibold text-gray-900 mb-4">Frequently asked questions</h3>
-                <div className="space-y-3">
-                  {[
-                    { q: "Can I leave the canopy graphic on while I retract the tent frame?", a: "Yes, the canopy graphic can remain on the tent frame when retracting it." },
-                    { q: "Can I use different artwork for each side?", a: "Yes, you can customize each side with different artwork." },
-                    { q: "How many graphics can fit in the Carry Bag Graphics/Accessories Compartment?", a: "The carry bag can accommodate multiple graphics depending on their size and thickness." },
-                    { q: "What do you recommend for cleaning the event tent graphics?", a: "Use mild soap and water with a soft cloth. Avoid harsh chemicals." },
-                    { q: "How would canopy and full wall connect together?", a: "The canopy and full wall connect using the included hardware and attachment points on the frame." },
-                  ].map((faq, idx) => (
-                    <div key={idx} className="border border-gray-200 rounded-lg">
-                      <button
-                        onClick={() => setExpandedFAQ(expandedFAQ === idx ? null : idx)}
-                        className="w-full px-4 py-3 flex items-center justify-between text-left hover:bg-gray-50"
-                      >
-                        <span className="font-medium text-gray-900">Q: {faq.q}</span>
-                        <svg
-                          className={`w-5 h-5 text-blue-600 transition-transform ${
-                            expandedFAQ === idx ? "rotate-45" : ""
-                          }`}
-                          fill="none"
-                          stroke="currentColor"
-                          viewBox="0 0 24 24"
+                {productFaq.length > 0 ? (
+                  <div className="space-y-3">
+                    {productFaq.map((faq, idx) => (
+                      <div key={`${faq.question}-${idx}`} className="border border-gray-200 rounded-lg">
+                        <button
+                          onClick={() => setExpandedFAQ(expandedFAQ === idx ? null : idx)}
+                          className="w-full px-4 py-3 flex items-center justify-between text-left hover:bg-gray-50"
                         >
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-                        </svg>
-                      </button>
-                      {expandedFAQ === idx && (
-                        <div className="px-4 py-3 border-t border-gray-200 bg-gray-50">
-                          <p className="text-gray-700">{faq.a}</p>
-                        </div>
-                      )}
-                    </div>
-                  ))}
-                </div>
+                          <span className="font-medium text-gray-900">Q: {faq.question}</span>
+                          <svg
+                            className={`w-5 h-5 text-blue-600 transition-transform ${
+                              expandedFAQ === idx ? "rotate-45" : ""
+                            }`}
+                            fill="none"
+                            stroke="currentColor"
+                            viewBox="0 0 24 24"
+                          >
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                          </svg>
+                        </button>
+                        {expandedFAQ === idx && (
+                          <div className="px-4 py-3 border-t border-gray-200 bg-gray-50">
+                            <p className="text-gray-700 whitespace-pre-wrap">{faq.answer}</p>
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="text-gray-600">No FAQ available for this product yet.</p>
+                )}
               </div>
             </div>
           )}
@@ -1843,7 +1794,7 @@ function ProductDetailContent() {
                       </div>
 
                       {/* Product Info */}
-                      <div className="p-4">
+                      <div className="p-4 flex h-full flex-col">
                         <div className="mb-2">
                           {relatedProduct.category_name && (
                             <p className="text-xs text-gray-500 mb-1">{relatedProduct.category_name}</p>
@@ -1869,7 +1820,7 @@ function ProductDetailContent() {
                             View Details →
                           </span>
                         </div>
-                        <div className="mt-3 pt-3 border-t border-gray-200">
+                        <div className="mt-auto pt-3 border-t border-gray-200">
                           <button
                             type="button"
                             onClick={(e) => handleSelectProduct(e)}

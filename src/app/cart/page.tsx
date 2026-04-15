@@ -21,7 +21,7 @@ import {
   type FreeShippingPolicy,
   type CartSummary,
 } from "../../utils/api";
-import { FiTrash2 } from "react-icons/fi";
+import { FiArrowLeft, FiTrash2 } from "react-icons/fi";
 
 interface CartJobLine {
   jobName: string;
@@ -94,6 +94,8 @@ export default function CartPage() {
     freeShippingEnabled: false,
     freeShippingThreshold: 0,
   });
+  const [clearCartPopoverOpen, setClearCartPopoverOpen] = useState(false);
+  const [clearingCart, setClearingCart] = useState(false);
   // const [isAdminView, setIsAdminView] = useState(false);
   const hasInitializedRef = useRef(false);
 
@@ -214,6 +216,21 @@ export default function CartPage() {
     }
   };
 
+  const clearCart = async () => {
+    try {
+      setClearingCart(true);
+      await cartAPI.clear();
+      setCartItems([]);
+      setOrderSummary(null);
+      setClearCartPopoverOpen(false);
+      window.dispatchEvent(new Event("cartUpdated"));
+    } catch (error) {
+      console.error("Error clearing cart:", error);
+    } finally {
+      setClearingCart(false);
+    }
+  };
+
   const calculateTotal = () => orderSummary?.total ?? subtotalSum + shippingSum;
 
   if (loading) {
@@ -279,6 +296,27 @@ export default function CartPage() {
       <Navbar />
       <div className="min-h-screen bg-gray-50 pt-25 pb-16">
         <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
+            <button
+              type="button"
+              onClick={() => router.back()}
+              className="inline-flex items-center gap-2 rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 transition hover:bg-gray-50"
+            >
+              <FiArrowLeft className="h-4 w-4" aria-hidden />
+              Back to Product
+            </button>
+            {cartItems.length > 0 ? (
+              <button
+                type="button"
+                onClick={() => setClearCartPopoverOpen(true)}
+                className="inline-flex items-center gap-2 rounded-lg border border-red-200 bg-white px-4 py-2 text-sm font-medium text-red-600 transition hover:bg-red-50"
+              >
+                <FiTrash2 className="h-4 w-4" aria-hidden />
+                Clear Cart
+              </button>
+            ) : null}
+          </div>
+
           {cartItems.length === 0 ? (
             <>
               {/* Cart title hidden */}
@@ -519,6 +557,44 @@ export default function CartPage() {
           )}
         </div>
       </div>
+      {clearCartPopoverOpen ? (
+        <div
+          className="fixed inset-0 z-[100] flex items-center justify-center bg-black/35 p-4"
+          onClick={() => setClearCartPopoverOpen(false)}
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="clear-cart-title"
+        >
+          <div
+            className="w-full max-w-sm rounded-xl border border-gray-200 bg-white p-5 shadow-xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h2 id="clear-cart-title" className="text-lg font-semibold text-gray-900">
+              Clear cart?
+            </h2>
+            <p className="mt-2 text-sm text-gray-600">
+              Are you sure you want to remove all items from your cart? This action cannot be undone.
+            </p>
+            <div className="mt-5 flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setClearCartPopoverOpen(false)}
+                className="rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 transition hover:bg-gray-50"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={clearCart}
+                disabled={clearingCart}
+                className="rounded-lg bg-red-600 px-4 py-2 text-sm font-medium text-white transition hover:bg-red-700 disabled:opacity-60"
+              >
+                {clearingCart ? "Clearing..." : "Yes, clear cart"}
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
       <Footer />
     </>
   );

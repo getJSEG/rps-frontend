@@ -26,11 +26,20 @@ interface ProductProperty {
   value: string;
 }
 
+interface ProductFaqItem {
+  question: string;
+  answer: string;
+}
+
 interface Product {
   id: number;
   name: string;
   slug: string;
   description: string | null;
+  spec?: string | null;
+  file_setup?: string | null;
+  installation_guide?: string | null;
+  faq?: ProductFaqItem[] | string | null;
   category_id: number | null;
   category_name?: string;
   category_slug?: string;
@@ -98,6 +107,10 @@ export default function AdminProductsPage() {
   const [prodName, setProdName] = useState("");
   const [prodSlug, setProdSlug] = useState("");
   const [prodDescription, setProdDescription] = useState("");
+  const [prodSpec, setProdSpec] = useState("");
+  const [prodFileSetup, setProdFileSetup] = useState("");
+  const [prodInstallationGuide, setProdInstallationGuide] = useState("");
+  const [prodFaq, setProdFaq] = useState<ProductFaqItem[]>([]);
   const [prodParentId, setProdParentId] = useState<string>("");
   const [prodCategoryId, setProdCategoryId] = useState<string>("");
   const [prodSubcategory, setProdSubcategory] = useState("");
@@ -473,6 +486,12 @@ export default function AdminProductsPage() {
         name: prodName.trim(),
         slug: prodSlug.trim() || undefined,
         description: prodDescription.trim() || undefined,
+        spec: prodSpec.trim() || undefined,
+        file_setup: prodFileSetup.trim() || undefined,
+        installation_guide: prodInstallationGuide.trim() || undefined,
+        faq: prodFaq
+          .filter((item) => item.question.trim() || item.answer.trim())
+          .map((item) => ({ question: item.question.trim(), answer: item.answer.trim() })),
         category_id: prodCategoryId === "" ? null : parseInt(prodCategoryId),
         subcategory: prodSubcategory.trim() || undefined,
         price:
@@ -510,6 +529,10 @@ export default function AdminProductsPage() {
       setProdName("");
       setProdSlug("");
       setProdDescription("");
+      setProdSpec("");
+      setProdFileSetup("");
+      setProdInstallationGuide("");
+      setProdFaq([]);
       setProdParentId("");
       setProdCategoryId("");
       setProdSubcategory("");
@@ -571,6 +594,32 @@ export default function AdminProductsPage() {
     setProdName(p.name);
     setProdSlug(p.slug);
     setProdDescription(p.description || "");
+    setProdSpec(p.spec || "");
+    setProdFileSetup(p.file_setup || "");
+    setProdInstallationGuide(p.installation_guide || "");
+    {
+      const f = p.faq;
+      const parsedFaq =
+        Array.isArray(f)
+          ? f
+          : typeof f === "string"
+            ? (() => {
+                try {
+                  const parsed = JSON.parse(f);
+                  return Array.isArray(parsed) ? parsed : [];
+                } catch {
+                  return [];
+                }
+              })()
+            : [];
+      setProdFaq(
+        parsedFaq
+          .map((x) => ({
+            question: String((x as ProductFaqItem)?.question || ""),
+            answer: String((x as ProductFaqItem)?.answer || ""),
+          }))
+      );
+    }
     const props = p.properties;
     setProdProperties(Array.isArray(props) ? props : typeof props === "string" ? (() => { try { return JSON.parse(props); } catch { return []; } })() : []);
     const catId = p.category_id == null ? null : p.category_id;
@@ -629,6 +678,10 @@ export default function AdminProductsPage() {
     setProdName("");
     setProdSlug("");
     setProdDescription("");
+    setProdSpec("");
+    setProdFileSetup("");
+    setProdInstallationGuide("");
+    setProdFaq([]);
     setProdParentId("");
     setProdCategoryId("");
     setProdSubcategory("");
@@ -798,6 +851,94 @@ export default function AdminProductsPage() {
                           />
                         </div>
                         <p className="mt-1 text-xs text-slate-500">Use toolbar for bold, italic, and lists. Shown on product page.</p>
+                      </div>
+                      <div className="md:col-span-2">
+                        <label className="mb-1 block text-sm font-medium text-slate-700">
+                          Spec
+                        </label>
+                        <textarea
+                          rows={4}
+                          placeholder="Enter spec content"
+                          value={prodSpec}
+                          onChange={(e) => setProdSpec(e.target.value)}
+                          className={inputClass}
+                        />
+                      </div>
+                      <div className="md:col-span-2">
+                        <label className="mb-1 block text-sm font-medium text-slate-700">
+                          File Setup
+                        </label>
+                        <textarea
+                          rows={4}
+                          placeholder="Enter file setup instructions"
+                          value={prodFileSetup}
+                          onChange={(e) => setProdFileSetup(e.target.value)}
+                          className={inputClass}
+                        />
+                      </div>
+                      <div className="md:col-span-2">
+                        <label className="mb-1 block text-sm font-medium text-slate-700">
+                          Installation Guide
+                        </label>
+                        <textarea
+                          rows={4}
+                          placeholder="Enter installation guide"
+                          value={prodInstallationGuide}
+                          onChange={(e) => setProdInstallationGuide(e.target.value)}
+                          className={inputClass}
+                        />
+                      </div>
+                      <div className="md:col-span-2">
+                        <div className="mb-2 flex flex-wrap items-start justify-between gap-3">
+                          <label className="block text-sm font-medium text-slate-700">
+                            FAQ
+                          </label>
+                          <button
+                            type="button"
+                            onClick={() => setProdFaq([...prodFaq, { question: "", answer: "" }])}
+                            className="shrink-0 rounded-lg bg-slate-900 px-4 py-2.5 text-sm font-medium text-white shadow-sm transition hover:bg-slate-800"
+                          >
+                            + Add FAQ
+                          </button>
+                        </div>
+                        <div className="space-y-3">
+                          {prodFaq.map((item, idx) => (
+                            <div key={idx} className="rounded-lg border border-slate-200 bg-white p-3">
+                              <div className="mb-2 flex justify-end">
+                                <button
+                                  type="button"
+                                  onClick={() => setProdFaq(prodFaq.filter((_, i) => i !== idx))}
+                                  title="Remove FAQ"
+                                  className="inline-flex items-center justify-center rounded-lg p-2 text-rose-600 transition-colors hover:bg-rose-50 hover:text-rose-800"
+                                >
+                                  <FiTrash2 size={18} aria-hidden />
+                                </button>
+                              </div>
+                              <input
+                                type="text"
+                                placeholder="Question"
+                                value={item.question}
+                                onChange={(e) => {
+                                  const next = [...prodFaq];
+                                  next[idx] = { ...next[idx], question: e.target.value };
+                                  setProdFaq(next);
+                                }}
+                                className={`${inputClass} mb-2`}
+                              />
+                              <textarea
+                                rows={3}
+                                placeholder="Answer"
+                                value={item.answer}
+                                onChange={(e) => {
+                                  const next = [...prodFaq];
+                                  next[idx] = { ...next[idx], answer: e.target.value };
+                                  setProdFaq(next);
+                                }}
+                                className={inputClass}
+                              />
+                            </div>
+                          ))}
+                        </div>
                       </div>
                       <div className="md:col-span-2">
                         <div className="mb-2 flex flex-wrap items-start justify-between mb-4 gap-3">
