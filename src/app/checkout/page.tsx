@@ -122,6 +122,7 @@ export default function CheckoutPage() {
   const [cardsLoading, setCardsLoading] = useState(false);
   const [clientSecret, setClientSecret] = useState<string | null>(null);
   const [orderId, setOrderId] = useState<number | null>(null);
+  const [guestTrackingToken, setGuestTrackingToken] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
   const [processing, setProcessing] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -445,14 +446,21 @@ export default function CheckoutPage() {
             orderNumber?: string;
             clientSecret: string | null;
             stripePaymentSkipped?: boolean;
+            guestTrackingToken?: string;
           };
+      const guestToken = !loggedInCheckout ? String(res.guestTrackingToken || "").trim() : "";
+      if (!loggedInCheckout && guestToken) setGuestTrackingToken(guestToken);
       if (res.stripePaymentSkipped) {
         try {
           await cartAPI.clear();
         } catch (_) {}
         localStorage.removeItem("cart");
         window.dispatchEvent(new Event("cartUpdated"));
-        router.push(`/upload?placed=1&order=${res.orderId}`);
+        if (!loggedInCheckout && guestToken) {
+          router.push(`/guest-orders/${res.orderId}?token=${encodeURIComponent(guestToken)}&placed=1`);
+        } else {
+          router.push(`/upload?placed=1&order=${res.orderId}`);
+        }
         return;
       }
       if (!res.clientSecret) {
@@ -491,7 +499,10 @@ export default function CheckoutPage() {
       const { error: err } = await stripe.confirmPayment({
         elements: elementsRef.current.elements,
         confirmParams: {
-          return_url: `${typeof window !== "undefined" ? window.location.origin : ""}/upload?placed=1&order=${orderId}`,
+          return_url:
+            !loggedInCheckout && guestTrackingToken
+              ? `${typeof window !== "undefined" ? window.location.origin : ""}/guest-orders/${orderId}?token=${encodeURIComponent(guestTrackingToken)}&placed=1`
+              : `${typeof window !== "undefined" ? window.location.origin : ""}/upload?placed=1&order=${orderId}`,
         },
       });
       if (err) setError(err.message || "Payment failed");

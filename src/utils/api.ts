@@ -706,6 +706,18 @@ export const ordersAPI = {
     });
   },
 
+  getGuestById: async (id: string | number, token: string) => {
+    const q = new URLSearchParams({ token: String(token || '') }).toString();
+    return apiCall(`/orders/guest/${id}?${q}`);
+  },
+
+  requestGuestCancellation: async (id: string | number, token: string) => {
+    const q = new URLSearchParams({ token: String(token || '') }).toString();
+    return apiCall(`/orders/guest/${id}/request-cancellation?${q}`, {
+      method: 'POST',
+    });
+  },
+
   updateOrderTrackingId: async (id: string, orderTrackingId: string | null) => {
     return apiCall(`/orders/admin/${id}/order-tracking`, {
       method: 'PUT',
