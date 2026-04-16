@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import ArtworkReviewFilePreview from "./ArtworkReviewFilePreview";
+import ArtworkLibraryPickerModal from "./ArtworkLibraryPickerModal";
 import {
   commitFilePreviewToSession,
   UPLOAD_APPROVAL_REVIEW_OK_ROUTE,
@@ -31,6 +32,7 @@ export default function ArtworkReviewErrorContent({
 }: ArtworkReviewErrorContentProps) {
   const router = useRouter();
   const fileRef = useRef<HTMLInputElement>(null);
+  const [libraryOpen, setLibraryOpen] = useState(false);
 
   const [localPreviewSrc, setLocalPreviewSrc] = useState<string | null>(previewSrc ?? null);
   const [localPreviewMime, setLocalPreviewMime] = useState<string | null>(previewMime ?? null);
@@ -57,20 +59,19 @@ export default function ArtworkReviewErrorContent({
 
   const openReupload = useCallback(() => fileRef.current?.click(), []);
 
-  const onReuploadFile = useCallback(
-    (e: React.ChangeEvent<HTMLInputElement>) => {
-      const f = e.target.files?.[0];
-      e.target.value = "";
-      if (!f) return;
+  const readExistingContext = useCallback((): StoredUploadReviewContext | null => {
+    try {
+      const raw = sessionStorage.getItem(UPLOAD_APPROVAL_REVIEW_CONTEXT_KEY);
+      if (raw) return JSON.parse(raw) as StoredUploadReviewContext;
+    } catch {
+      /* ignore */
+    }
+    return null;
+  }, []);
 
-      let existing: StoredUploadReviewContext | null = null;
-      try {
-        const raw = sessionStorage.getItem(UPLOAD_APPROVAL_REVIEW_CONTEXT_KEY);
-        if (raw) existing = JSON.parse(raw) as StoredUploadReviewContext;
-      } catch {
-        existing = null;
-      }
-
+  const applySelectedFile = useCallback(
+    (f: File) => {
+      const existing = readExistingContext();
       void (async () => {
         try {
           const r = await commitFilePreviewToSession(f, existing);
@@ -94,11 +95,26 @@ export default function ArtworkReviewErrorContent({
         }
       })();
     },
-    [router]
+    [readExistingContext, router]
+  );
+
+  const onReuploadFile = useCallback(
+    (e: React.ChangeEvent<HTMLInputElement>) => {
+      const f = e.target.files?.[0];
+      e.target.value = "";
+      if (!f) return;
+      applySelectedFile(f);
+    },
+    [applySelectedFile]
   );
 
   return (
     <div className="flex h-full min-h-[420px] flex-col gap-8 lg:flex-row lg:items-stretch lg:justify-between">
+      <ArtworkLibraryPickerModal
+        open={libraryOpen}
+        onClose={() => setLibraryOpen(false)}
+        onPickFile={applySelectedFile}
+      />
       <input
         ref={fileRef}
         type="file"
@@ -162,6 +178,14 @@ export default function ArtworkReviewErrorContent({
           }`}
         >
           {awaitingFileSelection ? "Choose file" : "Upload image"}
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setLibraryOpen(true)}
+          className="w-full rounded-md bg-sky-600 px-4 py-3.5 text-center text-sm font-semibold text-white shadow-sm transition-colors hover:bg-sky-700"
+        >
+          Upload my artwork
         </button>
 
         <button
