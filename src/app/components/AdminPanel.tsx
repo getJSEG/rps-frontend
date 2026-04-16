@@ -593,9 +593,12 @@ export default function AdminPanel() {
                             <Link
                               href={orderDetailUrl}
                               onClick={(e) => e.stopPropagation()}
-                              className="font-medium text-slate-900 transition-colors hover:text-sky-600"
+                              className="min-w-0 transition-colors hover:text-sky-600"
                             >
-                              {order.productName}
+                              <div className="truncate font-medium text-slate-900">{order.productName}</div>
+                              <div className="mt-0.5 text-[11px] font-semibold text-slate-400">
+                                Order ID: {order.order_number || order.id}
+                              </div>
                             </Link>
                           </div>
                         </td>

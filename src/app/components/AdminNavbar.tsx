@@ -16,6 +16,11 @@ interface AdminNavbarProps {
 
 const navItems = [
   {
+    href: "/admin/reports",
+    label: "Reports",
+    match: (p: string) => p === "/admin/reports" || p.startsWith("/admin/reports"),
+  },
+  {
     href: "/admin",
     label: "Orders",
     match: (p: string) =>
@@ -29,11 +34,6 @@ const navItems = [
     href: "/admin/products",
     label: "Products",
     match: (p: string) => p === "/admin/products" || p.startsWith("/admin/products"),
-  },
-  {
-    href: "/admin/employees",
-    label: "Employees",
-    match: (p: string) => p === "/admin/employees" || p.startsWith("/admin/employees"),
   },
   {
     href: "/admin/users",
@@ -54,6 +54,11 @@ const navItems = [
     href: "/admin/taxes",
     label: "Taxes",
     match: (p: string) => p === "/admin/taxes" || p.startsWith("/admin/taxes"),
+  },
+  {
+    href: "/admin/employees",
+    label: "Employees",
+    match: (p: string) => p === "/admin/employees" || p.startsWith("/admin/employees"),
   },
 ] as const;
 
@@ -126,6 +131,11 @@ export default function AdminNavbar({
                   {label === "Products" && (
                     <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
+                    </svg>
+                  )}
+                  {label === "Reports" && (
+                    <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 20V10m5 10V4m5 16v-7M4 20h16" />
                     </svg>
                   )}
                   {label === "Employees" && (

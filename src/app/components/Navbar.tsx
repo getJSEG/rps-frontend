@@ -334,7 +334,7 @@ export default function Navbar() {
         toast.success("Login successful!");
         const role = (response.user?.role || "").toString().toLowerCase();
         if (role === "admin") {
-          router.push("/admin");
+          router.push("/admin/reports");
         } else {
           router.push("/");
         }
