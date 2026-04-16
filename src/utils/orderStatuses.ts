@@ -7,14 +7,11 @@ export const ADMIN_ORDER_STATUS_OPTIONS: { value: string; label: string }[] = [
   { value: "pending_payment", label: "Pending payment" },
   { value: "awaiting_artwork", label: "Awaiting artwork" },
   { value: "on_hold", label: "On hold" },
-  { value: "awaiting_customer_approval", label: "Awaiting customer approval" },
   { value: "printing", label: "Printing" },
   { value: "trimming", label: "Trimming" },
   { value: "shipped", label: "Shipped" },
   { value: "completed", label: "Completed" },
   { value: "reprint", label: "Reprint" },
-  { value: "awaiting_refund", label: "Awaiting refund" },
-  { value: "refunded", label: "Refunded" },
   { value: "cancelled", label: "Cancelled" },
 ];
 
@@ -37,6 +34,7 @@ export function canonicalOrderStatus(raw: string | null | undefined): string {
     refund: "awaiting_refund",
     cancelled: "cancelled",
     canceled: "cancelled",
+    cancellation_requested: "cancellation_requested",
   };
   return legacy[s] ?? s;
 }
@@ -68,6 +66,8 @@ export function customerOrderStatusDescription(
       return null;
     case "awaiting_artwork":
       return "We're waiting to receive your artwork files for this job. Upload your files if you have not already.";
+    case "cancellation_requested":
+      return "Your cancellation request has been received and is awaiting admin review.";
     case "on_hold":
       return "There's an issue with your job. We'll email you with further instructions.";
     case "awaiting_customer_approval":
@@ -83,9 +83,9 @@ export function customerOrderStatusDescription(
     case "reprint":
       return "Your job is being reprinted.";
     case "awaiting_refund":
-      return "Your refund request is received. The accounting department is processing it.";
+      return "Your order is cancelled. Refund is in process. The accounting department is processing it.";
     case "refunded":
-      return "Your refund has been successfully processed.";
+      return "Your refund has been successfully processed. It may take a few business days for the amount to reflect in your account. Thank you for your patience.";
     case "cancelled":
       return "Unfortunately, your order has been cancelled.";
     default:
@@ -102,7 +102,7 @@ export function isOrderStatusLocked(status: string | null | undefined): boolean 
     .toLowerCase()
     .trim()
     .replace(/\s+/g, "_");
-  return s === "completed" || s === "complete" || s === "delivered";
+  return s === "completed" || s === "complete" || s === "delivered" || s === "refunded";
 }
 
 const REFUND_LIKE = new Set(["awaiting_refund", "refunded", "refund"]);
@@ -115,6 +115,7 @@ export function isRefundLikeStatus(status: string | null | undefined): boolean {
 /** When set, step 1 of the customer progress bar shows this label instead of "Pre-production". */
 const FIRST_STEP_DYNAMIC_LABEL_STATUSES = new Set([
   "awaiting_artwork",
+  "cancellation_requested",
   "on_hold",
   "awaiting_customer_approval",
   "reprint",
@@ -146,6 +147,7 @@ export function customerOrderProgressKind(
   if (c === "shipped") return { stage: 4 };
   if (c === "trimming") return { stage: 3 };
   if (c === "printing" || c === "reprint") return { stage: 2 };
-  if (c === "awaiting_artwork" || c === "on_hold" || c === "awaiting_customer_approval") return { stage: 1 };
+  if (c === "awaiting_artwork" || c === "cancellation_requested" || c === "on_hold" || c === "awaiting_customer_approval")
+    return { stage: 1 };
   return { stage: 1 };
 }

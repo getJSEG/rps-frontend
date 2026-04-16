@@ -24,7 +24,7 @@ const navItems = [
       p.startsWith("/admin/orders") ||
       p.startsWith("/admin/cart-item"),
   },
-  { href: "/admin/refunds", label: "Refunds", match: (p: string) => p === "/admin/refunds" },
+  { href: "/admin/refunds", label: "Cancel/Refunds", match: (p: string) => p === "/admin/refunds" },
   {
     href: "/admin/products",
     label: "Products",
@@ -118,7 +118,7 @@ export default function AdminNavbar({
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
                     </svg>
                   )}
-                  {label === "Refunds" && (
+                  {label === "Cancel/Refunds" && (
                     <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 10h10a8 8 0 018 8v2M3 10l6 6m-6-6l6-6" />
                     </svg>

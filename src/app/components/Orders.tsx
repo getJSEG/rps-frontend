@@ -333,6 +333,12 @@ function matchesSearch(order: OrderRow, q: string): boolean {
   );
 }
 
+function canRequestCancellationStatus(status: string | null | undefined): boolean {
+  const c = canonicalOrderStatus(status);
+  if (!c) return false;
+  return c === "awaiting_artwork" || c === "on_hold" || c === "awaiting_customer_approval";
+}
+
 export default function Orders() {
   const searchParams = useSearchParams();
   const [filterOption, setFilterOption] = useState("All");
@@ -343,6 +349,8 @@ export default function Orders() {
   const [authReady, setAuthReady] = useState(false);
   const [loggedIn, setLoggedIn] = useState(false);
   const [expanded, setExpanded] = useState<Record<number, boolean>>({});
+  const [requestingCancellationId, setRequestingCancellationId] = useState<number | null>(null);
+  const [confirmCancellationId, setConfirmCancellationId] = useState<number | null>(null);
 
   useEffect(() => {
     setLoggedIn(isAuthenticated());
@@ -430,6 +438,30 @@ export default function Orders() {
 
   const toggleExpanded = (id: number) => {
     setExpanded((prev) => ({ ...prev, [id]: !prev[id] }));
+  };
+
+  const requestCancellation = async (orderId: number) => {
+    try {
+      setRequestingCancellationId(orderId);
+      const response = await ordersAPI.requestCancellation(String(orderId));
+      const nextStatus = String(response?.order?.status || "cancellation_requested");
+      setOrders((prev) =>
+        prev.map((row) =>
+          row.id === orderId
+            ? {
+                ...row,
+                status: nextStatus,
+              }
+            : row
+        )
+      );
+      setConfirmCancellationId(null);
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : "Failed to request cancellation";
+      alert(msg);
+    } finally {
+      setRequestingCancellationId(null);
+    }
   };
 
   /** Guest just paid: URL has placed=1&order=… — show confirmation only, not the full orders UI. */
@@ -592,6 +624,7 @@ export default function Orders() {
               const contact = contactLines(order);
               const shippingMethodLabel = order.shipping_method?.trim() || null;
               const isStorePickup = String(order.shipping_mode || "").toLowerCase() === "store_pickup";
+              const canRequestCancellation = canRequestCancellationStatus(order.status);
 
               return (
                 <li
@@ -647,7 +680,52 @@ export default function Orders() {
                             </div>
                           );
                         })()}
-                        <h3 className="text-sm font-semibold text-gray-900">Order status</h3>
+                        <div className="flex items-center justify-between gap-3">
+                          <h3 className="text-sm font-semibold text-gray-900">Order status</h3>
+                          {canRequestCancellation && (
+                            <div className="relative">
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  setConfirmCancellationId((prev) =>
+                                    prev === order.id ? null : order.id
+                                  )
+                                }
+                                disabled={requestingCancellationId === order.id}
+                                className="rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-xs font-semibold text-rose-800 hover:bg-rose-100 disabled:opacity-50"
+                              >
+                                {requestingCancellationId === order.id
+                                  ? "Requesting…"
+                                  : "Request cancellation"}
+                              </button>
+                              {confirmCancellationId === order.id && (
+                                <div className="absolute right-0 z-20 mt-2 w-72 rounded-lg border border-slate-200 bg-white p-3 shadow-lg">
+                                  <p className="text-xs text-slate-700">
+                                    Are you sure you want to request cancellation for this
+                                    order?
+                                  </p>
+                                  <div className="mt-3 flex justify-end gap-2">
+                                    <button
+                                      type="button"
+                                      onClick={() => setConfirmCancellationId(null)}
+                                      className="rounded-md px-2.5 py-1.5 text-xs font-semibold text-slate-600 hover:bg-slate-100"
+                                    >
+                                      No
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() => requestCancellation(order.id)}
+                                      disabled={requestingCancellationId === order.id}
+                                      className="rounded-md border border-rose-200 bg-rose-50 px-2.5 py-1.5 text-xs font-semibold text-rose-800 hover:bg-rose-100 disabled:opacity-50"
+                                    >
+                                      Yes, request
+                                    </button>
+                                  </div>
+                                </div>
+                              )}
+                            </div>
+                          )}
+                        </div>
                         <OrderProgressBar status={order.status} />
                       </div>
 
