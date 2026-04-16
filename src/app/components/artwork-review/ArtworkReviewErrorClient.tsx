@@ -1,11 +1,16 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import ArtworkReviewShell, { type ArtworkReviewJobMeta } from "./ArtworkReviewShell";
 import ArtworkReviewErrorContent from "./ArtworkReviewErrorContent";
 import { ARTWORK_REVIEW_DEMO } from "./artworkReviewMock";
 import {
+  REVIEW_PLACEHOLDER_FILE_NAME,
+  UPLOAD_APPROVAL_PENDING_JOBS_KEY,
   UPLOAD_APPROVAL_REVIEW_CONTEXT_KEY,
+  revokeStoredUploadPreview,
+  reviewContextFromPendingLine,
+  type StoredPendingJobLine,
   type StoredUploadReviewContext,
 } from "./uploadApprovalReviewStorage";
 
@@ -33,7 +38,7 @@ export default function ArtworkReviewErrorClient() {
     dimensions: ARTWORK_REVIEW_DEMO.dimensions,
     quantity: ARTWORK_REVIEW_DEMO.quantity,
   }));
-  const [displayFileName, setDisplayFileName] = useState(ARTWORK_REVIEW_DEMO.fileNameError);
+  const [displayFileName, setDisplayFileName] = useState<string>(ARTWORK_REVIEW_DEMO.fileNameError);
   const [previewSrc, setPreviewSrc] = useState<string | null>(null);
   const [previewMime, setPreviewMime] = useState<string | null>(null);
   const [uploadedLabel, setUploadedLabel] = useState(
@@ -43,6 +48,35 @@ export default function ArtworkReviewErrorClient() {
     `${ARTWORK_REVIEW_DEMO.requiredInches.w}" × ${ARTWORK_REVIEW_DEMO.requiredInches.h}"`
   );
   const [hydrated, setHydrated] = useState(false);
+  const [sidebarJobs, setSidebarJobs] = useState<StoredPendingJobLine[] | null>(null);
+  const [activeOrderItemId, setActiveOrderItemId] = useState<number | null>(null);
+  const [activeJobIdLabel, setActiveJobIdLabel] = useState<string | undefined>(undefined);
+
+  const applyJobRow = useCallback((row: StoredPendingJobLine) => {
+    const ctx = reviewContextFromPendingLine(row);
+    if (!ctx) {
+      return;
+    }
+    try {
+      revokeStoredUploadPreview();
+      sessionStorage.setItem(UPLOAD_APPROVAL_REVIEW_CONTEXT_KEY, JSON.stringify(ctx));
+    } catch {
+      return;
+    }
+    setMeta(mergeMeta(ctx));
+    setDisplayFileName(ctx.fileName?.trim() || REVIEW_PLACEHOLDER_FILE_NAME);
+    setPreviewSrc(null);
+    setPreviewMime(null);
+    setUploadedLabel(ctx.uploadedGraphicLabel?.trim() || "Not uploaded yet");
+    setRequiredLabel(
+      ctx.requiredGraphicLabel?.trim() && ctx.requiredGraphicLabel !== "—"
+        ? ctx.requiredGraphicLabel.trim()
+        : `${ARTWORK_REVIEW_DEMO.requiredInches.w}" × ${ARTWORK_REVIEW_DEMO.requiredInches.h}"`
+    );
+    const oi = ctx.orderItemId;
+    setActiveOrderItemId(typeof oi === "number" && Number.isFinite(oi) && oi > 0 ? oi : null);
+    setActiveJobIdLabel(ctx.jobIdLabel?.trim() || undefined);
+  }, []);
 
   useEffect(() => {
     try {
@@ -61,6 +95,18 @@ export default function ArtworkReviewErrorClient() {
         if (parsed.requiredGraphicLabel?.trim() && parsed.requiredGraphicLabel !== "—") {
           setRequiredLabel(parsed.requiredGraphicLabel.trim());
         }
+        const oi = parsed.orderItemId;
+        setActiveOrderItemId(
+          typeof oi === "number" && Number.isFinite(oi) && oi > 0 ? oi : null
+        );
+        setActiveJobIdLabel(parsed.jobIdLabel?.trim() || undefined);
+      }
+      const rawJobs = sessionStorage.getItem(UPLOAD_APPROVAL_PENDING_JOBS_KEY);
+      if (rawJobs) {
+        const arr = JSON.parse(rawJobs) as unknown;
+        if (Array.isArray(arr) && arr.length > 0) {
+          setSidebarJobs(arr as StoredPendingJobLine[]);
+        }
       }
     } catch {
       /* ignore */
@@ -77,9 +123,23 @@ export default function ArtworkReviewErrorClient() {
     );
   }
 
+  const selectionKey =
+    activeOrderItemId != null && activeOrderItemId > 0
+      ? `oi-${activeOrderItemId}`
+      : activeJobIdLabel
+        ? `jl-${activeJobIdLabel}`
+        : "none";
+
   return (
-    <ArtworkReviewShell meta={meta}>
+    <ArtworkReviewShell
+      meta={meta}
+      sidebarJobs={sidebarJobs}
+      activeOrderItemId={activeOrderItemId}
+      activeJobIdLabel={activeJobIdLabel}
+      onSelectJob={sidebarJobs?.length ? applyJobRow : undefined}
+    >
       <ArtworkReviewErrorContent
+        key={selectionKey}
         displayFileName={displayFileName}
         previewSrc={previewSrc}
         previewMime={previewMime}

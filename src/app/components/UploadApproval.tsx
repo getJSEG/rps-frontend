@@ -1,15 +1,18 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { toast } from "react-toastify";
 import { ordersAPI } from "../../utils/api";
 import {
+  UPLOAD_APPROVAL_PENDING_JOBS_KEY,
   UPLOAD_APPROVAL_REVIEW_CONTEXT_KEY,
   revokeStoredUploadPreview,
+  reviewContextFromPendingLine,
+  type StoredPendingJobLine,
+  type StoredUploadReviewContext,
 } from "./artwork-review/uploadApprovalReviewStorage";
-import { buildArtworkReviewPayload } from "./artwork-review/buildArtworkReviewPayload";
 import { isAuthenticated } from "../../utils/roles";
 import { canonicalOrderStatus } from "../../utils/orderStatuses";
 
@@ -21,6 +24,7 @@ type OrderItem = {
   product_description?: string | null;
   width_inches?: number | string | null;
   height_inches?: number | string | null;
+  customer_artwork_url?: string | null;
 };
 
 type OrderRow = {
@@ -72,6 +76,8 @@ function orderNeedsUploadOrApproval(status: string | null | undefined): boolean 
 type PendingJob = {
   key: string;
   orderId: number;
+  orderItemId: number | null;
+  orderLabel: string;
   jobIdLabel: string;
   orderedAt: string | null;
   jobName: string;
@@ -81,6 +87,76 @@ type PendingJob = {
   requiredWidthIn: number | null;
   requiredHeightIn: number | null;
 };
+
+type PendingOrderGroup = {
+  orderId: number;
+  orderLabel: string;
+  orderedAt: string | null;
+  jobs: PendingJob[];
+};
+
+const REVIEW_ERROR_PATH = "/upload-approval/review/error";
+
+function openReviewForJob(
+  router: ReturnType<typeof useRouter>,
+  group: PendingOrderGroup,
+  job: PendingJob
+) {
+  if (job.orderItemId == null || !Number.isFinite(job.orderItemId) || job.orderItemId <= 0) {
+    toast.info(
+      "This order line has no item id yet. If this persists, contact support or try again after refreshing."
+    );
+    return;
+  }
+  try {
+    revokeStoredUploadPreview();
+    persistPendingJobsForGroup(group);
+    sessionStorage.setItem(
+      UPLOAD_APPROVAL_REVIEW_CONTEXT_KEY,
+      JSON.stringify(placeholderReviewContext(job))
+    );
+  } catch {
+    toast.error("Could not open review. Try again.");
+    return;
+  }
+  router.push(REVIEW_ERROR_PATH);
+}
+
+function pendingJobToStoredLine(j: PendingJob): StoredPendingJobLine {
+  return {
+    orderId: j.orderId,
+    orderItemId: j.orderItemId,
+    jobIdLabel: j.jobIdLabel,
+    jobName: j.jobName,
+    product: j.productLabel,
+    dimensions: j.dimensions?.trim() ? j.dimensions : "—",
+    quantity: j.quantity,
+    requiredWidthIn: j.requiredWidthIn,
+    requiredHeightIn: j.requiredHeightIn,
+    orderedAtLabel: formatJobDate(j.orderedAt),
+  };
+}
+
+function persistPendingJobsForGroup(grp: PendingOrderGroup | null) {
+  try {
+    if (!grp?.jobs?.length) {
+      sessionStorage.removeItem(UPLOAD_APPROVAL_PENDING_JOBS_KEY);
+      return;
+    }
+    const lines: StoredPendingJobLine[] = grp.jobs.map(pendingJobToStoredLine);
+    sessionStorage.setItem(UPLOAD_APPROVAL_PENDING_JOBS_KEY, JSON.stringify(lines));
+  } catch {
+    /* ignore */
+  }
+}
+
+function placeholderReviewContext(job: PendingJob): StoredUploadReviewContext {
+  const ctx = reviewContextFromPendingLine(pendingJobToStoredLine(job));
+  if (!ctx) {
+    throw new Error("Missing order line for review context");
+  }
+  return ctx;
+}
 
 function InfoHint({ text }: { text: string }) {
   return (
@@ -104,14 +180,13 @@ export default function UploadApproval() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [orders, setOrders] = useState<OrderRow[]>([]);
-  const fileInputRef = useRef<HTMLInputElement | null>(null);
-  const pendingUploadJobRef = useRef<PendingJob | null>(null);
 
   useEffect(() => {
     setLoggedIn(isAuthenticated());
     setAuthReady(true);
   }, []);
 
+  /** Drop stale review preview/context when visiting the list; keep pending job lines for review sidebar. */
   useEffect(() => {
     try {
       revokeStoredUploadPreview();
@@ -150,6 +225,30 @@ export default function UploadApproval() {
     };
   }, [authReady, loggedIn]);
 
+  useEffect(() => {
+    if (!authReady || !loggedIn) return;
+    const refetch = () => {
+      void (async () => {
+        try {
+          const res = (await ordersAPI.getAll({ limit: 50, page: 1 })) as { orders?: OrderRow[] };
+          const list = Array.isArray(res?.orders) ? res.orders : [];
+          setOrders(list);
+        } catch {
+          /* ignore */
+        }
+      })();
+    };
+    const onVis = () => {
+      if (document.visibilityState === "visible") refetch();
+    };
+    window.addEventListener("focus", refetch);
+    document.addEventListener("visibilitychange", onVis);
+    return () => {
+      window.removeEventListener("focus", refetch);
+      document.removeEventListener("visibilitychange", onVis);
+    };
+  }, [authReady, loggedIn]);
+
   const pendingJobs: PendingJob[] = useMemo(() => {
     const out: PendingJob[] = [];
     for (const order of orders) {
@@ -160,6 +259,8 @@ export default function UploadApproval() {
         out.push({
           key: `order-${order.id}-0`,
           orderId: order.id,
+          orderItemId: null,
+          orderLabel: base,
           jobIdLabel: `${base}-01`,
           orderedAt: order.created_at ?? null,
           jobName: "—",
@@ -172,6 +273,9 @@ export default function UploadApproval() {
         continue;
       }
       items.forEach((it, idx) => {
+        const url = it.customer_artwork_url != null ? String(it.customer_artwork_url).trim() : "";
+        if (url) return;
+        const itemId = it.id != null && Number.isFinite(Number(it.id)) ? Number(it.id) : null;
         const line = idx + 1;
         const jobIdLabel = `${base}-${String(line).padStart(2, "0")}`;
         const productLabel =
@@ -182,6 +286,8 @@ export default function UploadApproval() {
         out.push({
           key: `order-${order.id}-item-${it.id ?? line}`,
           orderId: order.id,
+          orderItemId: itemId,
+          orderLabel: base,
           jobIdLabel,
           orderedAt: order.created_at ?? null,
           jobName: (it.job_name || "").trim() || "—",
@@ -196,81 +302,37 @@ export default function UploadApproval() {
     return out;
   }, [orders]);
 
-  const openFilePickerForJob = useCallback((job: PendingJob) => {
-    pendingUploadJobRef.current = job;
-    fileInputRef.current?.click();
-  }, []);
-
-  const onFilePicked = useCallback(
-    (e: React.ChangeEvent<HTMLInputElement>) => {
-      const file = e.target.files?.[0];
-      e.target.value = "";
-      if (!file) return;
-      const job = pendingUploadJobRef.current;
-      if (!job) {
-        toast.error("Choose a file from a job row using “Upload From Computer”.");
-        return;
+  const pendingOrderGroups: PendingOrderGroup[] = useMemo(() => {
+    const byOrder = new Map<number, PendingOrderGroup>();
+    for (const job of pendingJobs) {
+      let g = byOrder.get(job.orderId);
+      if (!g) {
+        g = {
+          orderId: job.orderId,
+          orderLabel: job.orderLabel,
+          orderedAt: job.orderedAt,
+          jobs: [],
+        };
+        byOrder.set(job.orderId, g);
       }
-
-      void (async () => {
-        try {
-          const { nextPath } = await buildArtworkReviewPayload(file, {
-            jobIdLabel: job.jobIdLabel,
-            orderedAtLabel: formatJobDate(job.orderedAt),
-            jobName: job.jobName,
-            product: job.productLabel,
-            dimensions: job.dimensions ?? "",
-            quantity: job.quantity,
-            requiredWidthIn: job.requiredWidthIn,
-            requiredHeightIn: job.requiredHeightIn,
-          });
-          pendingUploadJobRef.current = null;
-          router.push(nextPath);
-        } catch (err) {
-          pendingUploadJobRef.current = job;
-          toast.error(
-            err instanceof Error && err.message
-              ? err.message
-              : "Could not save preview (file may be too large for browser storage)."
-          );
-        }
-      })();
-    },
-    [router]
-  );
+      g.jobs.push(job);
+    }
+    return Array.from(byOrder.values());
+  }, [pendingJobs]);
 
   return (
     <div className="relative min-h-screen bg-[#f5f5f5] pb-16 pt-24">
-      <input
-        ref={fileInputRef}
-        type="file"
-        accept=".jpg,.jpeg,.pdf,image/jpeg,application/pdf"
-        className="hidden"
-        onChange={onFilePicked}
-      />
-
       <div className="mx-auto w-3/4 max-w-full px-4 sm:px-6 lg:px-8 xl:px-10">
-        <div className="mb-8 flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
-          <div>
-            <h1 className="mb-2 text-3xl font-bold text-gray-900">Upload and Approval</h1>
+        <div className="mb-8 flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between sm:gap-6">
+          <div className="min-w-0 flex-1">
+            <h1 className="mb-2 text-3xl font-bold text-gray-900">Pending Upload and Approval</h1>
             <p className="text-gray-600">
               This page displays all jobs awaiting file uploads or proof approval before processing.
             </p>
-            <p className="mt-3 text-sm text-gray-500">
-              After upload, JPG/PNG files are compared to the job print size by aspect ratio; PDF is accepted for
-              now (API will validate later). Demo-only pages:{" "}
-              <Link href="/upload-approval/review/ok" className="font-medium text-sky-600 hover:underline">
-                size OK
-              </Link>
-              {" · "}
-              <Link href="/upload-approval/review/error" className="font-medium text-sky-600 hover:underline">
-                incorrect ratio
-              </Link>
-            </p>
           </div>
-          <div className="flex shrink-0 flex-col gap-2 text-right md:text-right">
+          <div className="flex shrink-0 flex-col gap-2 sm:items-end sm:text-right mt-5">
             <InfoHint text="Don't Include Crop Marks or Bleed" />
-            <InfoHint text="Accepted File Formats: JPG or Single Page PDF" />
+            <InfoHint text="Accepted file formats: PNG, JPG, or single-page PDF" />
           </div>
         </div>
 
@@ -313,51 +375,58 @@ export default function UploadApproval() {
           </div>
         ) : (
           <ul className="flex flex-col gap-6">
-            {pendingJobs.map((job) => (
-              <li key={job.key}>
+            {pendingOrderGroups.map((group) => (
+              <li key={`order-${group.orderId}`}>
                 <div className="overflow-hidden rounded-lg border border-gray-200 bg-white shadow-md">
                   <div className="flex flex-wrap items-center justify-between gap-2 border-b border-gray-100 px-4 py-3 text-sm text-gray-600">
                     <span>
-                      Job ID <span className="font-semibold text-gray-900">{job.jobIdLabel}</span>
+                      Order <span className="font-semibold text-gray-900">{group.orderLabel}</span>
+                      <span className="mx-2 text-gray-300">·</span>
+                      <span className="text-gray-500">
+                        {group.jobs.length} job{group.jobs.length === 1 ? "" : "s"}
+                      </span>
                     </span>
-                    <span className="text-gray-500">{formatJobDate(job.orderedAt)}</span>
+                    <span className="text-gray-500">{formatJobDate(group.orderedAt)}</span>
                   </div>
-                  <div className="grid gap-0 md:grid-cols-[1fr_minmax(220px,280px)]">
-                    <div className="border-gray-100 px-4 py-5 md:border-r">
-                      <p className="text-sm text-gray-800">
-                        <span className="font-medium text-gray-600">Job Name: </span>
-                        {job.jobName}
-                      </p>
-                      <div className="my-4 border-t border-gray-200" />
-                      <p className="text-sm text-gray-800">
-                        <span className="font-medium text-gray-600">Product: </span>
-                        {job.productLabel}
-                      </p>
-                      {job.dimensions && (
-                        <p className="mt-2 text-sm text-gray-800">
-                          <span className="font-medium text-gray-600">Dimensions: </span>
-                          {job.dimensions}
-                        </p>
-                      )}
-                      <p className="mt-2 text-sm text-gray-800">
-                        <span className="font-medium text-gray-600">Qty: </span>x{job.quantity}
-                      </p>
-                    </div>
-                    <div className="flex flex-col justify-center gap-3 border-t border-gray-100 bg-gray-50/80 px-4 py-5 md:border-t-0 md:bg-white">
-                      <button
-                        type="button"
-                        onClick={() => openFilePickerForJob(job)}
-                        className="w-full rounded-md bg-sky-600 px-4 py-3 text-center text-sm font-semibold text-white shadow-sm transition-colors hover:bg-sky-700"
-                      >
-                        Upload From Computer
-                      </button>
-                      <Link
-                        href="/my-artworks"
-                        className="w-full rounded-md border border-gray-300 bg-white px-4 py-3 text-center text-sm font-medium text-gray-800 transition-colors hover:bg-gray-50"
-                      >
-                        Recent Uploads & My Artworks
-                      </Link>
-                    </div>
+                  <div className="border-gray-100 px-4 py-4">
+                    <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-gray-500">Jobs</p>
+                    <ul className="divide-y divide-gray-100 rounded-md border border-gray-100">
+                      {group.jobs.map((job) => (
+                        <li
+                          key={job.key}
+                          className="flex flex-col gap-3 px-3 py-3 sm:flex-row sm:items-center sm:justify-between sm:gap-4"
+                        >
+                          <div className="min-w-0 flex-1">
+                            <p className="text-sm text-gray-800">
+                              <span className="font-medium text-gray-600">Job name: </span>
+                              {job.jobName}
+                            </p>
+                            <p className="mt-1 text-sm text-gray-800">
+                              <span className="font-medium text-gray-600">Product: </span>
+                              {job.productLabel}
+                            </p>
+                            {job.dimensions && (
+                              <p className="mt-1 text-sm text-gray-800">
+                                <span className="font-medium text-gray-600">Dimensions: </span>
+                                {job.dimensions}
+                              </p>
+                            )}
+                            <p className="mt-1 text-sm text-gray-800">
+                              <span className="font-medium text-gray-600">Qty: </span>x{job.quantity}
+                            </p>
+                          </div>
+                          <div className="flex shrink-0 sm:justify-end">
+                            <button
+                              type="button"
+                              onClick={() => openReviewForJob(router, group, job)}
+                              className="w-full min-w-[10.5rem] rounded-md bg-sky-600 px-3 py-2.5 text-center text-sm font-semibold text-white shadow-sm transition-colors hover:bg-sky-700 sm:w-auto"
+                            >
+                              Upload artwork
+                            </button>
+                          </div>
+                        </li>
+                      ))}
+                    </ul>
                   </div>
                 </div>
               </li>

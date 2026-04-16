@@ -5,6 +5,7 @@ import { toast } from "react-toastify";
 import { artworksAPI, getProductImageUrl, type ArtworkRecord } from "../../utils/api";
 import { extractUploadFileMetadata, type UploadFileMetadata } from "../../utils/uploadMetadata";
 import { formatInchesFromPixels } from "../../utils/artworkProportion";
+import { formatBytes } from "../../utils/formatBytes";
 
 type UploadedArtworkRow = UploadFileMetadata & {
   id: string | number;
@@ -17,18 +18,6 @@ type PreviewState = {
   mimeType: string;
   src: string;
 } | null;
-
-function formatBytes(bytes: number): string {
-  if (!Number.isFinite(bytes) || bytes <= 0) return "0 B";
-  const units = ["B", "KB", "MB", "GB"];
-  let value = bytes;
-  let i = 0;
-  while (value >= 1024 && i < units.length - 1) {
-    value /= 1024;
-    i += 1;
-  }
-  return `${value.toFixed(value >= 100 || i === 0 ? 0 : 1)} ${units[i]}`;
-}
 
 function fileTypeLabel(mimeType: string, fileName: string): string {
   const m = String(mimeType || "").toLowerCase();
@@ -46,8 +35,6 @@ export default function MyArtworks() {
   const [previewState, setPreviewState] = useState<PreviewState>(null);
   const [uploads, setUploads] = useState<UploadedArtworkRow[]>([]);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
-
-  const handleSearch = () => {};
 
   const filteredUploads = useMemo(() => {
     const q = searchQuery.trim().toLowerCase();
@@ -221,11 +208,6 @@ export default function MyArtworks() {
                   onChange={(e) => setSearchQuery(e.target.value)}
                   placeholder="Search File Name"
                   className="pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm w-64"
-                  onKeyPress={(e) => {
-                    if (e.key === "Enter") {
-                      handleSearch();
-                    }
-                  }}
                 />
                 <svg
                   className="w-5 h-5 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2"
@@ -242,7 +224,7 @@ export default function MyArtworks() {
                 </svg>
               </div>
               <button
-                onClick={handleSearch}
+                type="button"
                 className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors"
               >
                 Search

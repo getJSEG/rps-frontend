@@ -1,7 +1,11 @@
-import { guessMimeFromFileName } from "./filePreview";
+import type { UploadFileMetadata } from "./uploadMetadata";
 
 const DEFAULT_DISPLAY_DPI = 300;
-const RATIO_TOLERANCE = 0.04;
+/**
+ * Relative aspect difference allowed — keep in sync with backend
+ * `rps-backend/src/controllers/artworkController.js` (`RATIO_TOLERANCE` / `aspectMatch`).
+ */
+const RATIO_TOLERANCE = 0.06;
 
 function fmtInch(n: number): string {
   const rounded = Math.round(n * 100) / 100;
@@ -13,22 +17,6 @@ export function formatInchesFromPixels(pxW: number, pxH: number, dpi = DEFAULT_D
   return `${fmtInch(pxW / dpi)}" × ${fmtInch(pxH / dpi)}"`;
 }
 
-export function getImageDimensions(file: File): Promise<{ w: number; h: number }> {
-  return new Promise((resolve, reject) => {
-    const url = URL.createObjectURL(file);
-    const img = new Image();
-    img.onload = () => {
-      URL.revokeObjectURL(url);
-      resolve({ w: img.naturalWidth, h: img.naturalHeight });
-    };
-    img.onerror = () => {
-      URL.revokeObjectURL(url);
-      reject(new Error("Could not read image dimensions"));
-    };
-    img.src = url;
-  });
-}
-
 function aspectRatiosMatch(pxW: number, pxH: number, reqW: number, reqH: number): boolean {
   if (pxW <= 0 || pxH <= 0 || reqW <= 0 || reqH <= 0) return true;
   const rU = pxW / pxH;
@@ -37,8 +25,22 @@ function aspectRatiosMatch(pxW: number, pxH: number, reqW: number, reqH: number)
   return rel <= RATIO_TOLERANCE;
 }
 
+/** Match required print aspect, allowing artwork rotated 90° (swap W/H vs job). */
+function aspectRatiosMatchPrintJob(pxW: number, pxH: number, reqW: number, reqH: number): boolean {
+  return (
+    aspectRatiosMatch(pxW, pxH, reqW, reqH) || aspectRatiosMatch(pxW, pxH, reqH, reqW)
+  );
+}
+
 function requiredSizeLabel(reqW: number, reqH: number): string {
   return `${fmtInch(reqW)}" × ${fmtInch(reqH)}"`;
+}
+
+/** Coerce API/session values (may be string) to a positive finite inch value. */
+export function coercePositiveInch(v: unknown): number | null {
+  if (v === null || v === undefined || v === "") return null;
+  const n = typeof v === "string" ? Number(v.trim()) : Number(v);
+  return Number.isFinite(n) && n > 0 ? n : null;
 }
 
 export type ProportionAssessment = {
@@ -48,20 +50,17 @@ export type ProportionAssessment = {
 };
 
 /**
- * Client-only check until API exists. Raster images: compare aspect ratio to required print size.
- * PDF / unknown: cannot read dimensions in-browser → treat as OK (production will validate).
+ * Aspect check using metadata from `extractUploadFileMetadata` (same path as My Artworks).
  */
-export async function assessArtworkProportion(
-  file: File,
+export function assessArtworkProportionFromMetadata(
+  meta: UploadFileMetadata,
   requiredWidthIn: number | null,
   requiredHeightIn: number | null
-): Promise<ProportionAssessment> {
-  const reqW =
-    requiredWidthIn != null && requiredWidthIn !== "" ? Number(requiredWidthIn) : NaN;
-  const reqH =
-    requiredHeightIn != null && requiredHeightIn !== "" ? Number(requiredHeightIn) : NaN;
+): ProportionAssessment {
+  const reqW = coercePositiveInch(requiredWidthIn);
+  const reqH = coercePositiveInch(requiredHeightIn);
 
-  if (!Number.isFinite(reqW) || !Number.isFinite(reqH) || reqW <= 0 || reqH <= 0) {
+  if (reqW == null || reqH == null) {
     return {
       ok: true,
       uploadedLabel: "—",
@@ -70,26 +69,19 @@ export async function assessArtworkProportion(
   }
 
   const requiredLabel = requiredSizeLabel(reqW, reqH);
-  const mime = (file.type || "").trim().toLowerCase() || guessMimeFromFileName(file.name);
-
-  if (mime.startsWith("image/")) {
-    try {
-      const { w, h } = await getImageDimensions(file);
-      const uploadedLabel = formatInchesFromPixels(w, h);
-      const ok = aspectRatiosMatch(w, h, reqW, reqH);
-      return { ok, uploadedLabel, requiredLabel };
-    } catch {
-      return {
-        ok: true,
-        uploadedLabel: "Could not read image",
-        requiredLabel,
-      };
-    }
+  const uw = meta.widthPx;
+  const uh = meta.heightPx;
+  if (uw == null || uh == null || uw <= 0 || uh <= 0) {
+    return {
+      ok: false,
+      uploadedLabel: "Could not read file dimensions.",
+      requiredLabel,
+    };
   }
-
-  return {
-    ok: true,
-    uploadedLabel: mime.includes("pdf") ? "PDF (ratio check when API is ready)" : "—",
-    requiredLabel,
-  };
+  const ok = aspectRatiosMatchPrintJob(uw, uh, reqW, reqH);
+  const uploadedLabel =
+    meta.mimeType === "application/pdf"
+      ? `${uw} × ${uh} pt (page)`
+      : formatInchesFromPixels(uw, uh);
+  return { ok, uploadedLabel, requiredLabel };
 }

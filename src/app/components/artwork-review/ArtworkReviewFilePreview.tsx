@@ -2,7 +2,8 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { guessMimeFromFileName } from "../../../utils/filePreview";
-import FeatherFlagArtworkPreview from "./FeatherFlagArtworkPreview";
+import ArtworkInvitePreviewIllustration from "./ArtworkInvitePreviewIllustration";
+import { REVIEW_PLACEHOLDER_FILE_NAME } from "./uploadApprovalReviewStorage";
 
 type ArtworkReviewFilePreviewProps = {
   fileName: string;
@@ -82,7 +83,11 @@ export default function ArtworkReviewFilePreview({
 
   return (
     <div className="flex w-full max-w-md flex-col items-center">
-      <div className="flex w-full max-w-[min(100%,320px)] items-center justify-center overflow-hidden rounded-lg border border-gray-200 bg-gray-50">
+      <div
+        className={`flex w-full max-w-[min(100%,360px)] items-center justify-center overflow-hidden rounded-lg border border-gray-200 bg-gray-50 ${
+          mode === "schematic" ? "min-h-[min(52vh,440px)] py-10 px-5" : ""
+        }`}
+      >
         {mode === "image" && previewSrc ? (
           <img
             src={previewSrc}
@@ -92,8 +97,8 @@ export default function ArtworkReviewFilePreview({
         ) : mode === "pdf" && previewSrc ? (
           <PdfFrame src={previewSrc} title={fileName} />
         ) : (
-          <div className="py-4">
-            <FeatherFlagArtworkPreview variant={variant} fileName={fileName} showFileName={false} />
+          <div className="flex w-full max-w-[min(100%,320px)] flex-1 items-center justify-center">
+            <ArtworkInvitePreviewIllustration variant={variant} />
           </div>
         )}
       </div>
@@ -109,9 +114,9 @@ export default function ArtworkReviewFilePreview({
       ) : null}
       <p
         className="mt-3 max-w-full truncate text-center text-sm font-medium text-sky-700"
-        title={fileName}
+        title={fileName.trim() === REVIEW_PLACEHOLDER_FILE_NAME ? "No file selected" : fileName}
       >
-        {fileName}
+        {fileName.trim() === REVIEW_PLACEHOLDER_FILE_NAME ? "No file selected yet" : fileName}
       </p>
     </div>
   );

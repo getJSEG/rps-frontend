@@ -1,11 +1,14 @@
 "use client";
 
-import { useCallback, useRef, useState } from "react";
-import { usePathname, useRouter } from "next/navigation";
-import { toast } from "react-toastify";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
 import ArtworkReviewFilePreview from "./ArtworkReviewFilePreview";
-import { commitFilePreviewToSession } from "./buildArtworkReviewPayload";
 import {
+  commitFilePreviewToSession,
+  UPLOAD_APPROVAL_REVIEW_OK_ROUTE,
+} from "./buildArtworkReviewPayload";
+import {
+  REVIEW_PLACEHOLDER_FILE_NAME,
   UPLOAD_APPROVAL_REVIEW_CONTEXT_KEY,
   type StoredUploadReviewContext,
 } from "./uploadApprovalReviewStorage";
@@ -27,7 +30,6 @@ export default function ArtworkReviewErrorContent({
   requiredGraphicLabel: requiredProp,
 }: ArtworkReviewErrorContentProps) {
   const router = useRouter();
-  const pathname = usePathname();
   const fileRef = useRef<HTMLInputElement>(null);
 
   const [localPreviewSrc, setLocalPreviewSrc] = useState<string | null>(previewSrc ?? null);
@@ -43,6 +45,15 @@ export default function ArtworkReviewErrorContent({
     requiredProp ??
       `${ARTWORK_REVIEW_DEMO.requiredInches.w}" × ${ARTWORK_REVIEW_DEMO.requiredInches.h}"`
   );
+
+  useEffect(() => {
+    setLocalPreviewSrc(previewSrc ?? null);
+    setLocalPreviewMime(previewMime ?? null);
+    setLocalFileName(displayFileName?.trim() || ARTWORK_REVIEW_DEMO.fileNameError);
+  }, [previewSrc, previewMime, displayFileName]);
+
+  /** No preview yet and placeholder filename — user has not chosen a file for this job. */
+  const awaitingFileSelection = !localPreviewSrc && localFileName === REVIEW_PLACEHOLDER_FILE_NAME;
 
   const openReupload = useCallback(() => fileRef.current?.click(), []);
 
@@ -63,7 +74,7 @@ export default function ArtworkReviewErrorContent({
       void (async () => {
         try {
           const r = await commitFilePreviewToSession(f, existing);
-          if (r.nextPath !== pathname) {
+          if (r.nextPath === UPLOAD_APPROVAL_REVIEW_OK_ROUTE) {
             router.push(r.nextPath);
             return;
           }
@@ -78,18 +89,13 @@ export default function ArtworkReviewErrorContent({
               setRequiredLabel(p.requiredGraphicLabel);
             }
           }
-          toast.success("Updated artwork.");
         } catch {
-          toast.error("Could not update. Try a smaller file.");
+          /* ignore — page already shows artwork status */
         }
       })();
     },
-    [pathname, router]
+    [router]
   );
-
-  const onDownloadTemplates = useCallback(() => {
-    toast.info("Template download will use your product template URL when the API is ready.");
-  }, []);
 
   return (
     <div className="flex h-full min-h-[420px] flex-col gap-8 lg:flex-row lg:items-stretch lg:justify-between">
@@ -110,49 +116,58 @@ export default function ArtworkReviewErrorContent({
         />
       </div>
 
-      <div className="flex w-full shrink-0 flex-col justify-center gap-4 lg:max-w-md">
-        <h2 className="text-lg font-bold text-red-600">On Hold: Incorrect Artwork Ratio</h2>
-
-        <div className="space-y-1 text-sm text-gray-600">
-          <p>
-            Uploaded graphic size:{" "}
-            <span className="font-medium text-gray-800">{uploadedLabel}</span>
-          </p>
-          <p>
-            Required graphic size:{" "}
-            <span className="font-medium text-gray-800">{requiredLabel}</span>
-          </p>
-        </div>
-
-        <div className="border-t border-gray-200 pt-4 text-sm leading-relaxed text-gray-700">
-          Correctly proportioned artwork is{" "}
-          <span className="font-bold text-red-600">REQUIRED</span> for this product. Please{" "}
-          <span className="font-bold uppercase text-gray-900">REUPLOAD</span> corrected artwork to
-          proceed.
-        </div>
+      <div className="flex w-full shrink-0 flex-col justify-center gap-4 lg:max-w-sm">
+        {awaitingFileSelection ? (
+          <>
+            <h2 className="text-lg font-bold text-sky-800">Upload artwork for this job</h2>
+            <p className="text-sm leading-relaxed text-gray-700">
+              Choose a PNG, JPG, or single-page PDF. Your file must match this job&apos;s print size{" "}
+              <span className="font-medium">shape</span> (width-to-height aspect ratio)
+            </p>
+            <div className="space-y-1 text-sm text-gray-600">
+              <p>
+                Required print size:{" "}
+                <span className="font-bold text-gray-900">{requiredLabel}</span>
+              </p>
+              <p className="text-gray-500">Uploaded file: not selected yet</p>
+            </div>
+          </>
+        ) : (
+          <>
+            <h2 className="text-lg font-bold text-red-600">On hold: artwork shape does not match</h2>
+            <div className="space-y-1 text-sm text-gray-600">
+              <p>
+                Uploaded graphic:{" "}
+                <span className="font-bold text-gray-900">{uploadedLabel}</span>
+              </p>
+              <p>
+                Required print size (aspect target):{" "}
+                <span className="font-bold text-gray-900">{requiredLabel}</span>
+              </p>
+            </div>
+            <div className="border-t border-gray-200 pt-4 text-sm leading-relaxed text-gray-700">
+              The image must have the same width-to-height proportion as the job dimensions. Please upload a
+              different file or crop to match.
+            </div>
+          </>
+        )}
 
         <button
           type="button"
           onClick={openReupload}
-          className="w-full max-w-xs rounded-md bg-red-600 px-4 py-3 text-center text-sm font-semibold text-white shadow-sm transition-colors hover:bg-red-700"
+          className={`w-full rounded-md px-4 py-3.5 text-center text-sm font-semibold text-white shadow-sm transition-colors ${
+            awaitingFileSelection
+              ? "bg-sky-600 hover:bg-sky-700"
+              : "bg-red-600 hover:bg-red-700"
+          }`}
         >
-          Reupload
+          {awaitingFileSelection ? "Choose file" : "Upload image"}
         </button>
-
-        <button
-          type="button"
-          onClick={onDownloadTemplates}
-          className="text-left text-sm font-medium text-gray-600 underline decoration-gray-400 underline-offset-2 hover:text-gray-900"
-        >
-          Download Templates
-        </button>
-
-        <p className="text-xs text-gray-400">{localFileName}</p>
 
         <button
           type="button"
           onClick={() => router.push("/upload-approval")}
-          className="w-full   max-w-xs rounded-md bg-sky-600 px-4 py-3 text-center text-sm font-semibold text-white shadow-sm transition-colors hover:bg-sky-700"
+          className="w-full rounded-md bg-sky-600 px-4 py-3.5 text-center text-sm font-semibold text-white shadow-sm transition-colors hover:bg-sky-700"
         >
           Back to upload list
         </button>

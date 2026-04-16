@@ -3,7 +3,11 @@ import {
   guessMimeFromFileName,
   readFileAsDataURL,
 } from "../../../utils/filePreview";
-import { assessArtworkProportion } from "../../../utils/artworkProportion";
+import {
+  assessArtworkProportionFromMetadata,
+  coercePositiveInch,
+} from "../../../utils/artworkProportion";
+import { extractUploadFileMetadata } from "../../../utils/uploadMetadata";
 import { ARTWORK_REVIEW_DEMO } from "./artworkReviewMock";
 import {
   UPLOAD_APPROVAL_REVIEW_CONTEXT_KEY,
@@ -20,14 +24,16 @@ export type ArtworkJobFields = {
   quantity: number;
   requiredWidthIn: number | null;
   requiredHeightIn: number | null;
+  orderId?: number;
+  orderItemId?: number;
 };
 
-const OK_PATH = "/upload-approval/review/ok" as const;
-const ERR_PATH = "/upload-approval/review/error" as const;
+export const UPLOAD_APPROVAL_REVIEW_OK_ROUTE = "/upload-approval/review/ok" as const;
+export const UPLOAD_APPROVAL_REVIEW_ERROR_ROUTE = "/upload-approval/review/error" as const;
 
 export type BuildArtworkPayloadResult = {
   payload: StoredUploadReviewContext;
-  nextPath: typeof OK_PATH | typeof ERR_PATH;
+  nextPath: typeof UPLOAD_APPROVAL_REVIEW_OK_ROUTE | typeof UPLOAD_APPROVAL_REVIEW_ERROR_ROUTE;
 };
 
 /**
@@ -40,7 +46,12 @@ export async function buildArtworkReviewPayload(
   revokeStoredUploadPreview();
 
   const previewMime = (file.type || "").trim() || guessMimeFromFileName(file.name);
-  const proportion = await assessArtworkProportion(file, job.requiredWidthIn, job.requiredHeightIn);
+  /** Same order as My Artworks: metadata first, then aspect check. */
+  const meta = await extractUploadFileMetadata(file);
+  const proportion = assessArtworkProportionFromMetadata(meta, job.requiredWidthIn, job.requiredHeightIn);
+
+  const reqW = coercePositiveInch(job.requiredWidthIn);
+  const reqH = coercePositiveInch(job.requiredHeightIn);
 
   const payload: StoredUploadReviewContext = {
     jobIdLabel: job.jobIdLabel,
@@ -51,16 +62,24 @@ export async function buildArtworkReviewPayload(
     quantity: job.quantity,
     fileName: file.name,
     previewMime,
-    requiredWidthIn:
-      job.requiredWidthIn != null && Number.isFinite(job.requiredWidthIn)
-        ? job.requiredWidthIn
-        : undefined,
-    requiredHeightIn:
-      job.requiredHeightIn != null && Number.isFinite(job.requiredHeightIn)
-        ? job.requiredHeightIn
-        : undefined,
+    ...(job.orderId != null && Number.isFinite(job.orderId) && job.orderId > 0 ? { orderId: job.orderId } : {}),
+    ...(job.orderItemId != null && Number.isFinite(job.orderItemId) && job.orderItemId > 0
+      ? { orderItemId: job.orderItemId }
+      : {}),
+    requiredWidthIn: reqW ?? undefined,
+    requiredHeightIn: reqH ?? undefined,
     uploadedGraphicLabel: proportion.uploadedLabel,
     requiredGraphicLabel: proportion.requiredLabel,
+    ...(meta.widthPx != null &&
+    meta.heightPx != null &&
+    meta.widthPx > 0 &&
+    meta.heightPx > 0
+      ? {
+          uploadedWidthPx: meta.widthPx,
+          uploadedHeightPx: meta.heightPx,
+          uploadedSizeBytes: meta.sizeBytes,
+        }
+      : {}),
   };
 
   if (file.size <= MAX_PREVIEW_FILE_BYTES) {
@@ -94,7 +113,7 @@ export async function buildArtworkReviewPayload(
 
   return {
     payload: storedPayload,
-    nextPath: proportion.ok ? OK_PATH : ERR_PATH,
+    nextPath: proportion.ok ? UPLOAD_APPROVAL_REVIEW_OK_ROUTE : UPLOAD_APPROVAL_REVIEW_ERROR_ROUTE,
   };
 }
 
@@ -122,14 +141,14 @@ function contextToJob(ctx: StoredUploadReviewContext): ArtworkJobFields {
     dimensions: ctx.dimensions ?? "",
     quantity:
       typeof ctx.quantity === "number" && Number.isFinite(ctx.quantity) ? ctx.quantity : 1,
-    requiredWidthIn:
-      ctx.requiredWidthIn != null && Number.isFinite(ctx.requiredWidthIn)
-        ? ctx.requiredWidthIn
-        : null,
-    requiredHeightIn:
-      ctx.requiredHeightIn != null && Number.isFinite(ctx.requiredHeightIn)
-        ? ctx.requiredHeightIn
-        : null,
+    requiredWidthIn: coercePositiveInch(ctx.requiredWidthIn),
+    requiredHeightIn: coercePositiveInch(ctx.requiredHeightIn),
+    orderId:
+      ctx.orderId != null && Number.isFinite(ctx.orderId) && ctx.orderId > 0 ? ctx.orderId : undefined,
+    orderItemId:
+      ctx.orderItemId != null && Number.isFinite(ctx.orderItemId) && ctx.orderItemId > 0
+        ? ctx.orderItemId
+        : undefined,
   };
 }
 
@@ -143,7 +162,7 @@ export async function commitFilePreviewToSession(
   previewSrc: string;
   previewMime: string;
   fileName: string;
-  nextPath: typeof OK_PATH | typeof ERR_PATH;
+  nextPath: typeof UPLOAD_APPROVAL_REVIEW_OK_ROUTE | typeof UPLOAD_APPROVAL_REVIEW_ERROR_ROUTE;
 }> {
   const base =
     existing && typeof existing.jobIdLabel === "string" && existing.jobIdLabel.trim() !== ""

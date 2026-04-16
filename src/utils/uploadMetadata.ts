@@ -32,6 +32,19 @@ function isAllowedType(file: File, mimeType: string): boolean {
 }
 
 async function readImageDimensions(file: File): Promise<{ widthPx: number; heightPx: number }> {
+  /** Prefer decode that respects EXIF orientation (common cause of false "wrong ratio"). */
+  if (typeof createImageBitmap !== "undefined") {
+    try {
+      const bmp = await createImageBitmap(file);
+      try {
+        return { widthPx: bmp.width, heightPx: bmp.height };
+      } finally {
+        bmp.close();
+      }
+    } catch {
+      /* fall through to Image() */
+    }
+  }
   const objectUrl = URL.createObjectURL(file);
   try {
     const img = new Image();

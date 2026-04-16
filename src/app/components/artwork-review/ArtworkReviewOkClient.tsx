@@ -1,13 +1,20 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import ArtworkReviewShell, { type ArtworkReviewJobMeta } from "./ArtworkReviewShell";
 import ArtworkReviewOkContent from "./ArtworkReviewOkContent";
 import { ARTWORK_REVIEW_DEMO } from "./artworkReviewMock";
 import {
+  UPLOAD_APPROVAL_PENDING_JOBS_KEY,
   UPLOAD_APPROVAL_REVIEW_CONTEXT_KEY,
+  revokeStoredUploadPreview,
+  reviewContextFromPendingLine,
+  type StoredPendingJobLine,
   type StoredUploadReviewContext,
 } from "./uploadApprovalReviewStorage";
+
+const REVIEW_ERROR_PATH = "/upload-approval/review/error";
 
 function mergeMeta(stored: StoredUploadReviewContext | null): ArtworkReviewJobMeta {
   return {
@@ -24,7 +31,20 @@ function mergeMeta(stored: StoredUploadReviewContext | null): ArtworkReviewJobMe
   };
 }
 
+function readPendingJobsFromSession(): StoredPendingJobLine[] | null {
+  try {
+    const rawJobs = sessionStorage.getItem(UPLOAD_APPROVAL_PENDING_JOBS_KEY);
+    if (!rawJobs) return null;
+    const arr = JSON.parse(rawJobs) as unknown;
+    if (!Array.isArray(arr) || arr.length === 0) return null;
+    return arr as StoredPendingJobLine[];
+  } catch {
+    return null;
+  }
+}
+
 export default function ArtworkReviewOkClient() {
+  const router = useRouter();
   const [meta, setMeta] = useState<ArtworkReviewJobMeta>(() => ({
     jobIdLabel: ARTWORK_REVIEW_DEMO.jobIdLabel,
     orderedAtLabel: ARTWORK_REVIEW_DEMO.orderedAtLabel,
@@ -33,10 +53,39 @@ export default function ArtworkReviewOkClient() {
     dimensions: ARTWORK_REVIEW_DEMO.dimensions,
     quantity: ARTWORK_REVIEW_DEMO.quantity,
   }));
-  const [displayFileName, setDisplayFileName] = useState(ARTWORK_REVIEW_DEMO.fileNameOk);
+  const [displayFileName, setDisplayFileName] = useState<string>(ARTWORK_REVIEW_DEMO.fileNameOk);
   const [previewSrc, setPreviewSrc] = useState<string | null>(null);
   const [previewMime, setPreviewMime] = useState<string | null>(null);
   const [hydrated, setHydrated] = useState(false);
+  const [sidebarJobs, setSidebarJobs] = useState<StoredPendingJobLine[] | null>(null);
+  const [activeOrderItemId, setActiveOrderItemId] = useState<number | null>(null);
+  const [activeJobIdLabel, setActiveJobIdLabel] = useState<string | undefined>(undefined);
+
+  const refreshPendingSidebar = useCallback(() => {
+    setSidebarJobs(readPendingJobsFromSession());
+  }, []);
+
+  const applyJobRow = useCallback(
+    (row: StoredPendingJobLine) => {
+      if (
+        activeOrderItemId != null &&
+        row.orderItemId != null &&
+        row.orderItemId === activeOrderItemId
+      ) {
+        return;
+      }
+      const ctx = reviewContextFromPendingLine(row);
+      if (!ctx) return;
+      try {
+        revokeStoredUploadPreview();
+        sessionStorage.setItem(UPLOAD_APPROVAL_REVIEW_CONTEXT_KEY, JSON.stringify(ctx));
+      } catch {
+        return;
+      }
+      router.push(REVIEW_ERROR_PATH);
+    },
+    [router, activeOrderItemId]
+  );
 
   useEffect(() => {
     try {
@@ -49,7 +98,13 @@ export default function ArtworkReviewOkClient() {
         const blob = parsed.previewUrl?.trim();
         setPreviewSrc(data || blob || null);
         setPreviewMime(parsed.previewMime?.trim() || null);
+        const oi = parsed.orderItemId;
+        setActiveOrderItemId(
+          typeof oi === "number" && Number.isFinite(oi) && oi > 0 ? oi : null
+        );
+        setActiveJobIdLabel(parsed.jobIdLabel?.trim() || undefined);
       }
+      setSidebarJobs(readPendingJobsFromSession());
     } catch {
       /* ignore bad JSON */
     } finally {
@@ -66,11 +121,18 @@ export default function ArtworkReviewOkClient() {
   }
 
   return (
-    <ArtworkReviewShell meta={meta}>
+    <ArtworkReviewShell
+      meta={meta}
+      sidebarJobs={sidebarJobs}
+      activeOrderItemId={activeOrderItemId}
+      activeJobIdLabel={activeJobIdLabel}
+      onSelectJob={sidebarJobs?.length ? applyJobRow : undefined}
+    >
       <ArtworkReviewOkContent
         displayFileName={displayFileName}
         previewSrc={previewSrc}
         previewMime={previewMime}
+        onArtworkSaved={refreshPendingSidebar}
       />
     </ArtworkReviewShell>
   );

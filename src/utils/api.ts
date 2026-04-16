@@ -54,6 +54,30 @@ export function getProductImageUrl(url: string | null | undefined): string {
   return u;
 }
 
+/**
+ * Save a file from a URL (e.g. backend `/uploads/...`) with a chosen filename.
+ * A plain `<a download>` only works same-origin; cross-origin navigations ignore `download` and only open the file.
+ */
+export async function downloadUrlAsFile(url: string, filename: string): Promise<void> {
+  const res = await fetch(url, { mode: 'cors', credentials: 'omit' });
+  if (!res.ok) {
+    throw new Error(`Download failed (${res.status})`);
+  }
+  const blob = await res.blob();
+  const objectUrl = URL.createObjectURL(blob);
+  try {
+    const a = document.createElement('a');
+    a.href = objectUrl;
+    a.download = filename.replace(/[/\\]/g, '_');
+    a.style.display = 'none';
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+  } finally {
+    URL.revokeObjectURL(objectUrl);
+  }
+}
+
 export type ShippingRates = { ground: number; express: number; overnight: number };
 
 /** Admin / public shipping-rates API: threshold order subtotal for waived shipping. */
@@ -741,6 +765,30 @@ export const ordersAPI = {
       method: 'POST',
       body: JSON.stringify({ orderId, paymentIntentId }),
     });
+  },
+
+  /** Link approved customer artwork file to an order line (buyer only). */
+  approveOrderItemArtwork: async (orderId: number, orderItemId: number, file: File) => {
+    const token = typeof window !== 'undefined' ? localStorage.getItem('token') : null;
+    const formData = new FormData();
+    formData.append('file', file);
+    const res = await fetch(
+      `${API_BASE_URL}/orders/${orderId}/items/${orderItemId}/approve-artwork`,
+      {
+        method: 'POST',
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+        body: formData,
+      }
+    );
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      throw new Error(data.message || data.error || 'Could not save artwork to order.');
+    }
+    return res.json() as Promise<{
+      orderItemId: number;
+      customerArtworkUrl: string;
+      orderId: number;
+    }>;
   },
 };
 

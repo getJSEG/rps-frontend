@@ -3,7 +3,11 @@
 import { useState, useEffect, useMemo } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
-import { ordersAPI, cartAPI, getProductImageUrl } from "../../utils/api";
+import { ordersAPI, cartAPI } from "../../utils/api";
+import {
+  OrderLineArtworkDownloadCell,
+  OrderLineThumbnail,
+} from "./orders/OrderLineArtworkControls";
 import { isAuthenticated } from "../../utils/roles";
 import {
   canonicalOrderStatus,
@@ -44,6 +48,7 @@ type OrderItem = {
   image_url?: string | null;
   width_inches?: number | string | null;
   height_inches?: number | string | null;
+  customer_artwork_url?: string | null;
 };
 
 type OrderRow = {
@@ -696,55 +701,61 @@ export default function Orders() {
                         <AddressBlock title="Bill to" lines={bill.length > 0 ? bill : ship} />
                       </div>
 
-                      <div>
-                        <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3">
-                          Items in this order
-                        </h3>
+                      <div className="rounded-lg border border-gray-200 overflow-hidden bg-white shadow-sm">
+                        <div className="flex items-center justify-between border-b border-gray-100 bg-gray-50/80 px-4 py-2.5">
+                          <h3 className="text-xs font-bold uppercase tracking-wide text-slate-500">
+                            Items in this order
+                          </h3>
+                          <span className="text-xs text-slate-500">
+                            {items.length} {items.length === 1 ? "item" : "items"}
+                          </span>
+                        </div>
                         {items.length === 0 ? (
-                          <p className="text-sm text-gray-500">No line items returned for this order.</p>
+                          <p className="p-6 text-sm text-gray-500">No line items returned for this order.</p>
                         ) : (
-                          <div className="rounded-lg border border-gray-200 overflow-hidden bg-white">
-                            <table className="w-full text-sm">
+                          <div className="overflow-x-auto">
+                            <table className="w-full min-w-[820px] border-collapse text-left text-sm">
                               <thead>
-                                <tr className="bg-gray-100 text-left text-gray-600">
-                                  <th className="px-3 py-2 font-medium w-[72px]"> </th>
-                                  <th className="px-3 py-2 font-medium">Product</th>
-                                  <th className="px-3 py-2 font-medium text-right w-20">Qty</th>
-                                  <th className="px-3 py-2 font-medium text-right w-24">Price</th>
-                                  <th className="px-3 py-2 font-medium text-right w-28">Total</th>
+                                <tr className="border-b border-gray-200 bg-white text-[11px] font-bold uppercase tracking-wide text-slate-500">
+                                  <th className="whitespace-nowrap px-3 py-3 pl-4"> </th>
+                                  <th className="px-3 py-3">Product</th>
+                                  <th className="whitespace-nowrap px-3 py-3">Download</th>
+                                  <th className="whitespace-nowrap px-3 py-3 text-right">Qty</th>
+                                  <th className="whitespace-nowrap px-3 py-3 text-right">Price</th>
+                                  <th className="whitespace-nowrap px-3 py-3 pr-4 text-right">Total</th>
                                 </tr>
                               </thead>
                               <tbody>
                                 {items.map((it) => {
-                                  const img = getProductImageUrl(it.image_url || undefined);
                                   const sizeLine = formatLineSizeInches(it.width_inches, it.height_inches);
+                                  const lineKey = it.id ?? `${order.id}-${it.product_name}`;
                                   return (
-                                    <tr key={it.id} className="border-t border-gray-100">
-                                      <td className="px-3 py-2 align-top">
-                                        <div className="w-14 h-14 rounded border border-gray-200 bg-gray-50 overflow-hidden flex items-center justify-center">
-                                          {img ? (
-                                            <img src={img} alt="" className="w-full h-full object-cover" />
-                                          ) : (
-                                            <span className="text-[10px] text-gray-400">No img</span>
-                                          )}
-                                        </div>
+                                    <tr
+                                      key={lineKey}
+                                      className="border-b border-gray-100 align-top hover:bg-slate-50/50"
+                                    >
+                                      <td className="px-3 py-3 pl-4 align-top">
+                                        <OrderLineThumbnail item={it} />
                                       </td>
-                                      <td className="px-3 py-2 align-top">
+                                      <td className="px-3 py-3 align-top">
                                         <p className="font-medium text-gray-900">{it.product_name || "Item"}</p>
                                         {it.job_name ? (
-                                          <p className="text-gray-500 text-xs mt-0.5">Job: {it.job_name}</p>
+                                          <p className="mt-0.5 text-xs text-gray-500">Job: {it.job_name}</p>
                                         ) : null}
                                         {sizeLine ? (
-                                          <p className="text-gray-500 text-xs mt-0.5">Size: {sizeLine}</p>
+                                          <p className="mt-0.5 text-xs text-gray-500">Size: {sizeLine}</p>
                                         ) : null}
                                       </td>
-                                      <td className="px-3 py-2 align-top text-right text-gray-800">
+                                      <td className="px-3 py-3 align-top text-slate-700">
+                                        <OrderLineArtworkDownloadCell item={it} />
+                                      </td>
+                                      <td className="px-3 py-3 text-right tabular-nums text-gray-800">
                                         {it.quantity ?? "—"}
                                       </td>
-                                      <td className="px-3 py-2 align-top text-right text-gray-800">
+                                      <td className="px-3 py-3 text-right tabular-nums text-gray-800">
                                         ${formatMoney(it.unit_price)}
                                       </td>
-                                      <td className="px-3 py-2 align-top text-right font-medium text-gray-900">
+                                      <td className="px-3 py-3 pr-4 text-right font-semibold tabular-nums text-gray-900">
                                         ${formatMoney(it.total_price)}
                                       </td>
                                     </tr>
