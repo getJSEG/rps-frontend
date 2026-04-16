@@ -1,13 +1,25 @@
 "use client";
 
-import { Suspense, useEffect } from "react";
+import { Suspense, useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
+import { toast } from "react-toastify";
 import Navbar from "../components/Navbar";
+import {
+  pickFirstOpenablePendingJob,
+  UPLOAD_REVIEW_ERROR_CLIENT_PATH,
+  writeUploadReviewSessionForJob,
+} from "../components/artwork-review/openUploadReviewSession";
 import { ordersAPI, cartAPI } from "../../utils/api";
+import { isAuthenticated } from "../../utils/roles";
+import {
+  buildPendingUploadJobsFromOrders,
+  type UploadApprovalOrderRow,
+} from "../../utils/uploadApprovalPending";
 
 function UploadAfterOrderInner() {
   const router = useRouter();
+  const [uploadNavBusy, setUploadNavBusy] = useState(false);
   const searchParams = useSearchParams();
   const orderId = searchParams.get("order");
   const placed = searchParams.get("placed") === "1";
@@ -54,7 +66,52 @@ function UploadAfterOrderInner() {
   const hasOrderContext = orderId != null && orderId !== "";
 
   const goUploadArtwork = () => {
-    router.push("/upload-approval");
+    if (!hasOrderContext) {
+      router.push("/upload-approval");
+      return;
+    }
+    if (!isAuthenticated()) {
+      toast.info("Please sign in to upload artwork.");
+      router.push("/upload-approval");
+      return;
+    }
+    const idNum = Number(orderId);
+    if (!Number.isFinite(idNum) || idNum <= 0) {
+      router.push("/upload-approval");
+      return;
+    }
+    setUploadNavBusy(true);
+    void (async () => {
+      try {
+        const res = (await ordersAPI.getById(String(idNum))) as { order?: UploadApprovalOrderRow };
+        const order = res?.order;
+        if (!order || Number(order.id) !== idNum) {
+          toast.error("Could not load your order.");
+          router.push("/upload-approval");
+          return;
+        }
+        const pending = buildPendingUploadJobsFromOrders([order]);
+        const job = pickFirstOpenablePendingJob(pending);
+        if (!job) {
+          toast.info("No artwork upload is needed for this order right now.");
+          router.push("/upload-approval");
+          return;
+        }
+        try {
+          writeUploadReviewSessionForJob(job, pending);
+        } catch {
+          toast.error("Could not open upload. Try again from Pending Upload and Approval.");
+          router.push("/upload-approval");
+          return;
+        }
+        router.push(UPLOAD_REVIEW_ERROR_CLIENT_PATH);
+      } catch (e) {
+        toast.error(e instanceof Error ? e.message : "Could not load your order.");
+        router.push("/upload-approval");
+      } finally {
+        setUploadNavBusy(false);
+      }
+    })();
   };
 
   return (
@@ -102,10 +159,11 @@ function UploadAfterOrderInner() {
 
           <button
             type="button"
+            disabled={uploadNavBusy}
             onClick={goUploadArtwork}
-            className="mt-10 w-full max-w-sm rounded-lg bg-emerald-600 px-8 py-3.5 text-base font-semibold text-white shadow-sm transition-colors hover:bg-emerald-700"
+            className="mt-10 w-full max-w-sm rounded-lg bg-emerald-600 px-8 py-3.5 text-base font-semibold text-white shadow-sm transition-colors hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-60"
           >
-            Upload Artwork
+            {uploadNavBusy ? "Opening…" : "Upload Artwork"}
           </button>
 
           {hasOrderContext && (

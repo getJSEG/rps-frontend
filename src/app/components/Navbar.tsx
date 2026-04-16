@@ -15,6 +15,11 @@ import {
   IoImageOutline,
 } from "react-icons/io5";
 import { toast } from "react-toastify";
+import { ordersAPI } from "../../utils/api";
+import {
+  buildPendingUploadJobsFromOrders,
+  type UploadApprovalOrderRow,
+} from "../../utils/uploadApprovalPending";
 
 function shouldSkipCartApiForPathname(pathname: string): boolean {
   if (!pathname) return false;
@@ -59,9 +64,10 @@ function readCachedNavbarCategories(): Category[] {
   }
 }
 
-function getDisplayNameFromUser(user: any): string {
+function getDisplayNameFromUser(user: unknown): string {
   if (!user || typeof user !== "object") return "";
-  const candidates = [user.fullName, user.full_name, user.name, user.firstName, user.email];
+  const u = user as Record<string, unknown>;
+  const candidates = [u.fullName, u.full_name, u.name, u.firstName, u.email];
   for (const value of candidates) {
     if (typeof value === "string" && value.trim()) return value.trim();
   }
@@ -137,6 +143,7 @@ export default function Navbar() {
   const didInitialCartFetchRef = useRef(false);
   const loginCheckInvocationRef = useRef(0);
   const [categories, setCategories] = useState<Category[]>([]);
+  const [uploadPendingDot, setUploadPendingDot] = useState(false);
 
   // Cart count from API (JWT or guest X-Guest-Session-Id)
   const updateCartCount = async () => {
@@ -234,6 +241,39 @@ export default function Navbar() {
     };
   }, [effectiveSkipCartCountFetch]);
 
+  /** Red dot on Upload when the same pending jobs exist as on /upload-approval. */
+  useEffect(() => {
+    if (!isLoggedIn) {
+      setUploadPendingDot(false);
+      return;
+    }
+    let cancelled = false;
+    const refreshUploadPending = async () => {
+      try {
+        const res = (await ordersAPI.getAll({ limit: 50, page: 1 })) as {
+          orders?: UploadApprovalOrderRow[];
+        };
+        const list = Array.isArray(res?.orders) ? res.orders : [];
+        const n = buildPendingUploadJobsFromOrders(list).length;
+        if (!cancelled) setUploadPendingDot(n > 0);
+      } catch {
+        if (!cancelled) setUploadPendingDot(false);
+      }
+    };
+    void refreshUploadPending();
+    const onFocus = () => void refreshUploadPending();
+    const onVis = () => {
+      if (document.visibilityState === "visible") void refreshUploadPending();
+    };
+    window.addEventListener("focus", onFocus);
+    document.addEventListener("visibilitychange", onVis);
+    return () => {
+      cancelled = true;
+      window.removeEventListener("focus", onFocus);
+      document.removeEventListener("visibilitychange", onVis);
+    };
+  }, [isLoggedIn, pathname]);
+
   useEffect(() => {
     const cached = readCachedNavbarCategories();
     if (cached.length > 0) {
@@ -299,8 +339,8 @@ export default function Navbar() {
           router.push("/");
         }
       }
-    } catch (err: any) {
-      const msg = err?.message || "Invalid email or password";
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : "Invalid email or password";
       setLoginError(msg);
       toast.error(msg);
     }
@@ -497,8 +537,18 @@ export default function Navbar() {
                   )}
                 </div>
 
-                <Link href="/upload-approval" className="text-gray-700 hover:text-gray-900 text-sm font-medium transition-colors">
+                <Link
+                  href="/upload-approval"
+                  className="relative inline-flex items-center text-gray-700 hover:text-gray-900 text-sm font-medium transition-colors"
+                  aria-label={uploadPendingDot ? "Upload (pending artwork or approval)" : "Upload"}
+                >
                   Upload
+                  {uploadPendingDot ? (
+                    <span
+                      className="absolute -right-1.5 -top-1 h-2 w-2 rounded-full bg-red-500 shadow-sm ring-2 ring-white"
+                      aria-hidden
+                    />
+                  ) : null}
                 </Link>
 
                 <Link href="/orders" className="text-gray-700 hover:text-gray-900 text-sm font-medium transition-colors">

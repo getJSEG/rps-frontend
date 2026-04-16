@@ -13,14 +13,12 @@ import {
   authAPI,
   cardsAPI,
   shippingRatesAPI,
-  storePickupAddressesAPI,
   effectiveOrderShipping,
   orderQualifiesForFreeShipping,
   stackedShippingFromCartItems,
   mergedShippingFromCartItems,
   type ShippingMethod,
   type ShippingRates,
-  type StorePickupAddress,
   type FreeShippingPolicy,
   type CartSummary,
 } from "../../utils/api";
@@ -151,8 +149,6 @@ export default function CheckoutPage() {
     freeShippingEnabled: false,
     freeShippingThreshold: 0,
   });
-  const [storePickupAddresses, setStorePickupAddresses] = useState<StorePickupAddress[]>([]);
-
   const loadCartFromApi = useCallback(async () => {
     setCartItems(await fetchCartItemsFromApi());
     try {
@@ -186,21 +182,6 @@ export default function CheckoutPage() {
           if (!cancelled) setOrderSummary(null);
         }
         setLoading(false);
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-
-  useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      try {
-        const res = await storePickupAddressesAPI.getPublic();
-        if (!cancelled && Array.isArray(res?.addresses)) setStorePickupAddresses(res.addresses);
-      } catch {
-        if (!cancelled) setStorePickupAddresses([]);
       }
     })();
     return () => {
@@ -355,11 +336,11 @@ export default function CheckoutPage() {
       if (elementsRef.current) {
         try {
           elementsRef.current.paymentElement.unmount();
-        } catch (_) {}
+        } catch {}
         elementsRef.current = null;
       }
     };
-  }, [clientSecret]);
+  }, [clientSecret, stripePublishableKey]);
 
   const subtotal = cartItems.reduce((sum, i) => sum + checkoutItemLineSubtotal(i), 0);
   const shippingMode =
@@ -392,12 +373,6 @@ export default function CheckoutPage() {
   const shownTax = orderSummary?.taxAmount ?? 0;
   const shownTaxPercentage = orderSummary?.taxPercentage ?? 0;
   const shownTotal = orderSummary?.total ?? total;
-  const selectedStorePickupId =
-    shippingMode === "store_pickup" ? Number(cartItems[0]?.storePickupAddressId || 0) : 0;
-  const selectedStorePickup =
-    shippingMode === "store_pickup"
-      ? storePickupAddresses.find((a) => Number(a.id) === selectedStorePickupId) || null
-      : null;
 
   const loggedInCheckout = isAuthenticated();
   const guestEmailOk = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(guestEmail.trim());
@@ -453,7 +428,7 @@ export default function CheckoutPage() {
       if (res.stripePaymentSkipped) {
         try {
           await cartAPI.clear();
-        } catch (_) {}
+        } catch {}
         localStorage.removeItem("cart");
         window.dispatchEvent(new Event("cartUpdated"));
         if (!loggedInCheckout && guestToken) {
@@ -509,7 +484,7 @@ export default function CheckoutPage() {
       else {
         try {
           await cartAPI.clear();
-        } catch (_) {}
+        } catch {}
         localStorage.removeItem("cart");
         window.dispatchEvent(new Event("cartUpdated"));
       }
@@ -596,12 +571,12 @@ export default function CheckoutPage() {
                   )}
                   <label className="flex items-start gap-3 p-3 border-2 rounded-lg cursor-pointer border-gray-200 hover:border-gray-300">
                     <input type="radio" name="payment" checked={paymentMethod === "new"} onChange={() => setPaymentMethod("new")} className="mt-1" />
-                    <span className="font-medium text-gray-900">New Credit Card (Stripe)</span>
+                    <span className="font-medium text-gray-900">Credit Card (Stripe)</span>
                   </label>
-                  <label className="flex items-start gap-3 p-3 border-2 rounded-lg cursor-pointer border-gray-200 hover:border-gray-300">
+                  {/* <label className="flex items-start gap-3 p-3 border-2 rounded-lg cursor-pointer border-gray-200 hover:border-gray-300">
                     <input type="radio" name="payment" checked={paymentMethod === "paypal"} onChange={() => setPaymentMethod("paypal")} className="mt-1" />
                     <span className="font-medium text-gray-900">PayPal</span>
-                  </label>
+                  </label> */}
                 </div>
                 {!cardsLoading && isAuthenticated() && savedCards.length === 0 && (
                   <p className="text-gray-500 text-sm mt-2">No saved cards. Add cards in <Link href="/credit-cards" className="text-blue-600 hover:underline">Credit Cards</Link> or use New Credit Card below.</p>
