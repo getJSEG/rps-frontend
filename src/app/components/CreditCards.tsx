@@ -6,6 +6,8 @@ import { useRouter } from "next/navigation";
 import { cardsAPI } from "../../utils/api";
 import { toast } from "react-toastify";
 
+/** Legacy: full manage-cards UI; `/credit-cards` no longer renders this component. */
+
 interface Card {
   id: number;
   card_number_last4: string;

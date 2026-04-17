@@ -8,8 +8,6 @@ import {
   IoPersonCircleOutline,
   IoSettingsOutline,
   IoKeyOutline,
-  IoCardOutline,
-  IoMailOutline,
   IoBookOutline,
   IoLogOutOutline,
   IoImageOutline,
@@ -20,21 +18,6 @@ import {
   buildPendingUploadJobsFromOrders,
   type UploadApprovalOrderRow,
 } from "../../utils/uploadApprovalPending";
-
-function shouldSkipCartApiForPathname(pathname: string): boolean {
-  if (!pathname) return false;
-  const skipPrefixes = [
-    "/account-settings",
-    "/change-password",
-    "/credit-cards",
-    "/messages",
-    "/address-book",
-    "/claims",
-    "/favorite-jobs",
-    "/pending-payment",
-  ];
-  return skipPrefixes.some((prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`));
-}
 
 type Category = {
   id: number;
@@ -126,7 +109,6 @@ function CartIconLink({ count }: { count: number }) {
 export default function Navbar() {
   const router = useRouter();
   const pathname = usePathname();
-  const effectiveSkipCartCountFetch = shouldSkipCartApiForPathname(pathname ?? "");
   const [isUserDropdownOpen, setIsUserDropdownOpen] = useState(false);
   const [isSearchOpen, setIsSearchOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
@@ -165,7 +147,7 @@ export default function Navbar() {
   useEffect(() => {
     const checkLoginStatus = () => {
       loginCheckInvocationRef.current += 1;
-      if (loginCheckInvocationRef.current > 1 && !effectiveSkipCartCountFetch) {
+      if (loginCheckInvocationRef.current > 1) {
         void updateCartCount();
       }
       const loggedIn = localStorage.getItem("isLoggedIn") === "true";
@@ -197,7 +179,7 @@ export default function Navbar() {
     };
 
     checkLoginStatus();
-    if (!effectiveSkipCartCountFetch && !didInitialCartFetchRef.current) {
+    if (!didInitialCartFetchRef.current) {
       didInitialCartFetchRef.current = true;
       try {
         const cached = localStorage.getItem("cartCount");
@@ -211,21 +193,18 @@ export default function Navbar() {
 
     // Listen for custom login status change event
     window.addEventListener("loginStatusChanged", checkLoginStatus);
-    
-    // Listen for cart updates
-    if (!effectiveSkipCartCountFetch) {
-      window.addEventListener("cartUpdated", updateCartCount);
-    }
+
+    window.addEventListener("cartUpdated", updateCartCount);
 
     // Also listen for storage changes (when login happens in another tab/window)
     const onStorageChange = () => {
       checkLoginStatus();
-      if (!effectiveSkipCartCountFetch) updateCartCount();
+      void updateCartCount();
     };
     window.addEventListener("storage", onStorageChange);
 
     const onVisibilityChange = () => {
-      if (document.visibilityState === "visible" && !effectiveSkipCartCountFetch) {
+      if (document.visibilityState === "visible") {
         void updateCartCount();
       }
     };
@@ -234,12 +213,10 @@ export default function Navbar() {
     return () => {
       document.removeEventListener("visibilitychange", onVisibilityChange);
       window.removeEventListener("loginStatusChanged", checkLoginStatus);
-      if (!effectiveSkipCartCountFetch) {
-        window.removeEventListener("cartUpdated", updateCartCount);
-      }
+      window.removeEventListener("cartUpdated", updateCartCount);
       window.removeEventListener("storage", onStorageChange);
     };
-  }, [effectiveSkipCartCountFetch]);
+  }, []);
 
   /** Red dot on Upload when the same pending jobs exist as on /upload-approval. */
   useEffect(() => {
@@ -591,14 +568,8 @@ export default function Navbar() {
                             <IoKeyOutline className="h-4 w-4 shrink-0 opacity-90" aria-hidden />
                             Change Password
                           </Link>
-                          <Link href="/credit-cards" className="flex items-center gap-2 rounded-sm px-1.5 py-1 text-[#0B6BCB] hover:bg-slate-100 hover:text-blue-800 text-sm whitespace-nowrap">
-                            <IoCardOutline className="h-4 w-4 shrink-0 opacity-90" aria-hidden />
-                            Manage Credit Cards
-                          </Link>
-                          <Link href="/messages" className="flex items-center gap-2 rounded-sm px-1.5 py-1 text-[#0B6BCB] hover:bg-slate-100 hover:text-blue-800 text-sm whitespace-nowrap">
-                            <IoMailOutline className="h-4 w-4 shrink-0 opacity-90" aria-hidden />
-                            Messages
-                          </Link>
+                          {/* Credit cards page disabled — checkout uses Stripe only. */}
+                          {/* Messages section disabled. */}
                           <Link href="/address-book" className="flex items-center gap-2 rounded-sm px-1.5 py-1 text-[#0B6BCB] hover:bg-slate-100 hover:text-blue-800 text-sm whitespace-nowrap">
                             <IoBookOutline className="h-4 w-4 shrink-0 opacity-90" aria-hidden />
                             Address Book

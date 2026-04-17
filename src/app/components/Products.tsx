@@ -271,9 +271,13 @@ export default function Products({ forcedCategorySlug = null }: { forcedCategory
                 <p className="text-lg font-bold text-gray-900">${unit.toFixed(2)}</p>
               </div>
             ) : ppsf != null ? (
-              <div className="mt-1 flex items-center justify-between gap-3 border-t border-gray-200 pt-2">
-                <p className="text-lg font-bold text-gray-900">Starting at</p>
-                <p className="text-lg font-bold text-gray-900">${ppsf.toFixed(2)} per ft²</p>
+              <div className="mt-1 min-w-0 border-t border-gray-200 pt-2">
+                <p
+                  className="truncate text-xs font-bold tabular-nums leading-snug text-gray-900 sm:text-sm"
+                  title={`Starting at $${ppsf.toFixed(2)} per ft²`}
+                >
+                  {`Starting at $${ppsf.toFixed(2)} per ft²`}
+                </p>
               </div>
             ) : (
               <p className="text-sm text-gray-700">Price on request</p>

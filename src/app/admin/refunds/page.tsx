@@ -74,7 +74,8 @@ export default function RefundsPage() {
   const [loading, setLoading] = useState(true);
   const [busyOrderId, setBusyOrderId] = useState<string | null>(null);
   const [filter, setFilter] = useState<RefundFilter>("all");
-  const [confirmRefundOrderId, setConfirmRefundOrderId] = useState<string | null>(null);
+  /** When set, shows centered refund confirmation modal for that order id. */
+  const [refundModalOrderId, setRefundModalOrderId] = useState<string | null>(null);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -166,7 +167,7 @@ export default function RefundsPage() {
       const response = await ordersAPI.refundAdmin(orderId);
       const nextStatus = String(response?.order?.status || "refunded");
       updateOrderStatusLocally(orderId, nextStatus);
-      setConfirmRefundOrderId(null);
+      setRefundModalOrderId(null);
     } catch (e) {
       const msg = e instanceof Error ? e.message : "Failed to process refund";
       alert(msg);
@@ -176,6 +177,9 @@ export default function RefundsPage() {
   };
 
   const filteredOrders = orders.filter((o) => matchesRefundFilter(o.status, filter));
+  const refundModalOrder = refundModalOrderId
+    ? orders.find((o) => o.id === refundModalOrderId)
+    : null;
   const paymentTagClass = (paymentType: string) => {
     const p = String(paymentType || "").toLowerCase();
     if (p === "stripe") return "bg-sky-50 text-sky-900 ring-1 ring-sky-200/80";
@@ -352,44 +356,14 @@ export default function RefundsPage() {
                           </button>
                         )}
                         {(s === "awaiting_refund" || s === "refund") && (
-                          <div className="relative">
-                            <button
-                              type="button"
-                              onClick={() =>
-                                setConfirmRefundOrderId((prev) =>
-                                  prev === order.id ? null : order.id
-                                )
-                              }
-                              disabled={isBusy}
-                              className="rounded-lg border border-rose-200 bg-rose-50 px-3 py-1.5 text-xs font-semibold text-rose-800 hover:bg-rose-100 disabled:opacity-50"
-                            >
-                              {isBusy ? "Refunding…" : "Refund"}
-                            </button>
-                            {confirmRefundOrderId === order.id && (
-                              <div className="absolute right-0 z-20 mt-2 w-72 rounded-lg border border-slate-200 bg-white p-3 shadow-lg">
-                                <p className="text-xs text-slate-700">
-                                  Are you sure you want to process this refund?
-                                </p>
-                                <div className="mt-3 flex justify-end gap-2">
-                                  <button
-                                    type="button"
-                                    onClick={() => setConfirmRefundOrderId(null)}
-                                    className="rounded-md px-2.5 py-1.5 text-xs font-semibold text-slate-600 hover:bg-slate-100"
-                                  >
-                                    No
-                                  </button>
-                                  <button
-                                    type="button"
-                                    onClick={() => handleRefund(order.id)}
-                                    disabled={isBusy}
-                                    className="rounded-md border border-rose-200 bg-rose-50 px-2.5 py-1.5 text-xs font-semibold text-rose-800 hover:bg-rose-100 disabled:opacity-50"
-                                  >
-                                    Yes, refund
-                                  </button>
-                                </div>
-                              </div>
-                            )}
-                          </div>
+                          <button
+                            type="button"
+                            onClick={() => setRefundModalOrderId(order.id)}
+                            disabled={isBusy}
+                            className="rounded-lg border border-rose-200 bg-rose-50 px-3 py-1.5 text-xs font-semibold text-rose-800 hover:bg-rose-100 disabled:opacity-50"
+                          >
+                            {isBusy ? "Refunding…" : "Refund"}
+                          </button>
                         )}
                       </div>
                     </td>
@@ -400,6 +374,49 @@ export default function RefundsPage() {
           </table>
         </div>
       </div>
+
+      {refundModalOrderId && (
+        <div
+          className="fixed inset-0 z-[100] flex items-center justify-center bg-black/40 p-4"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="refund-list-modal-title"
+          onClick={() => {
+            if (!busyOrderId) setRefundModalOrderId(null);
+          }}
+        >
+          <div
+            className="w-full max-w-md rounded-2xl border border-slate-200 bg-white p-6 shadow-xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h2 id="refund-list-modal-title" className="text-lg font-bold text-slate-900">
+              Process refund?
+            </h2>
+            <p className="mt-2 text-sm text-slate-600">
+              Are you sure you want to process this refund. This cannot be
+              undone.
+            </p>
+            <div className="mt-6 flex flex-wrap justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setRefundModalOrderId(null)}
+                disabled={busyOrderId === refundModalOrderId}
+                className="rounded-xl px-4 py-2.5 text-sm font-semibold text-slate-600 hover:bg-slate-100 disabled:opacity-50"
+              >
+                No
+              </button>
+              <button
+                type="button"
+                onClick={() => void handleRefund(refundModalOrderId)}
+                disabled={busyOrderId === refundModalOrderId}
+                className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-2.5 text-sm font-semibold text-rose-800 hover:bg-rose-100 disabled:opacity-50"
+              >
+                {busyOrderId === refundModalOrderId ? "Processing…" : "Yes, refund"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </AdminNavbar>
   );
 }

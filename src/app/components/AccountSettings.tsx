@@ -12,7 +12,7 @@ interface ProfileUser {
   full_name: string | null;
   hear_about_us: string | null;
   telephone: string | null;
-  newsletter: boolean;
+  newsletter?: boolean;
   role: string;
   is_active?: boolean;
 }
@@ -33,7 +33,6 @@ export default function AccountSettings() {
     email: "",
     telephone: "",
     hearAboutUs: "",
-    newsletter: false,
     role: "",
   });
 
@@ -55,7 +54,6 @@ export default function AccountSettings() {
             email: user.email ?? "",
             telephone: user.telephone ?? "",
             hearAboutUs: user.hear_about_us ?? "",
-            newsletter: !!user.newsletter,
             role: user.role ?? "",
           });
         }
@@ -74,12 +72,8 @@ export default function AccountSettings() {
   }, [router]);
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const { name, value, type } = e.target;
-    const checked = (e.target as HTMLInputElement).checked;
-    setFormData((prev) => ({
-      ...prev,
-      [name]: type === "checkbox" ? checked : value,
-    }));
+    const { name, value } = e.target;
+    setFormData((prev) => ({ ...prev, [name]: value }));
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -94,7 +88,6 @@ export default function AccountSettings() {
       await usersAPI.updateProfile({
         fullName: formData.fullName.trim() || undefined,
         telephone: formData.telephone.trim() || undefined,
-        newsletter: formData.newsletter,
       });
       toast.success("Profile updated successfully.");
     } catch (err: any) {
@@ -107,7 +100,6 @@ export default function AccountSettings() {
   const menuItems = [
     { label: "Account Settings", href: "/account-settings", active: true },
     { label: "Change Password", href: "/change-password" },
-    { label: "Credit Cards", href: "/credit-cards" },
     { label: "Your Default Address", href: "/address-book" },
   ];
 
@@ -216,24 +208,6 @@ export default function AccountSettings() {
                   />
                 </div>
               )}
-
-              {/* Newsletter */}
-              <div className="rounded-sm border border-gray-200 bg-gray-50/80 px-3 py-3">
-                <label htmlFor="newsletter" className="flex cursor-pointer items-start gap-3">
-                <input
-                  type="checkbox"
-                  id="newsletter"
-                  name="newsletter"
-                  checked={formData.newsletter}
-                  onChange={handleChange}
-                    className="mt-0.5 h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-gray-300"
-                />
-                  <span>
-                    <span className="block text-sm font-medium text-gray-800">Subscribe to newsletter</span>
-                    <span className="block text-xs text-gray-500">Receive product updates and new offers.</span>
-                  </span>
-                </label>
-              </div>
 
               {/* Update Button */}
               <div className="flex items-center justify-between gap-3 border-t border-gray-200 pt-4">

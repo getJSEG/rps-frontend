@@ -587,6 +587,13 @@ export const usersAPI = {
       body: JSON.stringify(data),
     });
   },
+  /** Logged-in user: set new password (Bearer token). */
+  changePassword: async (newPassword: string) => {
+    return apiCall('/users/password', {
+      method: 'PUT',
+      body: JSON.stringify({ newPassword }),
+    });
+  },
 };
 
 // Cards API (saved credit cards - requires login)

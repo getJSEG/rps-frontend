@@ -1,5 +1,7 @@
 "use client";
 
+/** Legacy demo inbox UI; `/messages` no longer renders this component. */
+
 import { useState } from "react";
 
 export default function Messages() {

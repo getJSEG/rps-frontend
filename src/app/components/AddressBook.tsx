@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { addressesAPI } from "../../utils/api";
 import { toast } from "react-toastify";
-import { FiEdit, FiTrash2 } from "react-icons/fi";
+import { FiEdit } from "react-icons/fi";
 
 interface Address {
   id: number;
@@ -218,19 +218,6 @@ export default function AddressBook() {
     }
   };
 
-
-  const handleDelete = async (id: number) => {
-    if (!window.confirm("Remove this address?")) return;
-    try {
-      await addressesAPI.delete(String(id));
-      setAddresses((prev) => prev.filter((a) => a.id !== id));
-      if (editingId === id) cancelEdit();
-      toast.success("Address removed.");
-    } catch (err: any) {
-      toast.error(err?.message || "Failed to delete address.");
-    }
-  };
-
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     const token = typeof window !== "undefined" ? localStorage.getItem("token") : null;
@@ -285,7 +272,6 @@ export default function AddressBook() {
   const menuItems = [
     { label: "Account Settings", href: "/account-settings" },
     { label: "Change Password", href: "/change-password" },
-    { label: "Credit Cards", href: "/credit-cards" },
     { label: "Your Default Address", href: "/address-book", active: true },
   ];
 
@@ -307,7 +293,7 @@ export default function AddressBook() {
         <div className="mb-6 rounded-sm border border-gray-200 bg-white/80 px-5 py-4 shadow-[0_10px_35px_-24px_rgba(15,23,42,0.5)] backdrop-blur-sm">
           <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-gray-500">Account Area</p>
           <h1 className="mt-1 text-2xl font-semibold tracking-tight text-gray-900 sm:text-3xl">Address Book</h1>
-          <p className="mt-1.5 text-sm text-gray-600">Manage your billing and shipping addresses.</p>
+          <p className="mt-1.5 text-sm text-gray-600">Manage your shipping addresses.</p>
         </div>
 
         <div className="flex flex-col gap-5 lg:flex-row lg:gap-8">
@@ -385,15 +371,6 @@ export default function AddressBook() {
                         aria-label="Edit address"
                       >
                         <FiEdit size={18} />
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => handleDelete(addr.id)}
-                        className="font-medium text-rose-600 hover:text-rose-800"
-                        title="Delete"
-                        aria-label="Delete address"
-                      >
-                        <FiTrash2 size={18} />
                       </button>
                     </div>
                   </div>
@@ -500,7 +477,7 @@ export default function AddressBook() {
                       className="mt-0.5 h-4 w-4 rounded border-gray-300 text-blue-600"
                     />
                     <span className="text-sm font-medium text-gray-700">
-                      Use as my default address (only one; shown on product page and checkout)
+                      Use as my default address
                     </span>
                   </label>
                 </div>

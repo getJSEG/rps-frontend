@@ -499,7 +499,6 @@ export default function Orders() {
             <div className="flex flex-col gap-4">
               <div>
                 <h1 className="text-2xl font-semibold text-gray-900">My orders</h1>
-                <p className="text-sm text-gray-500 mt-1">Order number, items, delivery address, payment, and status</p>
               </div>
               <div className="flex flex-col sm:flex-row gap-3">
                 <div className="relative flex-1 min-w-0">

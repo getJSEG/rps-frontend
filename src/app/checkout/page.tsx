@@ -11,7 +11,6 @@ import {
   cartAPI,
   addressesAPI,
   authAPI,
-  cardsAPI,
   shippingRatesAPI,
   effectiveOrderShipping,
   orderQualifiesForFreeShipping,
@@ -48,16 +47,6 @@ function normalizeAddress(raw: Record<string, unknown>): Address {
     is_default: Boolean(raw.is_default ?? raw.isDefault),
     address_type: String(raw.address_type ?? raw.addressType ?? "billing"),
   };
-}
-
-interface SavedCard {
-  id: number;
-  card_number_last4: string;
-  cardholder_name: string;
-  expiry_month: number;
-  expiry_year: number;
-  card_type: string | null;
-  is_default: boolean;
 }
 
 interface CartItem {
@@ -115,9 +104,6 @@ export default function CheckoutPage() {
   const [cartItems, setCartItems] = useState<CartItem[]>([]);
   const [orderSummary, setOrderSummary] = useState<CartSummary | null>(null);
   const [loading, setLoading] = useState(true);
-  const [paymentMethod, setPaymentMethod] = useState<string>("new");
-  const [savedCards, setSavedCards] = useState<SavedCard[]>([]);
-  const [cardsLoading, setCardsLoading] = useState(false);
   const [clientSecret, setClientSecret] = useState<string | null>(null);
   const [orderId, setOrderId] = useState<number | null>(null);
   const [guestTrackingToken, setGuestTrackingToken] = useState<string | null>(null);
@@ -235,13 +221,11 @@ export default function CheckoutPage() {
     if (!isAuthenticated()) return;
     let cancelled = false;
     setAddressLoading(true);
-    setCardsLoading(true);
     (async () => {
       try {
-        const [addrRes, profileRes, cardsRes] = await Promise.all([
+        const [addrRes, profileRes] = await Promise.all([
           addressesAPI.getAll() as Promise<{ addresses?: unknown[] }>,
           authAPI.getProfile().catch(() => null),
-          cardsAPI.get().catch(() => ({ cards: [] })),
         ]);
         if (cancelled) return;
         const rawList = Array.isArray(addrRes?.addresses) ? addrRes.addresses : [];
@@ -250,29 +234,10 @@ export default function CheckoutPage() {
           const p = profileRes as { fullName?: string; full_name?: string; telephone?: string };
           setProfile({ fullName: p.fullName ?? p.full_name, telephone: p.telephone });
         }
-        const cards = Array.isArray((cardsRes as { cards?: unknown[] })?.cards) ? (cardsRes as { cards: unknown[] }).cards : [];
-        const normalized: SavedCard[] = cards.map((c) => {
-          const r = c as Record<string, unknown>;
-          return {
-            id: Number(r.id),
-            card_number_last4: String(r.card_number_last4 ?? r.cardNumberLast4 ?? ""),
-            cardholder_name: String(r.cardholder_name ?? r.cardholderName ?? ""),
-            expiry_month: Number(r.expiry_month ?? r.expiryMonth),
-            expiry_year: Number(r.expiry_year ?? r.expiryYear),
-            card_type: r.card_type != null || r.cardType != null ? String(r.card_type ?? r.cardType) : null,
-            is_default: Boolean(r.is_default ?? r.isDefault),
-          };
-        });
-        setSavedCards(normalized);
-        const defaultCard = normalized.find((c) => c.is_default) || normalized[0];
-        if (defaultCard) setPaymentMethod(String(defaultCard.id));
       } catch {
         if (!cancelled) setAddresses([]);
       } finally {
-        if (!cancelled) {
-          setAddressLoading(false);
-          setCardsLoading(false);
-        }
+        if (!cancelled) setAddressLoading(false);
       }
     })();
     return () => { cancelled = true; };
@@ -386,10 +351,6 @@ export default function CheckoutPage() {
 
   const handlePlaceOrder = async () => {
     if (!canProceedToPayment) return;
-    if (paymentMethod === "paypal") {
-      router.push("/");
-      return;
-    }
     setCreating(true);
     setError(null);
     try {
@@ -551,38 +512,17 @@ export default function CheckoutPage() {
           <div className="bg-white border border-gray-200 rounded-lg shadow-sm overflow-hidden">
             <div className="p-6 sm:p-8 grid grid-cols-1 lg:grid-cols-3 gap-8">
               <div>
-                <h2 className="text-lg font-bold text-gray-900 mb-4">Choose a Payment Method</h2>
-                <div className="space-y-3">
-                  {cardsLoading ? (
-                    <p className="text-gray-500 text-sm">Loading saved cards...</p>
-                  ) : (
-                    savedCards.map((card) => {
-                      const expMonth = String(card.expiry_month).padStart(2, "0");
-                      const expYear = String(card.expiry_year).length === 2 ? card.expiry_year : String(card.expiry_year).slice(-2);
-                      const label = (card.card_type || "Card").replace(/^\w/, (c) => c.toUpperCase());
-                      return (
-                        <label key={card.id} className="flex items-start gap-3 p-3 border-2 rounded-lg cursor-pointer border-gray-200 hover:border-gray-300">
-                          <input type="radio" name="payment" checked={paymentMethod === String(card.id)} onChange={() => setPaymentMethod(String(card.id))} className="mt-1" />
-                          <div className="flex-1">
-                            <span className="font-medium text-gray-900">{label} •••• {card.card_number_last4}</span>
-                            <p className="text-sm text-gray-600">Exp: {expMonth}/{expYear} — {card.cardholder_name}</p>
-                          </div>
-                        </label>
-                      );
-                    })
-                  )}
-                  <label className="flex items-start gap-3 p-3 border-2 rounded-lg cursor-pointer border-gray-200 hover:border-gray-300">
-                    <input type="radio" name="payment" checked={paymentMethod === "new"} onChange={() => setPaymentMethod("new")} className="mt-1" />
-                    <span className="font-medium text-gray-900">Credit Card (Stripe)</span>
-                  </label>
-                  {/* <label className="flex items-start gap-3 p-3 border-2 rounded-lg cursor-pointer border-gray-200 hover:border-gray-300">
-                    <input type="radio" name="payment" checked={paymentMethod === "paypal"} onChange={() => setPaymentMethod("paypal")} className="mt-1" />
-                    <span className="font-medium text-gray-900">PayPal</span>
-                  </label> */}
+                <h2 className="text-lg font-bold text-gray-900 mb-4">Payment method</h2>
+                <div
+                  className="flex items-start gap-3 rounded-lg border-2 border-blue-500 bg-blue-50/80 p-3"
+                  role="status"
+                  aria-label="Payment method"
+                >
+                  <input type="radio" name="payment" checked disabled className="mt-1" aria-checked="true" />
+                  <div className="flex-1">
+                    <span className="font-medium text-gray-900">Pay with card (Stripe)</span>
+                  </div>
                 </div>
-                {!cardsLoading && isAuthenticated() && savedCards.length === 0 && (
-                  <p className="text-gray-500 text-sm mt-2">No saved cards. Add cards in <Link href="/credit-cards" className="text-blue-600 hover:underline">Credit Cards</Link> or use New Credit Card below.</p>
-                )}
               </div>
 
               <div className="space-y-6">
