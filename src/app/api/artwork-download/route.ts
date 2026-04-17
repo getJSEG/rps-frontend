@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { isBackendUploadsAssetUrl } from "../../../utils/backendUploadProxy";
+import { isArtworkDownloadProxyUrl } from "../../../utils/backendUploadProxy";
 
 export const dynamic = "force-dynamic";
 
@@ -9,7 +9,7 @@ export const dynamic = "force-dynamic";
 export async function GET(request: NextRequest) {
   const u = request.nextUrl.searchParams.get("u");
   const fn = request.nextUrl.searchParams.get("fn") || "download";
-  if (!u || !isBackendUploadsAssetUrl(u)) {
+  if (!u || !isArtworkDownloadProxyUrl(u)) {
     return NextResponse.json({ message: "Invalid or forbidden URL" }, { status: 403 });
   }
   let safeFn = fn.replace(/[/\\]/g, "_").slice(0, 200);

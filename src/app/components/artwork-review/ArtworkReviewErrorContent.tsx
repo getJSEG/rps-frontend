@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import ArtworkReviewFilePreview from "./ArtworkReviewFilePreview";
 import ArtworkLibraryPickerModal from "./ArtworkLibraryPickerModal";
@@ -54,11 +54,15 @@ export default function ArtworkReviewErrorContent({
       `${ARTWORK_REVIEW_DEMO.requiredInches.w}" × ${ARTWORK_REVIEW_DEMO.requiredInches.h}"`
   );
 
-  useEffect(() => {
+  /** Align local preview when props change (avoids lint on setState-in-effect for this flow). */
+  const previewSyncKey = `${previewSrc ?? ""}\0${previewMime ?? ""}\0${displayFileName ?? ""}`;
+  const [syncedPreviewKey, setSyncedPreviewKey] = useState(previewSyncKey);
+  if (syncedPreviewKey !== previewSyncKey) {
+    setSyncedPreviewKey(previewSyncKey);
     setLocalPreviewSrc(previewSrc ?? null);
     setLocalPreviewMime(previewMime ?? null);
     setLocalFileName(displayFileName?.trim() || ARTWORK_REVIEW_DEMO.fileNameError);
-  }, [previewSrc, previewMime, displayFileName]);
+  }
 
   /** No preview yet and placeholder filename — user has not chosen a file for this job. */
   const awaitingFileSelection = !localPreviewSrc && localFileName === REVIEW_PLACEHOLDER_FILE_NAME;

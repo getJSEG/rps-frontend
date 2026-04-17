@@ -2,6 +2,7 @@
 
 import { useEffect, useState, type MouseEvent } from "react";
 import Image from "next/image";
+import { lineCustomerArtworkSource } from "../../../utils/customerArtworkSource";
 import { getProductImageUrl, downloadUrlAsFile } from "../../../utils/api";
 
 /** Shared shape for customer `/orders` and admin line rows. */
@@ -10,12 +11,13 @@ export type OrderLineArtworkItem = {
   image_url?: string | null;
   product_image?: string | null;
   customer_artwork_url?: string | null;
+  customerArtworkUrl?: string | null;
 };
 
 function jobArtworkDownloadName(item: OrderLineArtworkItem, href: string): string {
   const fromPath = href.split("?")[0].split("/").pop()?.trim();
   if (fromPath && /\.[a-z0-9]{2,8}$/i.test(fromPath)) return fromPath;
-  const raw = item.customer_artwork_url ? String(item.customer_artwork_url).trim() : "";
+  const raw = lineCustomerArtworkSource(item) ?? "";
   const tail = raw.split("?")[0].split("/").pop();
   if (tail && tail.length > 0) return tail;
   return `line-${item.id ?? "artwork"}-artwork`;
@@ -53,7 +55,7 @@ function ArtworkDownloadIcon({ className = "h-5 w-5" }: { className?: string }) 
  * Mirrors admin order detail `renderThumb`.
  */
 export function OrderLineThumbnail({ item }: { item: OrderLineArtworkItem }) {
-  const artHref = getProductImageUrl(item.customer_artwork_url ?? undefined);
+  const artHref = getProductImageUrl(lineCustomerArtworkSource(item));
   const productSrc = getProductImageUrl(item.image_url ?? item.product_image ?? undefined);
   const artExt = artHref ? artHref.split("?")[0].split(".").pop()?.toLowerCase() || "" : "";
   const useArtThumb =
@@ -96,7 +98,7 @@ export function OrderLineThumbnail({ item }: { item: OrderLineArtworkItem }) {
 
 /** Preview modal + download — same behavior as admin `JobArtworkDownloadCell`. */
 export function OrderLineArtworkDownloadCell({ item }: { item: OrderLineArtworkItem }) {
-  const href = getProductImageUrl(item.customer_artwork_url ?? undefined);
+  const href = getProductImageUrl(lineCustomerArtworkSource(item));
   const [downloading, setDownloading] = useState(false);
   const [previewOpen, setPreviewOpen] = useState(false);
 

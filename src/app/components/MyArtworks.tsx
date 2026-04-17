@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "react-toastify";
-import { artworksAPI, getProductImageUrl, type ArtworkRecord } from "../../utils/api";
+import { artworksAPI, downloadUrlAsFile, getProductImageUrl, type ArtworkRecord } from "../../utils/api";
 import { extractUploadFileMetadata, type UploadFileMetadata } from "../../utils/uploadMetadata";
 import { formatInchesFromPixels } from "../../utils/artworkProportion";
 import { formatBytes } from "../../utils/formatBytes";
@@ -103,17 +103,14 @@ export default function MyArtworks() {
     });
   };
 
-  const confirmAndDownload = (item: UploadedArtworkRow) => {
+  const confirmAndDownload = async (item: UploadedArtworkRow) => {
     const url = item.remoteUrl || item.previewUrl;
     if (!url) return toast.error("No download URL found.");
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = item.fileName;
-    a.target = "_blank";
-    a.rel = "noopener noreferrer";
-    document.body.appendChild(a);
-    a.click();
-    a.remove();
+    try {
+      await downloadUrlAsFile(url, item.fileName);
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Could not download file.");
+    }
   };
 
   const onFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -318,7 +315,7 @@ export default function MyArtworks() {
                       type="button"
                       className="p-1 hover:text-sky-700 transition-colors"
                       title="Download"
-                      onClick={() => confirmAndDownload(item)}
+                      onClick={() => void confirmAndDownload(item)}
                     >
                       <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />

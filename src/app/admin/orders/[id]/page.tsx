@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback, useRef, type MouseEvent, type ReactNo
 import { useRouter, useParams } from "next/navigation";
 import Image from "next/image";
 import Link from "next/link";
+import { lineCustomerArtworkSource } from "../../../../utils/customerArtworkSource";
 import { ordersAPI, getProductImageUrl, downloadUrlAsFile } from "../../../../utils/api";
 import AdminNavbar from "../../../components/AdminNavbar";
 import { canAccessAdminPanel, isAuthenticated, getUserRole } from "../../../../utils/roles";
@@ -33,6 +34,8 @@ interface OrderItem {
   height_inches?: number;
   /** Customer-uploaded artwork for this line (path or URL from API). */
   customer_artwork_url?: string | null;
+  /** Some API responses use camelCase; normalized to `customer_artwork_url` when order loads. */
+  customerArtworkUrl?: string | null;
 }
 
 interface GuestCheckoutShape {
@@ -135,7 +138,7 @@ function formatSizeWxH(w: unknown, h: unknown): string {
 function jobArtworkDownloadName(item: OrderItem, href: string): string {
   const fromPath = href.split("?")[0].split("/").pop()?.trim();
   if (fromPath && /\.[a-z0-9]{2,8}$/i.test(fromPath)) return fromPath;
-  const raw = item.customer_artwork_url ? String(item.customer_artwork_url).trim() : "";
+  const raw = lineCustomerArtworkSource(item) ?? "";
   const tail = raw.split("?")[0].split("/").pop();
   if (tail && tail.length > 0) return tail;
   return `line-${item.id}-artwork`;
@@ -170,7 +173,7 @@ function ArtworkDownloadIcon({ className = "h-5 w-5" }: { className?: string }) 
 }
 
 function JobArtworkDownloadCell({ item }: { item: OrderItem }) {
-  const href = getProductImageUrl(item.customer_artwork_url ?? undefined);
+  const href = getProductImageUrl(lineCustomerArtworkSource(item));
   const [downloading, setDownloading] = useState(false);
   const [previewOpen, setPreviewOpen] = useState(false);
 
@@ -701,7 +704,7 @@ export default function OrderDetails() {
   };
 
   const renderThumb = (item: OrderItem) => {
-    const artHref = getProductImageUrl(item.customer_artwork_url ?? undefined);
+    const artHref = getProductImageUrl(lineCustomerArtworkSource(item));
     const productSrc = getProductImageUrl(item.product_image);
     const artExt = artHref ? artHref.split("?")[0].split(".").pop()?.toLowerCase() || "" : "";
     const useArtThumb =

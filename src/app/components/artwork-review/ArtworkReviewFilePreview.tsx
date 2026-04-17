@@ -45,7 +45,7 @@ export default function ArtworkReviewFilePreview({
   previewMime,
   variant,
 }: ArtworkReviewFilePreviewProps) {
-  const [blobInvalid, setBlobInvalid] = useState(false);
+  const [blobFailure, setBlobFailure] = useState<{ src: string; failed: boolean } | null>(null);
 
   const mime = useMemo(
     () => ((previewMime || "").trim() || guessMimeFromFileName(fileName)).toLowerCase(),
@@ -53,23 +53,29 @@ export default function ArtworkReviewFilePreview({
   );
 
   useEffect(() => {
-    if (!previewSrc?.startsWith("blob:")) {
-      setBlobInvalid(false);
+    const src = previewSrc;
+    if (!src?.startsWith("blob:")) {
+      setBlobFailure(null);
       return;
     }
     let cancelled = false;
-    setBlobInvalid(false);
-    fetch(previewSrc)
+    void fetch(src)
       .then((r) => {
-        if (!cancelled && !r.ok) setBlobInvalid(true);
+        if (!cancelled) setBlobFailure({ src, failed: !r.ok });
       })
       .catch(() => {
-        if (!cancelled) setBlobInvalid(true);
+        if (!cancelled) setBlobFailure({ src, failed: true });
       });
     return () => {
       cancelled = true;
     };
   }, [previewSrc]);
+
+  const blobInvalid =
+    Boolean(previewSrc?.startsWith("blob:")) &&
+    blobFailure != null &&
+    blobFailure.src === previewSrc &&
+    blobFailure.failed;
 
   const mode = useMemo(() => {
     if (!previewSrc || blobInvalid) return "schematic" as const;

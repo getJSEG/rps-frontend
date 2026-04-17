@@ -1,4 +1,4 @@
-import { isBackendUploadsAssetUrl } from "./backendUploadProxy";
+import { isArtworkDownloadProxyUrl } from "./backendUploadProxy";
 
 // API Configuration - ensure base URL always ends with /api (backend mounts routes at /api)
 function getApiBaseUrl(): string {
@@ -78,7 +78,7 @@ function triggerBlobDownload(blob: Blob, filename: string): void {
  */
 export async function downloadUrlAsFile(url: string, filename: string): Promise<void> {
   const safeName = filename.replace(/[/\\]/g, '_');
-  if (typeof window !== "undefined" && isBackendUploadsAssetUrl(url)) {
+  if (typeof window !== "undefined" && isArtworkDownloadProxyUrl(url)) {
     const proxyUrl = `/api/artwork-download?u=${encodeURIComponent(url)}&fn=${encodeURIComponent(safeName)}`;
     try {
       const proxied = await fetch(proxyUrl, { credentials: "same-origin" });
