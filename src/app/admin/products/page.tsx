@@ -850,95 +850,6 @@ export default function AdminProductsPage() {
                             style={{ outline: "none" }}
                           />
                         </div>
-                        <p className="mt-1 text-xs text-slate-500">Use toolbar for bold, italic, and lists. Shown on product page.</p>
-                      </div>
-                      <div className="md:col-span-2">
-                        <label className="mb-1 block text-sm font-medium text-slate-700">
-                          Spec
-                        </label>
-                        <textarea
-                          rows={4}
-                          placeholder="Enter spec content"
-                          value={prodSpec}
-                          onChange={(e) => setProdSpec(e.target.value)}
-                          className={inputClass}
-                        />
-                      </div>
-                      <div className="md:col-span-2">
-                        <label className="mb-1 block text-sm font-medium text-slate-700">
-                          File Setup
-                        </label>
-                        <textarea
-                          rows={4}
-                          placeholder="Enter file setup instructions"
-                          value={prodFileSetup}
-                          onChange={(e) => setProdFileSetup(e.target.value)}
-                          className={inputClass}
-                        />
-                      </div>
-                      <div className="md:col-span-2">
-                        <label className="mb-1 block text-sm font-medium text-slate-700">
-                          Installation Guide
-                        </label>
-                        <textarea
-                          rows={4}
-                          placeholder="Enter installation guide"
-                          value={prodInstallationGuide}
-                          onChange={(e) => setProdInstallationGuide(e.target.value)}
-                          className={inputClass}
-                        />
-                      </div>
-                      <div className="md:col-span-2">
-                        <div className="mb-2 flex flex-wrap items-start justify-between gap-3">
-                          <label className="block text-sm font-medium text-slate-700">
-                            FAQ
-                          </label>
-                          <button
-                            type="button"
-                            onClick={() => setProdFaq([...prodFaq, { question: "", answer: "" }])}
-                            className="shrink-0 rounded-lg bg-slate-900 px-4 py-2.5 text-sm font-medium text-white shadow-sm transition hover:bg-slate-800"
-                          >
-                            + Add FAQ
-                          </button>
-                        </div>
-                        <div className="space-y-3">
-                          {prodFaq.map((item, idx) => (
-                            <div key={idx} className="rounded-lg border border-slate-200 bg-white p-3">
-                              <div className="mb-2 flex justify-end">
-                                <button
-                                  type="button"
-                                  onClick={() => setProdFaq(prodFaq.filter((_, i) => i !== idx))}
-                                  title="Remove FAQ"
-                                  className="inline-flex items-center justify-center rounded-lg p-2 text-rose-600 transition-colors hover:bg-rose-50 hover:text-rose-800"
-                                >
-                                  <FiTrash2 size={18} aria-hidden />
-                                </button>
-                              </div>
-                              <input
-                                type="text"
-                                placeholder="Question"
-                                value={item.question}
-                                onChange={(e) => {
-                                  const next = [...prodFaq];
-                                  next[idx] = { ...next[idx], question: e.target.value };
-                                  setProdFaq(next);
-                                }}
-                                className={`${inputClass} mb-2`}
-                              />
-                              <textarea
-                                rows={3}
-                                placeholder="Answer"
-                                value={item.answer}
-                                onChange={(e) => {
-                                  const next = [...prodFaq];
-                                  next[idx] = { ...next[idx], answer: e.target.value };
-                                  setProdFaq(next);
-                                }}
-                                className={inputClass}
-                              />
-                            </div>
-                          ))}
-                        </div>
                       </div>
                       <div className="md:col-span-2">
                         <div className="mb-2 flex flex-wrap items-start justify-between mb-4 gap-3">
@@ -1049,10 +960,12 @@ export default function AdminProductsPage() {
                         value={prodPrice}
                         onChange={(e) => setProdPrice(e.target.value)}
                         className={inputClassDisabled}
-                        disabled={prodPricingMode === "area"}
+                        disabled={prodPricingMode === "" || prodPricingMode === "area"}
                         title={
-                          prodPricingMode === "area"
-                            ? "Not used for per square foot pricing"
+                          prodPricingMode === ""
+                            ? "Select price type first"
+                            : prodPricingMode === "area"
+                              ? "Not used for per square foot pricing"
                             : undefined
                         }
                       />
@@ -1063,10 +976,12 @@ export default function AdminProductsPage() {
                         value={prodPricePerSqft}
                         onChange={(e) => setProdPricePerSqft(e.target.value)}
                         className={inputClassDisabled}
-                        disabled={prodPricingMode === "fixed"}
+                        disabled={prodPricingMode === "" || prodPricingMode === "fixed"}
                         title={
-                          prodPricingMode === "fixed"
-                            ? "Not used for fixed pricing"
+                          prodPricingMode === ""
+                            ? "Select price type first"
+                            : prodPricingMode === "fixed"
+                              ? "Not used for fixed pricing"
                             : undefined
                         }
                       />
@@ -1219,6 +1134,94 @@ export default function AdminProductsPage() {
                             </ul>
                           ) : null}
                         </div>
+                      <div className="md:col-span-2">
+                        <label className="mb-1 block text-sm font-medium text-slate-700">
+                          Spec
+                        </label>
+                        <textarea
+                          rows={4}
+                          placeholder="Enter spec content"
+                          value={prodSpec}
+                          onChange={(e) => setProdSpec(e.target.value)}
+                          className={inputClass}
+                        />
+                      </div>
+                      <div className="md:col-span-2">
+                        <label className="mb-1 block text-sm font-medium text-slate-700">
+                          File Setup
+                        </label>
+                        <textarea
+                          rows={4}
+                          placeholder="Enter file setup instructions"
+                          value={prodFileSetup}
+                          onChange={(e) => setProdFileSetup(e.target.value)}
+                          className={inputClass}
+                        />
+                      </div>
+                      <div className="md:col-span-2">
+                        <label className="mb-1 block text-sm font-medium text-slate-700">
+                          Installation Guide
+                        </label>
+                        <textarea
+                          rows={4}
+                          placeholder="Enter installation guide"
+                          value={prodInstallationGuide}
+                          onChange={(e) => setProdInstallationGuide(e.target.value)}
+                          className={inputClass}
+                        />
+                      </div>
+                      <div className="md:col-span-2">
+                        <div className="mb-2 flex flex-wrap items-start justify-between gap-3">
+                          <label className="block text-sm font-medium text-slate-700">
+                            FAQ
+                          </label>
+                          <button
+                            type="button"
+                            onClick={() => setProdFaq([...prodFaq, { question: "", answer: "" }])}
+                            className="shrink-0 rounded-lg bg-slate-900 px-4 py-2.5 text-sm font-medium text-white shadow-sm transition hover:bg-slate-800"
+                          >
+                            + Add FAQ
+                          </button>
+                        </div>
+                        <div className="space-y-3">
+                          {prodFaq.map((item, idx) => (
+                            <div key={idx} className="rounded-lg border border-slate-200 bg-white p-3">
+                              <div className="mb-2 flex justify-end">
+                                <button
+                                  type="button"
+                                  onClick={() => setProdFaq(prodFaq.filter((_, i) => i !== idx))}
+                                  title="Remove FAQ"
+                                  className="inline-flex items-center justify-center rounded-lg p-2 text-rose-600 transition-colors hover:bg-rose-50 hover:text-rose-800"
+                                >
+                                  <FiTrash2 size={18} aria-hidden />
+                                </button>
+                              </div>
+                              <input
+                                type="text"
+                                placeholder="Question"
+                                value={item.question}
+                                onChange={(e) => {
+                                  const next = [...prodFaq];
+                                  next[idx] = { ...next[idx], question: e.target.value };
+                                  setProdFaq(next);
+                                }}
+                                className={`${inputClass} mb-2`}
+                              />
+                              <textarea
+                                rows={3}
+                                placeholder="Answer"
+                                value={item.answer}
+                                onChange={(e) => {
+                                  const next = [...prodFaq];
+                                  next[idx] = { ...next[idx], answer: e.target.value };
+                                  setProdFaq(next);
+                                }}
+                                className={inputClass}
+                              />
+                            </div>
+                          ))}
+                        </div>
+                      </div>
                       {/* <div className="flex items-center gap-6">
                         <label className="group flex cursor-pointer items-center gap-2 text-sm text-slate-700 transition-colors">
                           <div className="relative flex items-center justify-center">

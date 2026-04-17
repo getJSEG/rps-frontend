@@ -161,11 +161,11 @@ function UploadAfterOrderInner() {
           <h1 className="text-balance text-2xl font-bold tracking-tight text-gray-800 sm:text-3xl">
             {hasOrderContext ? "Your order has been placed. Thank you" : "Upload artwork"}
           </h1>
-          <p className="mt-4 max-w-lg text-base text-gray-500">
-            {hasOrderContext
-              ? "Confirmation will be sent to your email."
-              : "Submit files for your jobs from My Artworks, or open an order below."}
-          </p>
+          {!hasOrderContext ? (
+            <p className="mt-4 max-w-lg text-base text-gray-500">
+              Submit files for your jobs from My Artworks, or open an order below.
+            </p>
+          ) : null}
 
           <button
             type="button"

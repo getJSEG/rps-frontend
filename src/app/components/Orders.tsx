@@ -469,7 +469,7 @@ export default function Orders() {
 
   return (
     <div className="min-h-screen bg-gray-50 pb-16 pt-20">
-      <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
+      <div className="mx-auto max-w-5xl px-4 sm:px-6 lg:px-8">
         {placed && placedOrderId && (
           <div
             className="mb-6 rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-4 text-emerald-900"
@@ -792,7 +792,7 @@ export default function Orders() {
                           <p className="p-6 text-sm text-gray-500">No line items returned for this order.</p>
                         ) : (
                           <div className="overflow-x-auto">
-                            <table className="w-full min-w-[820px] border-collapse text-left text-sm">
+                            <table className="w-full min-w-0 border-collapse text-left text-sm">
                               <thead>
                                 <tr className="border-b border-gray-200 bg-white text-[11px] font-bold uppercase tracking-wide text-slate-500">
                                   <th className="whitespace-nowrap px-3 py-3 pl-4"> </th>
@@ -815,8 +815,10 @@ export default function Orders() {
                                       <td className="px-3 py-3 pl-4 align-top">
                                         <OrderLineThumbnail item={it} />
                                       </td>
-                                      <td className="px-3 py-3 align-top">
-                                        <p className="font-medium text-gray-900">{it.product_name || "Item"}</p>
+                                      <td className="min-w-0 px-3 py-3 align-top">
+                                        <p className="font-medium break-words text-gray-900 [overflow-wrap:anywhere]">
+                                          {it.product_name || "Item"}
+                                        </p>
                                         {it.job_name ? (
                                           <p className="mt-0.5 text-xs text-gray-500">Job: {it.job_name}</p>
                                         ) : null}

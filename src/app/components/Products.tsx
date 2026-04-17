@@ -267,11 +267,13 @@ export default function Products({ forcedCategorySlug = null }: { forcedCategory
               <p className="line-clamp-3 min-w-0 break-words text-sm text-gray-600 [overflow-wrap:anywhere]">{descPlain}</p>
             ) : null}
             {unit != null ? (
-              <p className="text-lg font-bold text-gray-900">${unit.toFixed(2)}</p>
+              <div className="mt-1 border-t border-gray-200 pt-2">
+                <p className="text-lg font-bold text-gray-900">${unit.toFixed(2)}</p>
+              </div>
             ) : ppsf != null ? (
               <div className="mt-1 flex items-center justify-between gap-3 border-t border-gray-200 pt-2">
-                <p className="text-sm font-semibold text-gray-800">Starting at</p>
-                <p className="text-sm font-semibold text-gray-800">${ppsf.toFixed(2)} per ft²</p>
+                <p className="text-lg font-bold text-gray-900">Starting at</p>
+                <p className="text-lg font-bold text-gray-900">${ppsf.toFixed(2)} per ft²</p>
               </div>
             ) : (
               <p className="text-sm text-gray-700">Price on request</p>

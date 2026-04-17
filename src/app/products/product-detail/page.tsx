@@ -107,6 +107,18 @@ function normalizeProductGalleryImages(product: Product | null): string[] {
   return [];
 }
 
+/** Plain-text preview for listing cards (description is HTML from admin editor). */
+function descriptionPreview(html: string | null | undefined): string {
+  if (!html || typeof html !== "string") return "";
+  return html
+    .replace(/<script[\s\S]*?<\/script>/gi, "")
+    .replace(/<style[\s\S]*?<\/style>/gi, "")
+    .replace(/<[^>]+>/g, " ")
+    .replace(/&nbsp;/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
 /** Same parsing as product listing cards (`Products.tsx`): `price` wins over `price_per_sqft`. */
 function parseProductMoney(value: string | number | null | undefined): number | null {
   if (value == null || value === "") return null;
@@ -1464,13 +1476,6 @@ function ProductDetailContent() {
                   </>
                 )}
               </div>
-
-              {/* Estimated Delivery */}
-              <div className="mb-4">
-                <p className="text-sm text-gray-700">
-                  <span className="font-medium">Estimated Delivery:</span> See checkout for delivery options.
-                </p>
-              </div>
             </div>
             )}
 
@@ -1727,6 +1732,7 @@ function ProductDetailContent() {
                 {relatedProducts.map((relatedProduct) => {
                   const relatedPpsf = Number(relatedProduct.price_per_sqft);
                   const hasRelatedPpsf = Number.isFinite(relatedPpsf) && relatedPpsf > 0;
+                  const relatedDescPlain = descriptionPreview(relatedProduct.description);
                   const handleSelectProduct = (e?: React.MouseEvent) => {
                     if (e) {
                       e.preventDefault();
@@ -1803,11 +1809,11 @@ function ProductDetailContent() {
                             {relatedProduct.name}
                           </h3>
                         </div>
-                        {relatedProduct.description && (
-                          <p className="text-sm text-gray-600 mb-3 line-clamp-2 min-w-0 break-words [overflow-wrap:anywhere]">
-                            {relatedProduct.description}
+                        {relatedDescPlain ? (
+                          <p className="text-sm text-gray-600 mb-3 line-clamp-3 min-w-0 break-words [overflow-wrap:anywhere]">
+                            {relatedDescPlain}
                           </p>
-                        )}
+                        ) : null}
                         <div className="flex items-center justify-between">
                           {relatedProduct.price ? (
                             <p className="text-lg font-bold text-gray-900">${relatedProduct.price}</p>

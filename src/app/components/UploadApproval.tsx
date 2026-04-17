@@ -175,7 +175,7 @@ export default function UploadApproval() {
           <div className="min-w-0 flex-1">
             <h1 className="mb-2 text-3xl font-bold text-gray-900">Pending Upload and Approval</h1>
             <p className="text-gray-600">
-              This page displays all jobs awaiting file uploads or proof approval before processing.
+              This page displays all jobs awaiting file uploads before processing.
             </p>
           </div>
           <div className="flex shrink-0 flex-col gap-2 sm:items-end sm:text-right mt-5">

@@ -1,13 +1,9 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import AdminNavbar from "../../components/AdminNavbar";
-import {
-  reportsAPI,
-  type AdminDashboardResponse,
-  type ReportsDateRange,
-} from "../../../utils/api";
+import { reportsAPI, type AdminDashboardResponse } from "../../../utils/api";
 import { adminOrderStatusLabel } from "../../../utils/orderStatuses";
 import { canAccessAdminPanel, isAuthenticated } from "../../../utils/roles";
 
@@ -114,19 +110,18 @@ export default function AdminReportsPage() {
   const router = useRouter();
   const [state, setState] = useState<LoadingState>("idle");
   const [data, setData] = useState<AdminDashboardResponse | null>(null);
-  const [dateRange, setDateRange] = useState<ReportsDateRange>("all");
   const [chartYear, setChartYear] = useState<number>(() => new Date().getFullYear());
   const [fromDate, setFromDate] = useState<string>(() => toDateInputValue(new Date(Date.now() - 29 * 86400000)));
   const [toDate, setToDate] = useState<string>(() => toDateInputValue(new Date()));
 
-  const fetchDashboard = async () => {
+  const fetchDashboard = useCallback(async () => {
     try {
       setState("loading");
       const result = await reportsAPI.getAdminDashboard({
-        range: dateRange,
+        range: "custom",
         chartYear,
-        from: dateRange === "custom" ? fromDate : undefined,
-        to: dateRange === "custom" ? toDate : undefined,
+        from: fromDate,
+        to: toDate,
         tzOffsetMinutes: new Date().getTimezoneOffset(),
       });
       setData(result);
@@ -135,7 +130,7 @@ export default function AdminReportsPage() {
       console.error("Failed loading reports dashboard:", e);
       setState("error");
     }
-  };
+  }, [fromDate, toDate, chartYear]);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -144,7 +139,7 @@ export default function AdminReportsPage() {
       return;
     }
     void fetchDashboard();
-  }, [router, dateRange, chartYear]);
+  }, [router, fetchDashboard]);
 
   const overviewRows = useMemo(() => {
     if (!data?.ordersOverview) return [];
@@ -180,70 +175,29 @@ export default function AdminReportsPage() {
           <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
             <div>
               <p className="text-xs font-semibold uppercase tracking-[0.18em] text-sky-600">Filters</p>
-              <h2 className="mt-1 text-lg font-semibold text-slate-900">Date and trend options</h2>
-            </div>
-            <div className="flex flex-wrap items-center gap-2">
-              <button
-                type="button"
-                onClick={() => setDateRange("all")}
-                className={`rounded-lg px-3 py-1.5 text-sm font-medium ${dateRange === "all" ? "bg-slate-900 text-white" : "border border-slate-200 text-slate-700 hover:bg-slate-50"}`}
-              >
-                All history
-              </button>
-              <button
-                type="button"
-                onClick={() => setDateRange("today")}
-                className={`rounded-lg px-3 py-1.5 text-sm font-medium ${dateRange === "today" ? "bg-slate-900 text-white" : "border border-slate-200 text-slate-700 hover:bg-slate-50"}`}
-              >
-                Today
-              </button>
-              <button
-                type="button"
-                onClick={() => setDateRange("last30")}
-                className={`rounded-lg px-3 py-1.5 text-sm font-medium ${dateRange === "last30" ? "bg-slate-900 text-white" : "border border-slate-200 text-slate-700 hover:bg-slate-50"}`}
-              >
-                Last 30 days
-              </button>
-              <button
-                type="button"
-                onClick={() => setDateRange("custom")}
-                className={`rounded-lg px-3 py-1.5 text-sm font-medium ${dateRange === "custom" ? "bg-slate-900 text-white" : "border border-slate-200 text-slate-700 hover:bg-slate-50"}`}
-              >
-                Custom
-              </button>
+              <h2 className="mt-1 text-lg font-semibold text-slate-900">Date range</h2>
             </div>
           </div>
 
-          <div className="mt-4 flex flex-col gap-3 md:flex-row md:items-center">
-            {dateRange === "custom" && (
-              <>
-                <label className="text-sm text-slate-600">
-                  From{" "}
-                  <input
-                    type="date"
-                    value={fromDate}
-                    onChange={(e) => setFromDate(e.target.value)}
-                    className="ml-2 rounded-md border border-slate-300 px-2 py-1 text-sm"
-                  />
-                </label>
-                <label className="text-sm text-slate-600">
-                  To{" "}
-                  <input
-                    type="date"
-                    value={toDate}
-                    onChange={(e) => setToDate(e.target.value)}
-                    className="ml-2 rounded-md border border-slate-300 px-2 py-1 text-sm"
-                  />
-                </label>
-                <button
-                  type="button"
-                  onClick={() => void fetchDashboard()}
-                  className="inline-flex rounded-md bg-sky-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-sky-700"
-                >
-                  Apply
-                </button>
-              </>
-            )}
+          <div className="mt-4 flex flex-col flex-wrap gap-3 sm:flex-row sm:items-center">
+            <label className="text-sm text-slate-600">
+              From{" "}
+              <input
+                type="date"
+                value={fromDate}
+                onChange={(e) => setFromDate(e.target.value)}
+                className="ml-2 rounded-md border border-slate-300 px-2 py-1 text-sm"
+              />
+            </label>
+            <label className="text-sm text-slate-600">
+              To{" "}
+              <input
+                type="date"
+                value={toDate}
+                onChange={(e) => setToDate(e.target.value)}
+                className="ml-2 rounded-md border border-slate-300 px-2 py-1 text-sm"
+              />
+            </label>
           </div>
         </section>
 

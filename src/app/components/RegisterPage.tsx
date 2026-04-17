@@ -28,7 +28,6 @@ export default function RegisterPage() {
     shippingCountry: "United States",
     shippingTelephone: "",
     newsletter: false,
-    termsAccepted: false,
   });
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
@@ -78,14 +77,6 @@ export default function RegisterPage() {
     e.preventDefault();
     setError("");
     setSuccess("");
-
-    // Validation
-    if (!formData.termsAccepted) {
-      const msg = "You must accept the Terms and Conditions to register.";
-      setError(msg);
-      toast.error(msg);
-      return;
-    }
 
     if (formData.password !== formData.confirmPassword) {
       const msg = "Passwords do not match.";
@@ -143,7 +134,6 @@ export default function RegisterPage() {
         shippingCountry: formData.shippingCountry,
         shippingTelephone: formData.shippingSameAsBilling ? formData.telephone : formData.shippingTelephone,
         newsletter: formData.newsletter,
-        termsAccepted: formData.termsAccepted,
       });
 
       // Store token and user info
@@ -739,23 +729,6 @@ export default function RegisterPage() {
               </label>
             </div>
 
-            <div className="flex items-center">
-              <input
-                type="checkbox"
-                id="termsAccepted"
-                name="termsAccepted"
-                checked={formData.termsAccepted}
-                onChange={handleChange}
-                className="w-4 h-4 text-blue-600 border-gray-300 rounded text-black focus:ring-blue-500"
-                required
-              />
-              <label htmlFor="termsAccepted" className="ml-2 text-slate-700 text-sm">
-                I have read and accept the{" "}
-                <a href="#" className="text-blue-600 underline hover:text-blue-800">
-                  Terms and Conditions.
-                </a>
-              </label>
-            </div>
           </div>
 
           {/* Submit Button */}
