@@ -189,6 +189,69 @@ export type CartSummary = {
   total: number;
 };
 
+export type ReportsDateRange = "all" | "today" | "last30" | "custom";
+
+export type AdminDashboardSummary = {
+  registeredUsersCount: number;
+  totalRevenue: number;
+  totalOrders: number;
+  averageOrderValue: number;
+  pendingOrders: number;
+  refundOrders: number;
+  completedOrders: number;
+  refundAmount: number;
+  registeredCompletedOrders: number;
+  registeredInProgressOrders: number;
+  guestCompletedOrders: number;
+  guestInProgressOrders: number;
+};
+
+export type AdminDashboardRevenuePoint = {
+  bucket: string;
+  revenue: number;
+};
+
+export type AdminDashboardOrdersOverview = {
+  pending: number;
+  processing: number;
+  shipped: number;
+  completed: number;
+  statusBreakdown: { status: string; count: number }[];
+};
+
+export type AdminDashboardTopProduct = {
+  productId: string | null;
+  productName: string;
+  orderCount: number;
+  revenue: number;
+};
+
+export type AdminDashboardRecentOrder = {
+  orderId: number;
+  orderNumber: string;
+  customerName: string;
+  totalAmount: number;
+  status: string;
+  date: string;
+};
+
+export type AdminDashboardResponse = {
+  filters: {
+    range: ReportsDateRange;
+    from: string;
+    to: string;
+  };
+  summary: AdminDashboardSummary;
+  revenueChart: {
+    year: number;
+    availableYears: number[];
+    series: AdminDashboardRevenuePoint[];
+  };
+  ordersOverview: AdminDashboardOrdersOverview;
+  topProducts: AdminDashboardTopProduct[];
+  recentOrders: AdminDashboardRecentOrder[];
+};
+
 const DEFAULT_SHIPPING_RATES: ShippingRates = { ground: 120.07, express: 0, overnight: 0 };
 
 /** Match backend: Ground / Express / Overnight → admin-configured prices */
@@ -875,6 +938,24 @@ export const ordersAPI = {
       customerArtworkUrl: string;
       orderId: number;
     }>;
+  },
+};
+
+export const reportsAPI = {
+  getAdminDashboard: async (params: {
+    range: ReportsDateRange;
+    chartYear?: number;
+    from?: string;
+    to?: string;
+    tzOffsetMinutes?: number;
+  }) => {
+    const query = new URLSearchParams();
+    query.set("range", params.range);
+    if (params.chartYear != null) query.set("chartYear", String(params.chartYear));
+    if (params.from) query.set("from", params.from);
+    if (params.to) query.set("to", params.to);
+    if (params.tzOffsetMinutes != null) query.set("tzOffsetMinutes", String(params.tzOffsetMinutes));
+    return apiCall(`/reports/admin/dashboard?${query.toString()}`) as Promise<AdminDashboardResponse>;
   },
 };
 

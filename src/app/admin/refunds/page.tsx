@@ -208,10 +208,7 @@ export default function RefundsPage() {
 
       <div className="overflow-hidden rounded-xl border border-slate-200/60 bg-white shadow-sm shadow-slate-900/5">
         <div className="border-b border-slate-100 px-5 py-5 sm:px-6">
-          <h2 className="text-lg font-semibold text-slate-900">Filtered orders</h2>
-          <p className="mt-1 max-w-2xl text-sm text-slate-500">
-            Dedicated refund queue: cancellation requested, awaiting refund, and refunded.
-          </p>
+          <h2 className="text-lg font-semibold text-slate-900">Refund Orders</h2>
           <div className="mt-4 flex flex-wrap gap-2">
             <button
               type="button"
@@ -312,7 +309,12 @@ export default function RefundsPage() {
                             <span className="text-xs text-slate-400">—</span>
                           )}
                         </div>
-                        <span className="font-medium text-slate-900">{order.productName}</span>
+                        <div className="min-w-0">
+                          <div className="truncate font-medium text-slate-900">{order.productName}</div>
+                          <div className="mt-0.5 text-[11px] font-semibold text-slate-400">
+                            Order ID: {order.order_number || order.id}
+                          </div>
+                        </div>
                       </div>
                     </td>
                     <td className="px-4 py-4 whitespace-nowrap text-slate-600 sm:px-6">

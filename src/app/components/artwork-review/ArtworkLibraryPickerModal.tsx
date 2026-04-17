@@ -17,7 +17,8 @@ async function artworkRecordToFile(record: ArtworkRecord): Promise<File> {
   if (!url) {
     throw new Error("Missing file URL.");
   }
-  const res = await fetch(url, { mode: "cors", credentials: "omit" });
+  const proxyUrl = `/api/artwork-file?source=${encodeURIComponent(url)}&name=${encodeURIComponent(record.fileName)}`;
+  const res = await fetch(proxyUrl, { credentials: "same-origin" });
   if (!res.ok) {
     throw new Error(`Could not load file (${res.status}).`);
   }
