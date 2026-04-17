@@ -1,4 +1,9 @@
-import { getDocument } from "pdfjs-dist/legacy/build/pdf.mjs";
+import { GlobalWorkerOptions, getDocument } from "pdfjs-dist/legacy/build/pdf.mjs";
+
+GlobalWorkerOptions.workerSrc = new URL(
+  "pdfjs-dist/legacy/build/pdf.worker.min.mjs",
+  import.meta.url
+).toString();
 
 export type UploadFileMetadata = {
   mimeType: string;
