@@ -432,7 +432,9 @@ export default function CheckoutPage() {
         localStorage.removeItem("cart");
         window.dispatchEvent(new Event("cartUpdated"));
         if (!loggedInCheckout && guestToken) {
-          router.push(`/guest-orders/${res.orderId}?token=${encodeURIComponent(guestToken)}&placed=1`);
+          router.push(
+            `/upload?placed=1&order=${res.orderId}&guestToken=${encodeURIComponent(guestToken)}`
+          );
         } else {
           router.push(`/upload?placed=1&order=${res.orderId}`);
         }
@@ -476,7 +478,7 @@ export default function CheckoutPage() {
         confirmParams: {
           return_url:
             !loggedInCheckout && guestTrackingToken
-              ? `${typeof window !== "undefined" ? window.location.origin : ""}/guest-orders/${orderId}?token=${encodeURIComponent(guestTrackingToken)}&placed=1`
+              ? `${typeof window !== "undefined" ? window.location.origin : ""}/upload?placed=1&order=${orderId}&guestToken=${encodeURIComponent(guestTrackingToken)}`
               : `${typeof window !== "undefined" ? window.location.origin : ""}/upload?placed=1&order=${orderId}`,
         },
       });

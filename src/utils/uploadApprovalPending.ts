@@ -61,6 +61,21 @@ function orderNeedsUploadOrApproval(status: string | null | undefined): boolean 
 }
 
 /**
+ * Same rules as {@link buildPendingUploadJobsFromOrders} for a single line: order is open for
+ * artwork/approval uploads, line has a real id, and no customer file yet.
+ */
+export function orderItemNeedsCustomerArtworkUpload(
+  orderStatus: string | null | undefined,
+  item: Pick<UploadApprovalOrderItem, "id" | "customer_artwork_url">
+): boolean {
+  if (!orderNeedsUploadOrApproval(orderStatus)) return false;
+  const itemId = item.id != null && Number.isFinite(Number(item.id)) ? Number(item.id) : null;
+  if (itemId == null || itemId <= 0) return false;
+  const url = item.customer_artwork_url != null ? String(item.customer_artwork_url).trim() : "";
+  return !url;
+}
+
+/**
  * Same rules as the Pending Upload and Approval page: orders awaiting artwork or customer
  * approval, counting each line item that still has no customer_artwork_url.
  */

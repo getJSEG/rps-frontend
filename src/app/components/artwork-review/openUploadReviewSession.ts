@@ -1,8 +1,10 @@
 import {
   UPLOAD_APPROVAL_PENDING_JOBS_KEY,
   UPLOAD_APPROVAL_REVIEW_CONTEXT_KEY,
+  clearGuestUploadReturnUrl,
   revokeStoredUploadPreview,
   reviewContextFromPendingLine,
+  setGuestUploadReturnUrl,
   type StoredPendingJobLine,
   type StoredUploadReviewContext,
 } from "./uploadApprovalReviewStorage";
@@ -76,7 +78,31 @@ export function writeUploadReviewSessionForJob(job: PendingJob, orderJobs: Pendi
   if (job.orderItemId == null || !Number.isFinite(job.orderItemId) || job.orderItemId <= 0) {
     throw new Error("NO_ITEM_ID");
   }
+  clearGuestUploadReturnUrl();
   revokeStoredUploadPreview();
   persistPendingJobsLines(orderJobs);
   sessionStorage.setItem(UPLOAD_APPROVAL_REVIEW_CONTEXT_KEY, JSON.stringify(placeholderReviewContext(job)));
+}
+
+/**
+ * Guest checkout: same session as {@link writeUploadReviewSessionForJob} plus tracking token for approve API.
+ */
+export function writeUploadReviewSessionForGuestJob(
+  job: PendingJob,
+  orderJobs: PendingJob[],
+  guestTrackingToken: string
+): void {
+  const t = String(guestTrackingToken || "").trim();
+  if (!t) throw new Error("NO_GUEST_TOKEN");
+  writeUploadReviewSessionForJob(job, orderJobs);
+  try {
+    const raw = sessionStorage.getItem(UPLOAD_APPROVAL_REVIEW_CONTEXT_KEY);
+    if (!raw) return;
+    const ctx = JSON.parse(raw) as StoredUploadReviewContext;
+    ctx.guestTrackingToken = t;
+    sessionStorage.setItem(UPLOAD_APPROVAL_REVIEW_CONTEXT_KEY, JSON.stringify(ctx));
+  } catch {
+    /* ignore */
+  }
+  setGuestUploadReturnUrl(job.orderId, t);
 }

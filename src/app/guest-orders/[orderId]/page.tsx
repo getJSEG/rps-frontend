@@ -1,12 +1,23 @@
 "use client";
 
-import { Suspense, useCallback, useEffect, useMemo, useState } from "react";
+import { Suspense, useCallback, useEffect, useState } from "react";
 import Link from "next/link";
-import { useParams, useSearchParams } from "next/navigation";
+import { useParams, useRouter, useSearchParams } from "next/navigation";
+import { toast } from "react-toastify";
 import Navbar from "../../components/Navbar";
 import Footer from "../../components/Footer";
+import {
+  UPLOAD_REVIEW_ERROR_CLIENT_PATH,
+  writeUploadReviewSessionForGuestJob,
+} from "../../components/artwork-review/openUploadReviewSession";
 import { ordersAPI } from "../../../utils/api";
 import { customerOrderStatusDescription, customerOrderStatusTitle } from "../../../utils/orderStatuses";
+import {
+  buildPendingUploadJobsFromOrders,
+  orderItemNeedsCustomerArtworkUpload,
+  type UploadApprovalOrderRow,
+} from "../../../utils/uploadApprovalPending";
+import { OrderLineArtworkDownloadCell } from "../../components/orders/OrderLineArtworkControls";
 
 type OrderItem = {
   id?: number;
@@ -15,6 +26,10 @@ type OrderItem = {
   quantity?: number | string | null;
   unit_price?: number | string | null;
   total_price?: number | string | null;
+  width_inches?: number | string | null;
+  height_inches?: number | string | null;
+  image_url?: string | null;
+  customer_artwork_url?: string | null;
 };
 
 type GuestOrder = {
@@ -49,6 +64,7 @@ function canRequestCancellation(status: string | null | undefined): boolean {
 }
 
 function GuestOrderTrackInner() {
+  const router = useRouter();
   const params = useParams<{ orderId: string }>();
   const searchParams = useSearchParams();
   const orderId = String(params?.orderId || "").trim();
@@ -64,10 +80,19 @@ function GuestOrderTrackInner() {
   const [cancelBusy, setCancelBusy] = useState(false);
   const [cancelMsg, setCancelMsg] = useState<string | null>(null);
   const [confirmCancelOpen, setConfirmCancelOpen] = useState(false);
+  /** Which order line is opening the upload flow (prevents double navigation). */
+  const [uploadBusyItemId, setUploadBusyItemId] = useState<number | null>(null);
 
-  const trackingUrl = useMemo(() => {
-    if (typeof window === "undefined" || !orderId || !token) return "";
-    return `${window.location.origin}/guest-orders/${encodeURIComponent(orderId)}?token=${encodeURIComponent(token)}`;
+  const [trackingUrl, setTrackingUrl] = useState("");
+
+  useEffect(() => {
+    if (!orderId || !token) {
+      setTrackingUrl("");
+      return;
+    }
+    setTrackingUrl(
+      `${window.location.origin}/guest-orders/${encodeURIComponent(orderId)}?token=${encodeURIComponent(token)}`
+    );
   }, [orderId, token]);
 
   const loadOrder = useCallback(async () => {
@@ -103,6 +128,36 @@ function GuestOrderTrackInner() {
     } catch {
       setCopyDone(false);
     }
+  };
+
+  const startGuestUploadForOrderItem = (orderItemId: number) => {
+    if (!order || !token) return;
+    if (!Number.isFinite(orderItemId) || orderItemId <= 0) return;
+    setUploadBusyItemId(orderItemId);
+    void (async () => {
+      try {
+        const row = order as unknown as UploadApprovalOrderRow;
+        const pending = buildPendingUploadJobsFromOrders([row]);
+        const job = pending.find(
+          (j) => j.orderItemId != null && Number(j.orderItemId) === orderItemId
+        );
+        if (!job || job.orderItemId == null || !Number.isFinite(job.orderItemId) || job.orderItemId <= 0) {
+          toast.info("This line does not need an artwork upload right now.");
+          return;
+        }
+        try {
+          writeUploadReviewSessionForGuestJob(job, pending, token);
+        } catch {
+          toast.error("Could not open upload. Try again.");
+          return;
+        }
+        router.push(UPLOAD_REVIEW_ERROR_CLIENT_PATH);
+      } catch (e) {
+        toast.error(e instanceof Error ? e.message : "Could not start upload.");
+      } finally {
+        setUploadBusyItemId(null);
+      }
+    })();
   };
 
   const submitCancellationRequest = async () => {
@@ -241,16 +296,55 @@ function GuestOrderTrackInner() {
                 <p className="text-sm text-gray-500">No items found for this order.</p>
               ) : (
                 <div className="space-y-2">
-                  {order.items.map((item, idx) => (
-                    <div key={`${item.id ?? idx}`} className="flex items-start justify-between rounded-md border border-gray-100 p-3">
-                      <div>
+                  {order.items.map((item, idx) => {
+                    const itemIdNum =
+                      item.id != null && Number.isFinite(Number(item.id)) ? Number(item.id) : null;
+                    const showRowUpload =
+                      Boolean(token) &&
+                      itemIdNum != null &&
+                      orderItemNeedsCustomerArtworkUpload(order.status, {
+                        id: item.id,
+                        customer_artwork_url: item.customer_artwork_url,
+                      });
+                    return (
+                    <div
+                      key={`${item.id ?? idx}`}
+                      className="grid grid-cols-1 gap-3 rounded-md border border-gray-100 p-3 sm:grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] sm:items-center sm:gap-x-4"
+                    >
+                      <div className="min-w-0 sm:justify-self-start">
                         <p className="font-medium text-gray-900">{item.product_name || "Item"}</p>
                         {item.job_name && <p className="text-xs text-gray-500">Job: {item.job_name}</p>}
                         <p className="text-xs text-gray-500">Qty: {item.quantity ?? "—"}</p>
                       </div>
-                      <p className="text-sm font-semibold text-gray-900">${money(item.total_price)}</p>
+                      <div className="flex flex-col items-center justify-center justify-self-center gap-2 sm:min-w-[10rem] sm:px-2">
+                        {showRowUpload ? (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              if (itemIdNum == null) return;
+                              startGuestUploadForOrderItem(itemIdNum);
+                            }}
+                            disabled={uploadBusyItemId != null}
+                            className="whitespace-nowrap rounded-lg bg-emerald-600 px-3 py-2 text-xs font-semibold text-white shadow-sm hover:bg-emerald-700 disabled:opacity-60 sm:text-sm"
+                          >
+                            {uploadBusyItemId === itemIdNum ? "Opening…" : "Upload artwork"}
+                          </button>
+                        ) : (
+                          <OrderLineArtworkDownloadCell
+                            item={{
+                              id: item.id,
+                              image_url: item.image_url,
+                              customer_artwork_url: item.customer_artwork_url,
+                            }}
+                          />
+                        )}
+                      </div>
+                      <div className="flex w-full justify-end sm:w-auto sm:justify-self-end">
+                        <p className="text-sm font-semibold text-gray-900 tabular-nums">${money(item.total_price)}</p>
+                      </div>
                     </div>
-                  ))}
+                    );
+                  })}
                 </div>
               )}
               <div className="mt-4 max-w-xs space-y-1 text-sm">

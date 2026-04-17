@@ -9,6 +9,11 @@ import {
   UPLOAD_APPROVAL_REVIEW_OK_ROUTE,
 } from "./buildArtworkReviewPayload";
 import {
+  artworkReviewBackButtonLabel,
+  navigateBackFromArtworkReview,
+  shouldHideArtworkLibrary,
+} from "./artworkReviewBackNavigation";
+import {
   REVIEW_PLACEHOLDER_FILE_NAME,
   UPLOAD_APPROVAL_REVIEW_CONTEXT_KEY,
   type StoredUploadReviewContext,
@@ -30,6 +35,7 @@ export default function ArtworkReviewErrorContent({
   uploadedGraphicLabel: uploadedProp,
   requiredGraphicLabel: requiredProp,
 }: ArtworkReviewErrorContentProps) {
+  const hideArtworkLibrary = shouldHideArtworkLibrary();
   const router = useRouter();
   const fileRef = useRef<HTMLInputElement>(null);
   const [libraryOpen, setLibraryOpen] = useState(false);
@@ -110,15 +116,17 @@ export default function ArtworkReviewErrorContent({
 
   return (
     <div className="flex h-full min-h-[420px] flex-col gap-8 lg:flex-row lg:items-stretch lg:justify-between">
-      <ArtworkLibraryPickerModal
-        open={libraryOpen}
-        onClose={() => setLibraryOpen(false)}
-        onPickFile={applySelectedFile}
-      />
+      {!hideArtworkLibrary && (
+        <ArtworkLibraryPickerModal
+          open={libraryOpen}
+          onClose={() => setLibraryOpen(false)}
+          onPickFile={applySelectedFile}
+        />
+      )}
       <input
         ref={fileRef}
         type="file"
-        accept=".png,.jpg,.jpeg,.pdf,image/png,image/jpeg,application/pdf"
+        accept=".png,.jpg,.jpeg,.pdf,image/png,image/jpeg,application/pdf,application/x-pdf"
         className="hidden"
         onChange={onReuploadFile}
       />
@@ -180,20 +188,22 @@ export default function ArtworkReviewErrorContent({
           {awaitingFileSelection ? "Choose file" : "Upload image"}
         </button>
 
-        <button
-          type="button"
-          onClick={() => setLibraryOpen(true)}
-          className="w-full rounded-md bg-sky-600 px-4 py-3.5 text-center text-sm font-semibold text-white shadow-sm transition-colors hover:bg-sky-700"
-        >
-          Upload my artwork
-        </button>
+        {!hideArtworkLibrary && (
+          <button
+            type="button"
+            onClick={() => setLibraryOpen(true)}
+            className="w-full rounded-md bg-sky-600 px-4 py-3.5 text-center text-sm font-semibold text-white shadow-sm transition-colors hover:bg-sky-700"
+          >
+            Upload my artwork
+          </button>
+        )}
 
         <button
           type="button"
-          onClick={() => router.push("/upload-approval")}
+          onClick={() => navigateBackFromArtworkReview(router)}
           className="w-full rounded-md bg-sky-600 px-4 py-3.5 text-center text-sm font-semibold text-white shadow-sm transition-colors hover:bg-sky-700"
         >
-          Back to upload list
+          {artworkReviewBackButtonLabel()}
         </button>
       </div>
     </div>

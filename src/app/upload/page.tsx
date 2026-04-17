@@ -8,6 +8,7 @@ import Navbar from "../components/Navbar";
 import {
   pickFirstOpenablePendingJob,
   UPLOAD_REVIEW_ERROR_CLIENT_PATH,
+  writeUploadReviewSessionForGuestJob,
   writeUploadReviewSessionForJob,
 } from "../components/artwork-review/openUploadReviewSession";
 import { ordersAPI, cartAPI } from "../../utils/api";
@@ -22,6 +23,7 @@ function UploadAfterOrderInner() {
   const [uploadNavBusy, setUploadNavBusy] = useState(false);
   const searchParams = useSearchParams();
   const orderId = searchParams.get("order");
+  const guestToken = String(searchParams.get("guestToken") || "").trim();
   const placed = searchParams.get("placed") === "1";
   const redirectStatus = (searchParams.get("redirect_status") || "").toLowerCase();
   const paymentIntentId = searchParams.get("payment_intent");
@@ -60,7 +62,9 @@ function UploadAfterOrderInner() {
 
   const orderDetailHref =
     orderId != null && orderId !== ""
-      ? `/orders?placed=1&order=${encodeURIComponent(orderId)}`
+      ? guestToken
+        ? `/guest-orders/${encodeURIComponent(orderId)}?token=${encodeURIComponent(guestToken)}&placed=1`
+        : `/orders?placed=1&order=${encodeURIComponent(orderId)}`
       : "/orders";
 
   const hasOrderContext = orderId != null && orderId !== "";
@@ -70,20 +74,22 @@ function UploadAfterOrderInner() {
       router.push("/upload-approval");
       return;
     }
-    if (!isAuthenticated()) {
-      toast.info("Please sign in to upload artwork.");
+    const idNum = Number(orderId);
+    if (!Number.isFinite(idNum) || idNum <= 0) {
       router.push("/upload-approval");
       return;
     }
-    const idNum = Number(orderId);
-    if (!Number.isFinite(idNum) || idNum <= 0) {
+    if (!guestToken && !isAuthenticated()) {
+      toast.info("Please sign in to upload artwork.");
       router.push("/upload-approval");
       return;
     }
     setUploadNavBusy(true);
     void (async () => {
       try {
-        const res = (await ordersAPI.getById(String(idNum))) as { order?: UploadApprovalOrderRow };
+        const res = guestToken
+          ? ((await ordersAPI.getGuestById(String(idNum), guestToken)) as { order?: UploadApprovalOrderRow })
+          : ((await ordersAPI.getById(String(idNum))) as { order?: UploadApprovalOrderRow });
         const order = res?.order;
         if (!order || Number(order.id) !== idNum) {
           toast.error("Could not load your order.");
@@ -98,7 +104,11 @@ function UploadAfterOrderInner() {
           return;
         }
         try {
-          writeUploadReviewSessionForJob(job, pending);
+          if (guestToken) {
+            writeUploadReviewSessionForGuestJob(job, pending, guestToken);
+          } else {
+            writeUploadReviewSessionForJob(job, pending);
+          }
         } catch {
           toast.error("Could not open upload. Try again from Pending Upload and Approval.");
           router.push("/upload-approval");
@@ -168,7 +178,9 @@ function UploadAfterOrderInner() {
 
           {hasOrderContext && (
             <p className="mt-6 max-w-md text-sm leading-relaxed text-gray-700">
-              To submit artwork at a later time, use Upload page in menu bar.
+              {guestToken
+                ? "Save your order tracking link from View order detail if you need to return later."
+                : "To submit artwork at a later time, use Upload page in menu bar."}
             </p>
           )}
         </div>

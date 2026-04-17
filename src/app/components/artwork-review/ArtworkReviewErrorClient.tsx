@@ -51,11 +51,24 @@ export default function ArtworkReviewErrorClient() {
   const [sidebarJobs, setSidebarJobs] = useState<StoredPendingJobLine[] | null>(null);
   const [activeOrderItemId, setActiveOrderItemId] = useState<number | null>(null);
   const [activeJobIdLabel, setActiveJobIdLabel] = useState<string | undefined>(undefined);
-
   const applyJobRow = useCallback((row: StoredPendingJobLine) => {
+    let preservedGuestToken: string | undefined;
+    try {
+      const prevRaw = sessionStorage.getItem(UPLOAD_APPROVAL_REVIEW_CONTEXT_KEY);
+      if (prevRaw) {
+        const prev = JSON.parse(prevRaw) as StoredUploadReviewContext;
+        const gt = typeof prev.guestTrackingToken === "string" ? prev.guestTrackingToken.trim() : "";
+        if (gt) preservedGuestToken = gt;
+      }
+    } catch {
+      preservedGuestToken = undefined;
+    }
     const ctx = reviewContextFromPendingLine(row);
     if (!ctx) {
       return;
+    }
+    if (preservedGuestToken) {
+      ctx.guestTrackingToken = preservedGuestToken;
     }
     try {
       revokeStoredUploadPreview();

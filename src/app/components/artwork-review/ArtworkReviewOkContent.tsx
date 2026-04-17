@@ -7,8 +7,10 @@ import { usePathname, useRouter } from "next/navigation";
 import ArtworkReviewFilePreview from "./ArtworkReviewFilePreview";
 import { commitFilePreviewToSession } from "./buildArtworkReviewPayload";
 import { ARTWORK_REVIEW_DEMO } from "./artworkReviewMock";
+import { artworkReviewBackButtonLabel, navigateBackFromArtworkReview } from "./artworkReviewBackNavigation";
 import {
   UPLOAD_APPROVAL_REVIEW_CONTEXT_KEY,
+  clearGuestUploadReturnUrl,
   removePendingJobLineFromSession,
   type StoredUploadReviewContext,
 } from "./uploadApprovalReviewStorage";
@@ -125,14 +127,28 @@ export default function ArtworkReviewOkContent({
         if (!file) {
           return;
         }
-        await ordersAPI.approveOrderItemArtwork(oid, iid, file);
+        const guestTok = typeof ctx.guestTrackingToken === "string" ? ctx.guestTrackingToken.trim() : "";
+        if (guestTok) {
+          await ordersAPI.approveGuestOrderItemArtwork(oid, iid, guestTok, file);
+        } else {
+          await ordersAPI.approveOrderItemArtwork(oid, iid, file);
+        }
+        const guestOrderPlacedHref =
+          guestTok !== ""
+            ? `/guest-orders/${oid}?token=${encodeURIComponent(guestTok)}&placed=1`
+            : null;
         try {
           sessionStorage.removeItem(UPLOAD_APPROVAL_REVIEW_CONTEXT_KEY);
           removePendingJobLineFromSession(iid);
+          if (guestOrderPlacedHref) clearGuestUploadReturnUrl();
         } catch {
           /* ignore */
         }
         onArtworkSaved?.();
+        if (guestOrderPlacedHref) {
+          router.push(guestOrderPlacedHref);
+          return;
+        }
         setUploadSucceeded(true);
       } catch {
         /* ignore */
@@ -140,14 +156,14 @@ export default function ArtworkReviewOkContent({
         setApproving(false);
       }
     })();
-  }, [onArtworkSaved]);
+  }, [onArtworkSaved, router]);
 
   return (
     <div className="flex h-full min-h-[420px] flex-col gap-8 lg:flex-row lg:items-stretch lg:justify-between">
       <input
         ref={fileRef}
         type="file"
-        accept=".png,.jpg,.jpeg,.pdf,image/png,image/jpeg,application/pdf"
+        accept=".png,.jpg,.jpeg,.pdf,image/png,image/jpeg,application/pdf,application/x-pdf"
         className="hidden"
         onChange={onReuploadFile}
       />
@@ -191,10 +207,10 @@ export default function ArtworkReviewOkContent({
 
         <button
           type="button"
-          onClick={() => router.push("/upload-approval")}
+          onClick={() => navigateBackFromArtworkReview(router)}
           className="w-full rounded-md bg-sky-600 px-4 py-3.5 text-center text-sm font-semibold text-white shadow-sm transition-colors hover:bg-sky-700"
         >
-          Back to upload list
+          {artworkReviewBackButtonLabel()}
         </button>
       </div>
     </div>

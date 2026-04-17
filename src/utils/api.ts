@@ -1,3 +1,5 @@
+import { isBackendUploadsAssetUrl } from "./backendUploadProxy";
+
 // API Configuration - ensure base URL always ends with /api (backend mounts routes at /api)
 function getApiBaseUrl(): string {
   const raw = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080/api';
@@ -35,7 +37,7 @@ function needsGuestSessionHeader(endpoint: string): boolean {
 }
 
 /** Get backend base URL (no /api) for image URLs - works in browser */
-function getBackendBaseUrl(): string {
+export function getBackendBaseUrl(): string {
   const apiUrl = getApiBaseUrl();
   return apiUrl.replace(/\/api\/?$/, '') || 'http://localhost:8080';
 }
@@ -54,21 +56,13 @@ export function getProductImageUrl(url: string | null | undefined): string {
   return u;
 }
 
-/**
- * Save a file from a URL (e.g. backend `/uploads/...`) with a chosen filename.
- * A plain `<a download>` only works same-origin; cross-origin navigations ignore `download` and only open the file.
- */
-export async function downloadUrlAsFile(url: string, filename: string): Promise<void> {
-  const res = await fetch(url, { mode: 'cors', credentials: 'omit' });
-  if (!res.ok) {
-    throw new Error(`Download failed (${res.status})`);
-  }
-  const blob = await res.blob();
+function triggerBlobDownload(blob: Blob, filename: string): void {
+  const safeName = filename.replace(/[/\\]/g, '_');
   const objectUrl = URL.createObjectURL(blob);
   try {
     const a = document.createElement('a');
     a.href = objectUrl;
-    a.download = filename.replace(/[/\\]/g, '_');
+    a.download = safeName;
     a.style.display = 'none';
     document.body.appendChild(a);
     a.click();
@@ -76,6 +70,46 @@ export async function downloadUrlAsFile(url: string, filename: string): Promise<
   } finally {
     URL.revokeObjectURL(objectUrl);
   }
+}
+
+/**
+ * Save a file from a URL (e.g. backend `/uploads/...`) with a chosen filename.
+ * Uses a same-origin Next.js proxy for backend `/uploads/` URLs (works for guests / no login — no CORS).
+ */
+export async function downloadUrlAsFile(url: string, filename: string): Promise<void> {
+  const safeName = filename.replace(/[/\\]/g, '_');
+  if (typeof window !== "undefined" && isBackendUploadsAssetUrl(url)) {
+    const proxyUrl = `/api/artwork-download?u=${encodeURIComponent(url)}&fn=${encodeURIComponent(safeName)}`;
+    try {
+      const proxied = await fetch(proxyUrl, { credentials: "same-origin" });
+      if (proxied.ok) {
+        const blob = await proxied.blob();
+        triggerBlobDownload(blob, safeName);
+        return;
+      }
+    } catch {
+      /* try anchor fallback below */
+    }
+    try {
+      const a = document.createElement("a");
+      a.href = proxyUrl;
+      a.download = safeName;
+      a.rel = "noopener";
+      a.style.display = "none";
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      return;
+    } catch {
+      /* fall through to direct fetch */
+    }
+  }
+  const res = await fetch(url, { mode: "cors", credentials: "omit" });
+  if (!res.ok) {
+    throw new Error(`Download failed (${res.status})`);
+  }
+  const blob = await res.blob();
+  triggerBlobDownload(blob, safeName);
 }
 
 export type ShippingRates = { ground: number; express: number; overnight: number };
@@ -377,7 +411,7 @@ async function apiCall(endpoint: string, options: RequestInit = {}) {
     if (contentType && contentType.includes('application/json')) {
       try {
       data = await response.json();
-      } catch (jsonError) {
+      } catch {
         // If JSON parsing fails, try to get text
         const text = await response.text();
         throw new Error(text || `HTTP ${response.status}: ${response.statusText}`);
@@ -801,6 +835,34 @@ export const ordersAPI = {
       {
         method: 'POST',
         headers: token ? { Authorization: `Bearer ${token}` } : {},
+        body: formData,
+      }
+    );
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      throw new Error(data.message || data.error || 'Could not save artwork to order.');
+    }
+    return res.json() as Promise<{
+      orderItemId: number;
+      customerArtworkUrl: string;
+      orderId: number;
+    }>;
+  },
+
+  /** Guest checkout: save artwork using order tracking token (no JWT). */
+  approveGuestOrderItemArtwork: async (
+    orderId: number,
+    orderItemId: number,
+    guestTrackingToken: string,
+    file: File
+  ) => {
+    const q = new URLSearchParams({ token: String(guestTrackingToken || '') }).toString();
+    const formData = new FormData();
+    formData.append('file', file);
+    const res = await fetch(
+      `${API_BASE_URL}/orders/guest/${orderId}/items/${orderItemId}/approve-artwork?${q}`,
+      {
+        method: 'POST',
         body: formData,
       }
     );

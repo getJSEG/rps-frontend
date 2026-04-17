@@ -198,7 +198,7 @@ function JobArtworkDownloadCell({ item }: { item: OrderItem }) {
     try {
       await downloadUrlAsFile(href, downloadName);
     } catch {
-      window.open(href, "_blank", "noopener,noreferrer");
+      /* Proxied /uploads/ download in downloadUrlAsFile */
     } finally {
       setDownloading(false);
     }

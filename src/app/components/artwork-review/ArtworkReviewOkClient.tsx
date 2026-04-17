@@ -60,7 +60,6 @@ export default function ArtworkReviewOkClient() {
   const [sidebarJobs, setSidebarJobs] = useState<StoredPendingJobLine[] | null>(null);
   const [activeOrderItemId, setActiveOrderItemId] = useState<number | null>(null);
   const [activeJobIdLabel, setActiveJobIdLabel] = useState<string | undefined>(undefined);
-
   const refreshPendingSidebar = useCallback(() => {
     setSidebarJobs(readPendingJobsFromSession());
   }, []);
@@ -74,8 +73,22 @@ export default function ArtworkReviewOkClient() {
       ) {
         return;
       }
+      let preservedGuestToken: string | undefined;
+      try {
+        const prevRaw = sessionStorage.getItem(UPLOAD_APPROVAL_REVIEW_CONTEXT_KEY);
+        if (prevRaw) {
+          const prev = JSON.parse(prevRaw) as StoredUploadReviewContext;
+          const gt = typeof prev.guestTrackingToken === "string" ? prev.guestTrackingToken.trim() : "";
+          if (gt) preservedGuestToken = gt;
+        }
+      } catch {
+        preservedGuestToken = undefined;
+      }
       const ctx = reviewContextFromPendingLine(row);
       if (!ctx) return;
+      if (preservedGuestToken) {
+        ctx.guestTrackingToken = preservedGuestToken;
+      }
       try {
         revokeStoredUploadPreview();
         sessionStorage.setItem(UPLOAD_APPROVAL_REVIEW_CONTEXT_KEY, JSON.stringify(ctx));

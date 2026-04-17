@@ -14,8 +14,21 @@ const ALLOWED_EXTENSIONS = [".png", ".jpg", ".jpeg", ".pdf"];
 
 function guessMimeType(file: File): string {
   const mime = String(file.type || "").trim().toLowerCase();
-  if (mime) return mime;
   const n = file.name.toLowerCase();
+
+  /** Chrome/Linux often sends PDF as application/octet-stream — must not short-circuit on that. */
+  if (mime === "application/x-pdf" || mime === "application/acrobat") {
+    return "application/pdf";
+  }
+  const genericMime =
+    mime === "" || mime === "application/octet-stream" || mime === "binary/octet-stream";
+  if (genericMime) {
+    if (n.endsWith(".pdf")) return "application/pdf";
+    if (n.endsWith(".png")) return "image/png";
+    if (n.endsWith(".jpg") || n.endsWith(".jpeg")) return "image/jpeg";
+    return "";
+  }
+  if (mime) return mime;
   if (n.endsWith(".png")) return "image/png";
   if (n.endsWith(".jpg") || n.endsWith(".jpeg")) return "image/jpeg";
   if (n.endsWith(".pdf")) return "application/pdf";

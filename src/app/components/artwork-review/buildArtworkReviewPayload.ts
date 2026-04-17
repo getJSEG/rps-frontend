@@ -26,6 +26,7 @@ export type ArtworkJobFields = {
   requiredHeightIn: number | null;
   orderId?: number;
   orderItemId?: number;
+  guestTrackingToken?: string;
 };
 
 export const UPLOAD_APPROVAL_REVIEW_OK_ROUTE = "/upload-approval/review/ok" as const;
@@ -45,9 +46,10 @@ export async function buildArtworkReviewPayload(
 ): Promise<BuildArtworkPayloadResult> {
   revokeStoredUploadPreview();
 
-  const previewMime = (file.type || "").trim() || guessMimeFromFileName(file.name);
   /** Same order as My Artworks: metadata first, then aspect check. */
   const meta = await extractUploadFileMetadata(file);
+  const previewMime =
+    meta.mimeType || (file.type || "").trim() || guessMimeFromFileName(file.name);
   const proportion = assessArtworkProportionFromMetadata(meta, job.requiredWidthIn, job.requiredHeightIn);
 
   const reqW = coercePositiveInch(job.requiredWidthIn);
@@ -65,6 +67,9 @@ export async function buildArtworkReviewPayload(
     ...(job.orderId != null && Number.isFinite(job.orderId) && job.orderId > 0 ? { orderId: job.orderId } : {}),
     ...(job.orderItemId != null && Number.isFinite(job.orderItemId) && job.orderItemId > 0
       ? { orderItemId: job.orderItemId }
+      : {}),
+    ...(typeof job.guestTrackingToken === "string" && job.guestTrackingToken.trim() !== ""
+      ? { guestTrackingToken: job.guestTrackingToken.trim() }
       : {}),
     requiredWidthIn: reqW ?? undefined,
     requiredHeightIn: reqH ?? undefined,
@@ -148,6 +153,10 @@ function contextToJob(ctx: StoredUploadReviewContext): ArtworkJobFields {
     orderItemId:
       ctx.orderItemId != null && Number.isFinite(ctx.orderItemId) && ctx.orderItemId > 0
         ? ctx.orderItemId
+        : undefined,
+    guestTrackingToken:
+      typeof ctx.guestTrackingToken === "string" && ctx.guestTrackingToken.trim() !== ""
+        ? ctx.guestTrackingToken.trim()
         : undefined,
   };
 }

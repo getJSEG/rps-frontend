@@ -124,7 +124,7 @@ export function OrderLineArtworkDownloadCell({ item }: { item: OrderLineArtworkI
     try {
       await downloadUrlAsFile(href, downloadName);
     } catch {
-      window.open(href, "_blank", "noopener,noreferrer");
+      /* downloadUrlAsFile uses same-origin proxy for /uploads/ — no new-tab fallback */
     } finally {
       setDownloading(false);
     }

@@ -9,6 +9,41 @@ export const UPLOAD_APPROVAL_REVIEW_CONTEXT_KEY = "uploadApprovalReviewContext";
 /** Same-order jobs still awaiting artwork — shown in the review page left column. */
 export const UPLOAD_APPROVAL_PENDING_JOBS_KEY = "uploadApprovalPendingJobs";
 
+/** Guest flow: "Back to upload list" navigates here (path + query). */
+export const UPLOAD_APPROVAL_GUEST_RETURN_URL_KEY = "uploadApprovalGuestReturnUrl";
+
+export function clearGuestUploadReturnUrl(): void {
+  try {
+    sessionStorage.removeItem(UPLOAD_APPROVAL_GUEST_RETURN_URL_KEY);
+  } catch {
+    /* ignore */
+  }
+}
+
+export function setGuestUploadReturnUrl(orderId: number, guestTrackingToken: string): void {
+  const id = Number(orderId);
+  const t = String(guestTrackingToken || "").trim();
+  if (!Number.isFinite(id) || id <= 0 || !t) return;
+  try {
+    const path = `/guest-orders/${id}?token=${encodeURIComponent(t)}&placed=1`;
+    sessionStorage.setItem(UPLOAD_APPROVAL_GUEST_RETURN_URL_KEY, path);
+  } catch {
+    /* ignore */
+  }
+}
+
+/** Read guest return path and remove it (one-shot). */
+export function consumeGuestUploadReturnUrl(): string | null {
+  try {
+    const u = sessionStorage.getItem(UPLOAD_APPROVAL_GUEST_RETURN_URL_KEY)?.trim();
+    if (!u) return null;
+    sessionStorage.removeItem(UPLOAD_APPROVAL_GUEST_RETURN_URL_KEY);
+    return u;
+  } catch {
+    return null;
+  }
+}
+
 export type StoredPendingJobLine = {
   orderId: number;
   orderItemId: number | null;
@@ -33,6 +68,8 @@ export type StoredUploadReviewContext = {
   /** When set, "Approve" can persist artwork to this order line. */
   orderId?: number;
   orderItemId?: number;
+  /** Guest order tracking token — when set, approve uses guest API instead of JWT. */
+  guestTrackingToken?: string;
   fileName?: string;
   /** Base64 data URL — survives full page reload (used for smaller files). */
   previewDataUrl?: string;
