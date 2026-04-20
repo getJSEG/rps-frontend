@@ -435,9 +435,10 @@ function ProductDetailContent() {
         const res = await storePickupAddressesAPI.getPublic();
         if (!cancelled && Array.isArray(res?.addresses)) {
           setStorePickupAddresses(res.addresses);
-          if (res.addresses[0] && !storePickupAddressId) {
-            setStorePickupAddressId(String(res.addresses[0].id));
-          }
+          setStorePickupAddressId((prev) => {
+            if (prev) return prev;
+            return res.addresses[0] ? String(res.addresses[0].id) : "";
+          });
         }
       } catch {
         if (!cancelled) setStorePickupAddresses([]);
@@ -446,7 +447,7 @@ function ProductDetailContent() {
     return () => {
       cancelled = true;
     };
-  }, [storePickupAddressId]);
+  }, []);
 
   useEffect(() => {
     if (!jobArtworkInfoOpen) return;
@@ -515,7 +516,7 @@ function ProductDetailContent() {
     if (product) {
       fetchSubcategories();
     }
-  }, [product?.category_slug, product]);
+  }, [product?.category_slug]);
 
   // Fetch products for selected subcategory
   useEffect(() => {
