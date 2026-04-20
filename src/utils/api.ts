@@ -7,7 +7,6 @@ function getApiBaseUrl(): string {
   return base.endsWith('/api') ? base : `${base}/api`;
 }
 const API_BASE_URL = getApiBaseUrl();
-const inFlightGetRequests = new Map<string, Promise<unknown>>();
 
 const GUEST_SESSION_STORAGE_KEY = 'rps_guest_session_id';
 
@@ -466,107 +465,80 @@ async function apiCall(endpoint: string, options: RequestInit = {}) {
     }
   }
 
-  const method = String(config.method || 'GET').toUpperCase();
-  const hasBody = config.body != null;
-  const shouldDedupeGet = method === 'GET' && !hasBody;
-  const dedupeKey = shouldDedupeGet
-    ? JSON.stringify({
-        url,
-        method,
-        auth: token || '',
-        guestSession: typeof window !== 'undefined' ? localStorage.getItem(GUEST_SESSION_STORAGE_KEY) || '' : '',
-      })
-    : '';
-
-  if (shouldDedupeGet) {
-    const inFlight = inFlightGetRequests.get(dedupeKey);
-    if (inFlight) {
-      return inFlight;
-    }
-  }
-
-  const execute = async () => {
-    try {
-      const response = await fetch(url, config);
-      
-      // Handle non-JSON responses
-      let data: any;
-      const contentType = response.headers.get('content-type');
-      if (contentType && contentType.includes('application/json')) {
-        try {
-        data = await response.json();
-        } catch {
-          // If JSON parsing fails, try to get text
-          const text = await response.text();
-          throw new Error(text || `HTTP ${response.status}: ${response.statusText}`);
-        }
-      } else {
+  try {
+    const response = await fetch(url, config);
+    
+    // Handle non-JSON responses
+    let data: any;
+    const contentType = response.headers.get('content-type');
+    if (contentType && contentType.includes('application/json')) {
+      try {
+      data = await response.json();
+      } catch {
+        // If JSON parsing fails, try to get text
         const text = await response.text();
         throw new Error(text || `HTTP ${response.status}: ${response.statusText}`);
       }
-      
-      if (!response.ok) {
-        // Safely access error message from response data (include server error detail when present)
-        const dataObj = data && typeof data === 'object' ? data : {};
-        const msg = dataObj.message || dataObj.error;
-        const detail = dataObj.error && dataObj.message !== dataObj.error ? dataObj.error : '';
-        const errorMessage = msg
-          ? (detail ? `${msg}: ${detail}` : msg)
-          : `API request failed: ${response.status} ${response.statusText}`;
-        
-        const isTokenBasedCall = !!token;
-        const isAuthError = response.status === 401 || response.status === 403;
-        const isAccessTokenRequired = /access\s*token|token\s*required|session\s*invalid|invalid\s*token|token\s*expired/i.test(errorMessage || '');
-
-        if (isAuthError && (isTokenBasedCall || isAccessTokenRequired)) {
-          if (typeof window !== 'undefined') {
-            localStorage.removeItem('token');
-            localStorage.removeItem('isLoggedIn');
-            localStorage.removeItem('user');
-            localStorage.removeItem('userRole');
-            window.location.href = '/';
-          }
-          throw new Error('Session invalid. Please log in again.');
-        }
-        throw new Error(errorMessage);
-      }
-      
-      return data;
-    } catch (error: any) {
-      const isNetworkError =
-        error?.message?.includes('Failed to fetch') ||
-        error?.name === 'TypeError' ||
-        (error?.message && typeof error.message === 'string' && error.message.toLowerCase().includes('network'));
-
-      if (isNetworkError) {
-        const baseUrl = API_BASE_URL.replace(/\/api\/?$/, '') || 'http://localhost:5000';
-        console.error(
-          'API unreachable. Is the backend running? Expected base URL:',
-          baseUrl,
-          '\nStart backend: cd backend && npm run dev'
-        );
-        throw new Error(
-          `Cannot connect to the API. Start the backend: cd backend && npm run dev (expected: ${baseUrl})`
-        );
-      }
-
-      console.error('API Error:', error);
-      
-      // If it's already an Error object, throw it as is
-      if (error instanceof Error) {
-        throw error;
-      }
-      
-      // Otherwise wrap it
-      throw new Error(error.message || 'Network error. Please check your connection.');
-    } finally {
-      if (shouldDedupeGet) inFlightGetRequests.delete(dedupeKey);
+    } else {
+      const text = await response.text();
+      throw new Error(text || `HTTP ${response.status}: ${response.statusText}`);
     }
-  };
+    
+    if (!response.ok) {
+      // Safely access error message from response data (include server error detail when present)
+      const dataObj = data && typeof data === 'object' ? data : {};
+      const msg = dataObj.message || dataObj.error;
+      const detail = dataObj.error && dataObj.message !== dataObj.error ? dataObj.error : '';
+      const errorMessage = msg
+        ? (detail ? `${msg}: ${detail}` : msg)
+        : `API request failed: ${response.status} ${response.statusText}`;
+      
+      const isTokenBasedCall = !!token;
+      const isAuthError = response.status === 401 || response.status === 403;
+      const isAccessTokenRequired = /access\s*token|token\s*required|session\s*invalid|invalid\s*token|token\s*expired/i.test(errorMessage || '');
 
-  const promise = execute();
-  if (shouldDedupeGet) inFlightGetRequests.set(dedupeKey, promise);
-  return promise;
+      if (isAuthError && (isTokenBasedCall || isAccessTokenRequired)) {
+        if (typeof window !== 'undefined') {
+          localStorage.removeItem('token');
+          localStorage.removeItem('isLoggedIn');
+          localStorage.removeItem('user');
+          localStorage.removeItem('userRole');
+          window.location.href = '/';
+        }
+        throw new Error('Session invalid. Please log in again.');
+      }
+      throw new Error(errorMessage);
+    }
+    
+    return data;
+  } catch (error: any) {
+    const isNetworkError =
+      error?.message?.includes('Failed to fetch') ||
+      error?.name === 'TypeError' ||
+      (error?.message && typeof error.message === 'string' && error.message.toLowerCase().includes('network'));
+
+    if (isNetworkError) {
+      const baseUrl = API_BASE_URL.replace(/\/api\/?$/, '') || 'http://localhost:5000';
+      console.error(
+        'API unreachable. Is the backend running? Expected base URL:',
+        baseUrl,
+        '\nStart backend: cd backend && npm run dev'
+      );
+      throw new Error(
+        `Cannot connect to the API. Start the backend: cd backend && npm run dev (expected: ${baseUrl})`
+      );
+    }
+
+    console.error('API Error:', error);
+    
+    // If it's already an Error object, throw it as is
+    if (error instanceof Error) {
+      throw error;
+    }
+    
+    // Otherwise wrap it
+    throw new Error(error.message || 'Network error. Please check your connection.');
+  }
 }
 
 // Auth API
