@@ -6,7 +6,6 @@ import Image from "next/image";
 import Link from "next/link";
 import Navbar from "../../components/Navbar";
 import Footer from "../../components/Footer";
-import { toast } from "react-toastify";
 import {
   productsAPI,
   getProductImageUrl,
@@ -14,13 +13,11 @@ import {
   addressesAPI,
   shippingRatesAPI,
   taxesAPI,
-  storePickupAddressesAPI,
   shippingAmountForMethod,
   effectiveOrderShipping,
   orderQualifiesForFreeShipping,
   type ShippingMethod,
   type ShippingRates,
-  type StorePickupAddress,
   type FreeShippingPolicy,
   type Tax,
 } from "../../../utils/api";
@@ -257,17 +254,15 @@ function ProductDetailContent() {
   const [jobs, setJobs] = useState<ProductJobRow[]>(() => [
     { id: newProductJobRowId(), jobName: "", quantity: "1" },
   ]);
-  const [productType, setProductType] = useState("canopy-frame"); // "canopy-frame" or "canopy-only"
-  const [reinforcedStrip, setReinforcedStrip] = useState("White");
-  const [carryBag, setCarryBag] = useState("Standard Bag");
-  const [sandbag, setSandbag] = useState("No");
-  const [fullWall, setFullWall] = useState("1 Full Wall");
-  const [halfWall, setHalfWall] = useState("1 Half Wall (Single Sided)");
-  const [shippingMode, setShippingMode] = useState<"blind_drop_ship" | "store_pickup">("blind_drop_ship");
+  /** Defaults for cart line (customization UI removed); keep in sync if options return. */
+  const productType = "canopy-frame";
+  const reinforcedStrip = "White";
+  const carryBag = "Standard Bag";
+  const sandbag = "No";
+  const fullWall = "1 Full Wall";
+  const halfWall = "1 Half Wall (Single Sided)";
   const [shippingService, setShippingService] = useState("Ground");
   const [shippingMethods, setShippingMethods] = useState<ShippingMethod[]>([]);
-  const [storePickupAddresses, setStorePickupAddresses] = useState<StorePickupAddress[]>([]);
-  const [storePickupAddressId, setStorePickupAddressId] = useState("");
   const [activeTab, setActiveTab] = useState("description");
   const [selectedImageIndex, setSelectedImageIndex] = useState(0);
   const [selectedProductImageIndex, setSelectedProductImageIndex] = useState(0);
@@ -276,11 +271,8 @@ function ProductDetailContent() {
   const [loadingRelated, setLoadingRelated] = useState(false);
   const [subcategories, setSubcategories] = useState<Array<{name: string; slug: string; image_url?: string}>>([]);
   const [selectedSubcategory, setSelectedSubcategory] = useState<string | null>(null);
-  const [subcategoryProducts, setSubcategoryProducts] = useState<Product[]>([]);
-  const [loadingSubcategoryProducts, setLoadingSubcategoryProducts] = useState(false);
   const [imageZoom, setImageZoom] = useState({ x: 50, y: 50, scale: 1 });
   const [message, setMessage] = useState("");
-  const [shippingAuthReady, setShippingAuthReady] = useState(false);
   const [shippingUserLoggedIn, setShippingUserLoggedIn] = useState(false);
   const [savedAddresses, setSavedAddresses] = useState<SavedAddress[]>([]);
   const [addressesLoading, setAddressesLoading] = useState(false);
@@ -313,7 +305,6 @@ function ProductDetailContent() {
     Number.isFinite(pricePerSqFtNum) && pricePerSqFtNum > 0 ? pricePerSqFtNum : 3.63;
   const minChargeNum = Number(product?.min_charge);
   const minCharge = Number.isFinite(minChargeNum) && minChargeNum >= 0 ? minChargeNum : 8.0;
-  const sameDayFee = 8.0;
 
   // Fetch product data - Reset and fetch when productId changes
   useEffect(() => {
@@ -337,7 +328,7 @@ function ProductDetailContent() {
         } else {
           setProduct(null);
         }
-      } catch (_) {
+      } catch {
         fetchedProductForRef.current = null;
         setProduct(null);
       } finally {
@@ -429,27 +420,6 @@ function ProductDetailContent() {
   }, []);
 
   useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      try {
-        const res = await storePickupAddressesAPI.getPublic();
-        if (!cancelled && Array.isArray(res?.addresses)) {
-          setStorePickupAddresses(res.addresses);
-          setStorePickupAddressId((prev) => {
-            if (prev) return prev;
-            return res.addresses[0] ? String(res.addresses[0].id) : "";
-          });
-        }
-      } catch {
-        if (!cancelled) setStorePickupAddresses([]);
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-
-  useEffect(() => {
     if (!jobArtworkInfoOpen) return;
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") setJobArtworkInfoOpen(false);
@@ -475,7 +445,7 @@ function ProductDetailContent() {
         } else {
           setRelatedProducts([]);
         }
-      } catch (_) {
+      } catch {
         fetchedRelatedForRef.current = null;
         setRelatedProducts([]);
       } finally {
@@ -508,7 +478,7 @@ function ProductDetailContent() {
           image_url: sub.image_url
         }));
         setSubcategories(subcats);
-      } catch (_) {
+      } catch {
         setSubcategories([]);
       }
     };
@@ -516,56 +486,7 @@ function ProductDetailContent() {
     if (product) {
       fetchSubcategories();
     }
-  }, [product?.category_slug]);
-
-  // Fetch products for selected subcategory
-  useEffect(() => {
-    const fetchSubcategoryProducts = async () => {
-      if (!selectedSubcategory || !product?.category_slug) {
-        setSubcategoryProducts([]);
-        return;
-      }
-
-      try {
-        setLoadingSubcategoryProducts(true);
-        // Fetch products by category and subcategory
-        const response = await productsAPI.getAll({ 
-          category: product.category_slug,
-          subcategory: selectedSubcategory
-        });
-        
-        let products = response.products || [];
-        
-        // Ensure minimum 4 products - if less, fetch more from same category
-        if (products.length < 4) {
-          const allCategoryResponse = await productsAPI.getAll({ 
-            category: product.category_slug 
-          });
-          const allCategoryProducts = allCategoryResponse.products || [];
-          
-          // Add products from same category but different subcategories
-          const additionalProducts = allCategoryProducts
-            .filter((p: Product) => 
-              p.id !== productId && 
-              !products.find((sp: Product) => sp.id === p.id)
-            )
-            .slice(0, 4 - products.length);
-          
-          products = [...products, ...additionalProducts];
-        }
-        
-        // Limit to at least 4 products
-        setSubcategoryProducts(products.slice(0, Math.max(4, products.length)));
-      } catch (error) {
-        console.error('Error fetching subcategory products:', error);
-        setSubcategoryProducts([]);
-      } finally {
-        setLoadingSubcategoryProducts(false);
-      }
-    };
-
-    fetchSubcategoryProducts();
-  }, [selectedSubcategory, product?.category_slug, productId]);
+  }, [product]);
 
   useEffect(() => {
     if (!productId || !product) return;
@@ -622,21 +543,9 @@ function ProductDetailContent() {
     };
   });
   const subtotal = jobLines.reduce((sum, line) => sum + line.lineSubtotal, 0);
-  const rawShippingCost =
-    shippingMode === "store_pickup"
-      ? 0
-      : shippingAmountForMethod(shippingMethods, shippingService, shippingRates);
-  const shippingCost = effectiveOrderShipping(
-    rawShippingCost,
-    subtotal,
-    freeShippingPolicy,
-    shippingMode === "store_pickup"
-  );
-  const showFreeShippingLabel = orderQualifiesForFreeShipping(
-    subtotal,
-    freeShippingPolicy,
-    shippingMode === "store_pickup"
-  );
+  const rawShippingCost = shippingAmountForMethod(shippingMethods, shippingService, shippingRates);
+  const shippingCost = effectiveOrderShipping(rawShippingCost, subtotal, freeShippingPolicy, false);
+  const showFreeShippingLabel = orderQualifiesForFreeShipping(subtotal, freeShippingPolicy, false);
   const total = subtotal + shippingCost;
   const activeTaxPercentage = Number(activeTax?.percentage || 0);
   const taxAmount = ((subtotal + shippingCost) * activeTaxPercentage) / 100;
@@ -721,13 +630,9 @@ function ProductDetailContent() {
         quantity: totalQty,
         jobName: legacyJobName,
         turnaround: "free-same-day",
-        shippingMode,
-        shipping: shippingMode === "store_pickup" ? "store-pickup" : "blind-drop",
+        shippingMode: "blind_drop_ship",
+        shipping: "blind-drop",
         shippingService: shippingService,
-        storePickupAddressId:
-          shippingMode === "store_pickup" && storePickupAddressId
-            ? Number(storePickupAddressId)
-            : undefined,
         emailProof: false,
         fullWall: fullWallQty,
         halfWall: halfWallQty,
@@ -757,9 +662,10 @@ function ProductDetailContent() {
         router.push("/cart");
       }, 1000);
 
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error("Error adding to cart:", error);
-      setMessage(`❌ Error: ${error.message || "Failed to add product to cart"}`);
+      const msg = error instanceof Error ? error.message : "Failed to add product to cart";
+      setMessage(`❌ Error: ${msg}`);
       setTimeout(() => setMessage(""), 5000);
     } finally {
       setAddingToCart(false);
@@ -792,16 +698,15 @@ function ProductDetailContent() {
   }, []);
 
   useEffect(() => {
-    setShippingAuthReady(true);
     setShippingUserLoggedIn(isAuthenticated());
   }, []);
 
   useEffect(() => {
-    if (!shippingAuthReady || !shippingUserLoggedIn) return;
+    if (!shippingUserLoggedIn) return;
     if (fetchedAddressesOnceRef.current) return;
     fetchedAddressesOnceRef.current = true;
     loadSavedAddresses();
-  }, [shippingAuthReady, shippingUserLoggedIn, loadSavedAddresses]);
+  }, [shippingUserLoggedIn, loadSavedAddresses]);
 
   useEffect(() => {
     const onAuthChange = () => {
@@ -947,9 +852,6 @@ function ProductDetailContent() {
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-12 min-w-0">
           {/* Left Panel - Product Image and Details */}
           <div className="min-w-0 max-w-full">
-            {/* <h1 className="text-3xl font-bold text-gray-900 mb-6">{productName}</h1> */}
-            
-
             {/* Main Product Image */}
             <div className="mb-4">
                 <div 
@@ -1096,7 +998,7 @@ function ProductDetailContent() {
                     {displayPricingMode === "area" ? (
                       <>
                         <p className="text-sm text-gray-600 mt-1">
-                          Based on {widthInches}" × {heightInches}" ({areaSqFt.toFixed(4)} sq ft)
+                          Based on {widthInches} in × {heightInches} in ({areaSqFt.toFixed(4)} sq ft)
                         </p>
                         <p className="text-sm text-gray-600 mt-1">
                           Size in feet: {(widthInches / 12).toFixed(2)} ft × {(heightInches / 12).toFixed(2)} ft
@@ -1104,7 +1006,7 @@ function ProductDetailContent() {
                       </>
                     ) : (
                       <p className="text-sm text-gray-600 mt-1">
-                        Size: {widthInches}" × {heightInches}" ({(widthInches / 12).toFixed(2)} ft ×{" "}
+                        Size: {widthInches} in × {heightInches} in ({(widthInches / 12).toFixed(2)} ft ×{" "}
                         {(heightInches / 12).toFixed(2)} ft)
                       </p>
                     )}
@@ -1121,97 +1023,6 @@ function ProductDetailContent() {
 
           {/* Right Panel - Configuration and Order */}
           <div className="min-w-0 max-w-full">
-            {/* Product Type Selection */}
-            <div className="mb-6">
-              {/* <div className="grid grid-cols-2 gap-3">
-                <button
-                  onClick={() => setProductType("canopy-frame")}
-                  className={`px-4 py-3 border-2 rounded-lg font-medium transition-colors ${
-                    productType === "canopy-frame"
-                      ? "border-blue-600 bg-blue-50 text-blue-700"
-                      : "border-gray-300 bg-white text-gray-700 hover:border-gray-400"
-                  }`}
-                >
-                  Canopy Graphic + Frame
-                </button>
-                <button
-                  onClick={() => setProductType("canopy-only")}
-                  className={`px-4 py-3 border-2 rounded-lg font-medium transition-colors ${
-                    productType === "canopy-only"
-                      ? "border-blue-600 bg-blue-50 text-blue-700"
-                      : "border-gray-300 bg-white text-gray-700 hover:border-gray-400"
-                  }`}
-                >
-                  Canopy Graphic Only
-                </button>
-              </div> */}
-            </div>
-
-            {/* Customization Options */}
-            {/* <div className="mb-6 p-4 border border-gray-200 rounded-lg space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Reinforced Strip</label>
-                <select
-                  value={reinforcedStrip}
-                  onChange={(e) => setReinforcedStrip(e.target.value)}
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                >
-                  <option>White</option>
-                  <option>Black</option>
-                  <option>Custom</option>
-                </select>
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Carry Bag</label>
-                <select
-                  value={carryBag}
-                  onChange={(e) => setCarryBag(e.target.value)}
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                >
-                  <option>Standard Bag</option>
-                  <option>Premium Wheeled Bag</option>
-                </select>
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Sandbag</label>
-                <select
-                  value={sandbag}
-                  onChange={(e) => setSandbag(e.target.value)}
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                >
-                  <option>No</option>
-                  <option>Yes</option>
-                </select>
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Full Wall</label>
-                <select
-                  value={fullWall}
-                  onChange={(e) => setFullWall(e.target.value)}
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                >
-                  <option>No Full Wall</option>
-                  <option>1 Full Wall</option>
-                  <option>2 Full Walls</option>
-                  <option>3 Full Walls</option>
-                  <option>4 Full Walls</option>
-                </select>
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Half Wall</label>
-                <select
-                  value={halfWall}
-                  onChange={(e) => setHalfWall(e.target.value)}
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                >
-                  <option>No Half Wall</option>
-                  <option>1 Half Wall (Single Sided)</option>
-                  <option>1 Half Wall (Double Sided)</option>
-                  <option>2 Half Walls (Single Sided)</option>
-                  <option>2 Half Walls (Double Sided)</option>
-                </select>
-              </div>
-            </div> */}
             {/* Size — width & height (inches) */}
             <div className="mb-6 p-4 border border-gray-200 rounded-lg">
               <div className="grid grid-cols-2 gap-4 mb-4">
@@ -1339,14 +1150,10 @@ function ProductDetailContent() {
             </div>
 
             {/* Shipping: service & charges for everyone; saved “Ship to” only when logged in */}
-            {shippingAuthReady && (
             <div className="mb-6 p-4 border border-gray-200 rounded-lg min-w-0">
-              <div className="mb-4">
-                <h2 className="text-lg font-semibold text-gray-900 mb-4">Shipping</h2>
-                <div className="space-y-3" />
-              </div>
+              <h2 className="text-lg font-semibold text-gray-900 mb-4">Shipping</h2>
 
-              {shippingUserLoggedIn && shippingMode !== "store_pickup" ? (
+              {shippingUserLoggedIn ? (
                 /* Ship to — from address book */
                 <div className="mb-4 p-3 bg-gray-50 rounded-lg relative min-w-0 max-w-full">
                   <div className="flex justify-between items-start gap-2 mb-2">
@@ -1385,100 +1192,60 @@ function ProductDetailContent() {
                     </div>
                   )}
                 </div>
-              ) : shippingMode !== "store_pickup" ? (
+              ) : (
                 <div className="mb-4 rounded-lg border border-dashed border-gray-200 bg-gray-50/80 px-3 py-3">
                   <p className="text-sm text-gray-700">
                     You’ll enter your full shipping address at checkout. Choose a service below to see the estimated
                     shipping charge for this item.
                   </p>
                 </div>
-              ) : null}
+              )}
 
               <div className="mb-4">
-                <div className="mb-3 flex flex-wrap items-center gap-5">
-                  <label className="inline-flex items-center gap-2 text-sm text-gray-900">
-                    <input
-                      type="radio"
-                      name="shipping-mode"
-                      checked={shippingMode === "blind_drop_ship"}
-                      onChange={() => setShippingMode("blind_drop_ship")}
-                    />
-                    Blind Drop Ship
-                  </label>
-                  <label className="inline-flex items-center gap-2 text-sm text-gray-900">
-                    <input
-                      type="radio"
-                      name="shipping-mode"
-                      checked={shippingMode === "store_pickup"}
-                      onChange={() => setShippingMode("store_pickup")}
-                    />
-                    Store Pickup
-                  </label>
-                </div>
-                {shippingMode === "blind_drop_ship" ? (
-                  <>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">Shipping Service</label>
-                    <div className="flex items-center gap-2">
-                      <select
-                        value={shippingService}
-                        onChange={(e) => setShippingService(e.target.value)}
-                        className="flex-1 px-4 py-2 border border-gray-300 rounded-lg  text-black focus:outline-none focus:ring-2 focus:ring-blue-500"
-                      >
-                        {shippingMethods.length > 0 ? (
-                          shippingMethods.map((m) => (
-                            <option key={m.id} value={m.name}>
-                              {m.name}
-                            </option>
-                          ))
-                        ) : (
-                          <>
-                            <option>Ground</option>
-                            <option>Express</option>
-                            <option>Overnight</option>
-                          </>
-                        )}
-                      </select>
-                      <span
-                        className={`font-medium ${showFreeShippingLabel ? "text-emerald-700" : "text-gray-900"}`}
-                      >
-                        {showFreeShippingLabel ? "Free Shipping" : `$${shippingCost.toFixed(2)}`}
-                      </span>
-                    </div>
-                    {freeShippingPolicy.freeShippingEnabled ? (
-                      <p className="mt-2 text-sm font-medium leading-snug text-rose-700">
-                        {freeShippingPolicy.freeShippingThreshold > 0 ? (
-                          <>
-                            Get free shipping on orders over{" "}
-                            <span className="font-bold tabular-nums text-black">
-                              ${freeShippingPolicy.freeShippingThreshold.toFixed(2)}
-                            </span>
-                            .
-                          </>
-                        ) : (
-                          <>Get free shipping on qualifying orders while this offer is running.</>
-                        )}
-                      </p>
-                    ) : null}
-                  </>
-                ) : (
-                  <>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">Pickup Address</label>
-                    <select
-                      value={storePickupAddressId}
-                      onChange={(e) => setStorePickupAddressId(e.target.value)}
-                      className="w-full px-4 py-2 border border-gray-300 rounded-lg text-black focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    >
-                      {storePickupAddresses.map((a) => (
-                        <option key={a.id} value={a.id}>
-                          {a.label} - {a.city}, {a.state}
+                <label className="block text-sm font-medium text-gray-700 mb-2">Shipping Service</label>
+                <div className="flex items-center gap-2">
+                  <select
+                    value={shippingService}
+                    onChange={(e) => setShippingService(e.target.value)}
+                    className="flex-1 px-4 py-2 border border-gray-300 rounded-lg  text-black focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  >
+                    {shippingMethods.length > 0 ? (
+                      shippingMethods.map((m) => (
+                        <option key={m.id} value={m.name}>
+                          {m.name}
                         </option>
-                      ))}
-                    </select>
-                  </>
-                )}
+                      ))
+                    ) : (
+                      <>
+                        <option>Ground</option>
+                        <option>Express</option>
+                        <option>Overnight</option>
+                      </>
+                    )}
+                  </select>
+                  <span
+                    className={`font-medium ${showFreeShippingLabel ? "text-emerald-700" : "text-gray-900"}`}
+                  >
+                    {showFreeShippingLabel ? "Free Shipping" : `$${shippingCost.toFixed(2)}`}
+                  </span>
+                </div>
+                {freeShippingPolicy.freeShippingEnabled ? (
+                  <p className="mt-2 text-sm font-medium leading-snug text-rose-700">
+                    {freeShippingPolicy.freeShippingThreshold > 0 ? (
+                      <>
+                        Get free shipping on orders over{" "}
+                        <span className="font-bold tabular-nums text-black">
+                          ${freeShippingPolicy.freeShippingThreshold.toFixed(2)}
+                        </span>
+                        .
+                      </>
+                    ) : (
+                      <>Get free shipping on qualifying orders while this offer is running.</>
+                    )}
+                  </p>
+                ) : null}
               </div>
             </div>
-            )}
 
             {/* Order Summary */}
             <div className="mb-6 p-4 border border-gray-200 rounded-lg bg-gray-50">
@@ -1486,16 +1253,14 @@ function ProductDetailContent() {
                 <span className="text-gray-700">Subtotal</span>
                 <span className="text-gray-900 font-medium">${subtotal.toFixed(2)}</span>
               </div>
-              {shippingMode === "blind_drop_ship" ? (
-                <div className="flex justify-between mb-2">
-                  <span className="text-gray-700">Shipping ({shippingService})</span>
-                  <span
-                    className={`font-medium ${showFreeShippingLabel ? "text-emerald-700" : "text-gray-900"}`}
-                  >
-                    {showFreeShippingLabel ? "Free Shipping" : `$${shippingCost.toFixed(2)}`}
-                  </span>
-                </div>
-              ) : null}
+              <div className="flex justify-between mb-2">
+                <span className="text-gray-700">Shipping ({shippingService})</span>
+                <span
+                  className={`font-medium ${showFreeShippingLabel ? "text-emerald-700" : "text-gray-900"}`}
+                >
+                  {showFreeShippingLabel ? "Free Shipping" : `$${shippingCost.toFixed(2)}`}
+                </span>
+              </div>
               <div className="flex justify-between mb-2">
                 <span className="text-gray-700">
                   Tax ({activeTaxPercentage.toFixed(2)}%)

@@ -31,6 +31,30 @@ const emptyForm = {
   hire_date: "",
 };
 
+/** Matches backend `employeeController.js` STRONG_PASSWORD_REGEX */
+const STRONG_PASSWORD_REGEX = /^(?=.*[A-Z])(?=.*\d).+$/;
+
+const PASSWORD_RULES_HINT =
+  "Use at least 6 characters with one uppercase letter and one number.";
+
+type FieldErrors = {
+  full_name?: string;
+  email?: string;
+  password?: string;
+};
+
+/** Maps backend error messages to field-level vs form-level display (create + update). */
+function mapEmployeeApiError(message: string): { fields?: FieldErrors; form?: string } {
+  const m = message.trim();
+  if (!m) return { form: "Something went wrong." };
+  if (/password must include at least one uppercase/i.test(m) || /uppercase letter and one number/i.test(m)) {
+    return { fields: { password: m } };
+  }
+  if (/password must be at least 6/i.test(m)) return { fields: { password: m } };
+  if (/email already exists|account with this email/i.test(m)) return { fields: { email: m } };
+  return { form: m };
+}
+
 const getImageSrc = (path: string | null | undefined): string => {
   if (!path || typeof path !== "string") return "";
   const p = path.trim();
@@ -67,6 +91,10 @@ export default function EmployeesPage() {
   const [showEditPassword, setShowEditPassword] = useState(false);
   const [addFormImagePreview, setAddFormImagePreview] = useState<string>("");
   const [editFormImagePreview, setEditFormImagePreview] = useState<string>("");
+  const [addFieldErrors, setAddFieldErrors] = useState<FieldErrors>({});
+  const [addFormError, setAddFormError] = useState<string | null>(null);
+  const [editFieldErrors, setEditFieldErrors] = useState<FieldErrors>({});
+  const [editFormError, setEditFormError] = useState<string | null>(null);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -101,12 +129,22 @@ export default function EmployeesPage() {
   const openAdd = () => {
     setAddForm(emptyForm);
     setAddFormImagePreview("");
+    setAddFieldErrors({});
+    setAddFormError(null);
     setShowAddModal(true);
+  };
+
+  const closeAddModal = () => {
+    setShowAddModal(false);
+    setAddFieldErrors({});
+    setAddFormError(null);
   };
 
   const openEdit = (emp: Employee) => {
     setSelectedEmployee(emp);
     setEditFormImagePreview("");
+    setEditFieldErrors({});
+    setEditFormError(null);
     setEditForm({
       full_name: emp.full_name || "",
       email: emp.email || "",
@@ -128,14 +166,21 @@ export default function EmployeesPage() {
 
   const handleAdd = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!addForm.full_name.trim() || !addForm.email.trim() || !addForm.password) {
-      setMessage({ type: "error", text: "Name, email and password are required." });
+    const nextErrors: FieldErrors = {};
+    if (!addForm.full_name.trim()) nextErrors.full_name = "Full name is required.";
+    if (!addForm.email.trim()) nextErrors.email = "Email is required.";
+    if (!addForm.password) nextErrors.password = "Password is required.";
+    else if (addForm.password.length < 6) {
+      nextErrors.password = "Password must be at least 6 characters.";
+    } else if (!STRONG_PASSWORD_REGEX.test(addForm.password)) {
+      nextErrors.password = "Password must include at least one uppercase letter and one number.";
+    }
+    setAddFormError(null);
+    if (Object.keys(nextErrors).length > 0) {
+      setAddFieldErrors(nextErrors);
       return;
     }
-    if (addForm.password.length < 6) {
-      setMessage({ type: "error", text: "Password must be at least 6 characters." });
-      return;
-    }
+    setAddFieldErrors({});
     setSubmitting(true);
     setMessage(null);
     try {
@@ -149,10 +194,13 @@ export default function EmployeesPage() {
         hire_date: addForm.hire_date.trim() || undefined,
       });
       setMessage({ type: "success", text: "Employee added successfully." });
-      setShowAddModal(false);
+      closeAddModal();
       fetchEmployees();
     } catch (err: any) {
-      setMessage({ type: "error", text: err?.message || "Failed to add employee." });
+      const raw = err?.message || "Failed to add employee.";
+      const mapped = mapEmployeeApiError(typeof raw === "string" ? raw : String(raw));
+      setAddFieldErrors(mapped.fields || {});
+      setAddFormError(mapped.form ?? null);
     } finally {
       setSubmitting(false);
     }
@@ -161,14 +209,22 @@ export default function EmployeesPage() {
   const handleEdit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedEmployee) return;
-    if (!editForm.full_name.trim() || !editForm.email.trim()) {
-      setMessage({ type: "error", text: "Name and email are required." });
+    const nextErrors: FieldErrors = {};
+    if (!editForm.full_name.trim()) nextErrors.full_name = "Full name is required.";
+    if (!editForm.email.trim()) nextErrors.email = "Email is required.";
+    if (editForm.password) {
+      if (editForm.password.length < 6) {
+        nextErrors.password = "Password must be at least 6 characters.";
+      } else if (!STRONG_PASSWORD_REGEX.test(editForm.password)) {
+        nextErrors.password = "Password must include at least one uppercase letter and one number.";
+      }
+    }
+    setEditFormError(null);
+    if (Object.keys(nextErrors).length > 0) {
+      setEditFieldErrors(nextErrors);
       return;
     }
-    if (editForm.password && editForm.password.length < 6) {
-      setMessage({ type: "error", text: "Password must be at least 6 characters." });
-      return;
-    }
+    setEditFieldErrors({});
     setSubmitting(true);
     setMessage(null);
     try {
@@ -187,9 +243,14 @@ export default function EmployeesPage() {
       setMessage({ type: "success", text: "Employee updated successfully." });
       setShowEditModal(false);
       setSelectedEmployee(null);
+      setEditFieldErrors({});
+      setEditFormError(null);
       fetchEmployees();
     } catch (err: any) {
-      setMessage({ type: "error", text: err?.message || "Failed to update employee." });
+      const raw = err?.message || "Failed to update employee.";
+      const mapped = mapEmployeeApiError(typeof raw === "string" ? raw : String(raw));
+      setEditFieldErrors(mapped.fields || {});
+      setEditFormError(mapped.form ?? null);
     } finally {
       setSubmitting(false);
     }
@@ -216,6 +277,8 @@ export default function EmployeesPage() {
 
   const fieldClass =
     "w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm shadow-sm outline-none transition focus:border-sky-400 focus:ring-2 focus:ring-sky-400/25";
+
+  const withFieldError = (err?: string) => `${fieldClass}${err ? " border-rose-400 focus:border-rose-500 focus:ring-rose-400/25" : ""}`;
 
   return (
     <AdminNavbar title="Employees" subtitle="Team accounts and access">
@@ -378,37 +441,67 @@ export default function EmployeesPage() {
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 p-4 backdrop-blur-sm">
           <div className="max-h-[90vh] w-full max-w-md overflow-y-auto rounded-xl border border-slate-200/60 bg-white p-6 shadow-2xl shadow-slate-900/20">
             <h3 className="mb-4 text-lg font-semibold text-slate-500">Add employee</h3>
-            <form onSubmit={handleAdd} className="space-y-4">
+            {addFormError && (
+              <div
+                role="alert"
+                className="mb-4 rounded-lg border border-rose-200 bg-rose-50 px-3 py-2.5 text-sm text-rose-900"
+              >
+                {addFormError}
+              </div>
+            )}
+            <form noValidate onSubmit={handleAdd} className="space-y-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Full Name *</label>
                 <input
                   type="text"
                   value={addForm.full_name}
-                  onChange={(e) => setAddForm((f) => ({ ...f, full_name: e.target.value }))}
-                  className={fieldClass}
+                  onChange={(e) => {
+                    setAddForm((f) => ({ ...f, full_name: e.target.value }));
+                    setAddFieldErrors((er) => ({ ...er, full_name: undefined }));
+                    setAddFormError(null);
+                  }}
+                  className={withFieldError(addFieldErrors.full_name)}
                   required
+                  aria-invalid={!!addFieldErrors.full_name}
                 />
+                {addFieldErrors.full_name && (
+                  <p className="mt-1 text-sm text-rose-600">{addFieldErrors.full_name}</p>
+                )}
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Email *</label>
                 <input
                   type="email"
                   value={addForm.email}
-                  onChange={(e) => setAddForm((f) => ({ ...f, email: e.target.value }))}
-                  className={fieldClass}
+                  onChange={(e) => {
+                    setAddForm((f) => ({ ...f, email: e.target.value }));
+                    setAddFieldErrors((er) => ({ ...er, email: undefined }));
+                    setAddFormError(null);
+                  }}
+                  className={withFieldError(addFieldErrors.email)}
                   required
+                  aria-invalid={!!addFieldErrors.email}
                 />
+                {addFieldErrors.email && (
+                  <p className="mt-1 text-sm text-rose-600">{addFieldErrors.email}</p>
+                )}
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Password * (min 6)</label>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Password *</label>
+                <p className="mb-1 text-xs text-slate-500">{PASSWORD_RULES_HINT}</p>
                 <div className="relative">
                   <input
                     type={showAddPassword ? "text" : "password"}
                     value={addForm.password}
-                    onChange={(e) => setAddForm((f) => ({ ...f, password: e.target.value }))}
-                    className={`${fieldClass} pr-10`}
+                    onChange={(e) => {
+                      setAddForm((f) => ({ ...f, password: e.target.value }));
+                      setAddFieldErrors((er) => ({ ...er, password: undefined }));
+                      setAddFormError(null);
+                    }}
+                    className={`${withFieldError(addFieldErrors.password)} pr-10`}
                     required
                     minLength={6}
+                    aria-invalid={!!addFieldErrors.password}
                   />
                   <button
                     type="button"
@@ -429,6 +522,9 @@ export default function EmployeesPage() {
                     )}
                   </button>
                 </div>
+                {addFieldErrors.password && (
+                  <p className="mt-1 text-sm text-rose-600">{addFieldErrors.password}</p>
+                )}
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Telephone</label>
@@ -467,12 +563,12 @@ export default function EmployeesPage() {
                     };
                     reader.readAsDataURL(file);
                     setUploadingImage(true);
-                    setMessage(null);
+                    setAddFormError(null);
                     try {
                       const { url } = await employeesAPI.uploadImage(file);
                       setAddForm((f) => ({ ...f, profile_image: url }));
                     } catch (err: any) {
-                      setMessage({ type: "error", text: err?.message || "Image upload failed" });
+                      setAddFormError(err?.message || "Image upload failed");
                     } finally {
                       setUploadingImage(false);
                       e.target.value = "";
@@ -516,7 +612,7 @@ export default function EmployeesPage() {
                 </button>
                 <button
                   type="button"
-                  onClick={() => setShowAddModal(false)}
+                  onClick={closeAddModal}
                   className="rounded-lg border border-slate-200 bg-white px-4 py-2.5 text-sm font-medium text-slate-700 shadow-sm hover:bg-slate-50"
                 >
                   Cancel
@@ -532,26 +628,50 @@ export default function EmployeesPage() {
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 p-4 backdrop-blur-sm">
           <div className="max-h-[90vh] w-full max-w-md overflow-y-auto rounded-xl border border-slate-200/60 bg-white p-6 shadow-2xl shadow-slate-900/20">
             <h3 className="mb-4 text-lg font-semibold text-slate-900">Edit employee</h3>
-            <form onSubmit={handleEdit} className="space-y-4">
+            {editFormError && (
+              <div
+                role="alert"
+                className="mb-4 rounded-lg border border-rose-200 bg-rose-50 px-3 py-2.5 text-sm text-rose-900"
+              >
+                {editFormError}
+              </div>
+            )}
+            <form noValidate onSubmit={handleEdit} className="space-y-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Full Name *</label>
                 <input
                   type="text"
                   value={editForm.full_name}
-                  onChange={(e) => setEditForm((f) => ({ ...f, full_name: e.target.value }))}
-                  className={fieldClass}
+                  onChange={(e) => {
+                    setEditForm((f) => ({ ...f, full_name: e.target.value }));
+                    setEditFieldErrors((er) => ({ ...er, full_name: undefined }));
+                    setEditFormError(null);
+                  }}
+                  className={withFieldError(editFieldErrors.full_name)}
                   required
+                  aria-invalid={!!editFieldErrors.full_name}
                 />
+                {editFieldErrors.full_name && (
+                  <p className="mt-1 text-sm text-rose-600">{editFieldErrors.full_name}</p>
+                )}
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Email *</label>
                 <input
                   type="email"
                   value={editForm.email}
-                  onChange={(e) => setEditForm((f) => ({ ...f, email: e.target.value }))}
-                  className={fieldClass}
+                  onChange={(e) => {
+                    setEditForm((f) => ({ ...f, email: e.target.value }));
+                    setEditFieldErrors((er) => ({ ...er, email: undefined }));
+                    setEditFormError(null);
+                  }}
+                  className={withFieldError(editFieldErrors.email)}
                   required
+                  aria-invalid={!!editFieldErrors.email}
                 />
+                {editFieldErrors.email && (
+                  <p className="mt-1 text-sm text-rose-600">{editFieldErrors.email}</p>
+                )}
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Telephone</label>
@@ -590,12 +710,12 @@ export default function EmployeesPage() {
                     };
                     reader.readAsDataURL(file);
                     setUploadingImage(true);
-                    setMessage(null);
+                    setEditFormError(null);
                     try {
                       const { url } = await employeesAPI.uploadImage(file);
                       setEditForm((f) => ({ ...f, profile_image: url }));
                     } catch (err: any) {
-                      setMessage({ type: "error", text: err?.message || "Image upload failed" });
+                      setEditFormError(err?.message || "Image upload failed");
                     } finally {
                       setUploadingImage(false);
                       e.target.value = "";
@@ -641,14 +761,20 @@ export default function EmployeesPage() {
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">New Password (leave blank to keep)</label>
+                <p className="mb-1 text-xs text-slate-500">If set: {PASSWORD_RULES_HINT}</p>
                 <div className="relative">
                   <input
                     type={showEditPassword ? "text" : "password"}
                     value={editForm.password}
-                    onChange={(e) => setEditForm((f) => ({ ...f, password: e.target.value }))}
-                    className={`${fieldClass} pr-10`}
+                    onChange={(e) => {
+                      setEditForm((f) => ({ ...f, password: e.target.value }));
+                      setEditFieldErrors((er) => ({ ...er, password: undefined }));
+                      setEditFormError(null);
+                    }}
+                    className={`${withFieldError(editFieldErrors.password)} pr-10`}
                     minLength={6}
                     placeholder="Optional"
+                    aria-invalid={!!editFieldErrors.password}
                   />
                   <button
                     type="button"
@@ -669,6 +795,9 @@ export default function EmployeesPage() {
                     )}
                   </button>
                 </div>
+                {editFieldErrors.password && (
+                  <p className="mt-1 text-sm text-rose-600">{editFieldErrors.password}</p>
+                )}
               </div>
               <div className="flex items-center gap-4">
                 <label className="flex items-center gap-2">
@@ -700,7 +829,12 @@ export default function EmployeesPage() {
                 </button>
                 <button
                   type="button"
-                  onClick={() => { setShowEditModal(false); setSelectedEmployee(null); }}
+                  onClick={() => {
+                    setShowEditModal(false);
+                    setSelectedEmployee(null);
+                    setEditFieldErrors({});
+                    setEditFormError(null);
+                  }}
                   className="rounded-lg border border-slate-200 bg-white px-4 py-2.5 text-sm font-medium text-slate-700 shadow-sm hover:bg-slate-50"
                 >
                   Cancel

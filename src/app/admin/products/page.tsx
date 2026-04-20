@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useRef, useCallback, type RefObject } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import AdminNavbar from "../../components/AdminNavbar";
@@ -87,73 +87,45 @@ function descriptionPreview(html: string | null | undefined): string {
     .trim();
 }
 
-export default function AdminProductsPage() {
-  const router = useRouter();
-  const [activeTab, setActiveTab] = useState<Tab>("products");
-  const [categories, setCategories] = useState<Category[]>([]);
-  const [products, setProducts] = useState<Product[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [saving, setSaving] = useState(false);
-  const [message, setMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
+/** Same suffix as Description for Spec / File setup labels. */
+const WORD_STYLE_LABEL_SUFFIX = " (Word-style formatting)";
+const RICH_PLACEHOLDER_HINT = "bold, italic, lists supported";
 
-  // Category form
-  const [catName, setCatName] = useState("");
-  const [catSlug, setCatSlug] = useState("");
-  const [catParentId, setCatParentId] = useState<string>("");
-  const [catDescription, setCatDescription] = useState("");
-  const [editingCategoryId, setEditingCategoryId] = useState<number | null>(null);
+/** Seed contenteditable: existing HTML as-is; plain text escaped with line breaks as &lt;br&gt;. */
+function toEditorInitialHtml(raw: string | null | undefined): string {
+  if (!raw) return "";
+  if (/^[\s]*</.test(raw)) return raw;
+  return raw
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/\n/g, "<br>");
+}
 
-  // Product form
-  const [prodName, setProdName] = useState("");
-  const [prodSlug, setProdSlug] = useState("");
-  const [prodDescription, setProdDescription] = useState("");
-  const [prodSpec, setProdSpec] = useState("");
-  const [prodFileSetup, setProdFileSetup] = useState("");
-  const [prodInstallationGuide, setProdInstallationGuide] = useState("");
-  const [prodFaq, setProdFaq] = useState<ProductFaqItem[]>([]);
-  const [prodParentId, setProdParentId] = useState<string>("");
-  const [prodCategoryId, setProdCategoryId] = useState<string>("");
-  const [prodSubcategory, setProdSubcategory] = useState("");
-  const [prodPrice, setProdPrice] = useState("");
-  const [prodPricePerSqft, setProdPricePerSqft] = useState("");
-  const [prodMinCharge, setProdMinCharge] = useState("");
-  const [prodPricingMode, setProdPricingMode] = useState<"" | "fixed" | "area">("");
-  const [prodBaseUnit, setProdBaseUnit] = useState<"inch">("inch");
-  const [prodMinWidth, setProdMinWidth] = useState("");
-  const [prodMaxWidth, setProdMaxWidth] = useState("");
-  const [prodMinHeight, setProdMinHeight] = useState("");
-  const [prodMaxHeight, setProdMaxHeight] = useState("");
-  const [prodMaterial, setProdMaterial] = useState("");
-  /** Ordered product photos; first is listing thumbnail. */
-  const [prodGalleryUrls, setProdGalleryUrls] = useState<string[]>([]);
-  const [prodImageUrlInput, setProdImageUrlInput] = useState("");
-  const [prodSku, setProdSku] = useState("");
-  const [prodIsNew, setProdIsNew] = useState(false);
-  const [prodIsActive, setProdIsActive] = useState(true);
-  const [prodProperties, setProdProperties] = useState<ProductProperty[]>([]);
-  const descEditorRef = useRef<HTMLDivElement>(null);
-  /** Saved so toolbar clicks don’t lose the caret before execCommand / list insertion. */
-  const descLastRangeRef = useRef<Range | null>(null);
+function useContentEditableRichText(setHtml: (html: string) => void) {
+  const editorRef = useRef<HTMLDivElement>(null);
+  const lastRangeRef = useRef<Range | null>(null);
 
-  const captureDescSelection = useCallback(() => {
-    const el = descEditorRef.current;
+  const captureSelection = useCallback(() => {
+    const el = editorRef.current;
     if (!el) return;
     const sel = window.getSelection();
     if (!sel || sel.rangeCount === 0) return;
     const r = sel.getRangeAt(0);
     if (!el.contains(r.commonAncestorContainer)) return;
-    descLastRangeRef.current = r.cloneRange();
+    lastRangeRef.current = r.cloneRange();
   }, []);
 
-  const applyDescCommand = useCallback(
+  const applyCommand = useCallback(
     (command: string) => {
-      const el = descEditorRef.current;
+      const el = editorRef.current;
       if (!el) return;
       el.focus();
       const sel = window.getSelection();
       if (sel) {
         sel.removeAllRanges();
-        const saved = descLastRangeRef.current;
+        const saved = lastRangeRef.current;
         if (saved) {
           try {
             sel.addRange(saved);
@@ -175,16 +147,15 @@ export default function AdminProductsPage() {
       } catch {
         /* ignore */
       }
-      captureDescSelection();
-      setProdDescription(el.innerHTML);
+      captureSelection();
+      setHtml(el.innerHTML);
     },
-    [captureDescSelection]
+    [captureSelection, setHtml]
   );
 
-  /** Inserts real <ul>/<ol> — browser execCommand for lists is unreliable in contenteditable. */
-  const insertDescList = useCallback(
+  const insertList = useCallback(
     (ordered: boolean) => {
-      const el = descEditorRef.current;
+      const el = editorRef.current;
       if (!el) return;
       el.focus();
 
@@ -193,7 +164,7 @@ export default function AdminProductsPage() {
 
       const restoreCaret = () => {
         sel.removeAllRanges();
-        const saved = descLastRangeRef.current;
+        const saved = lastRangeRef.current;
         if (saved) {
           try {
             sel.addRange(saved);
@@ -261,20 +232,186 @@ export default function AdminProductsPage() {
         sel.addRange(nr);
       }
 
-      descLastRangeRef.current = sel.rangeCount ? sel.getRangeAt(0).cloneRange() : null;
-      setProdDescription(el.innerHTML);
+      lastRangeRef.current = sel.rangeCount ? sel.getRangeAt(0).cloneRange() : null;
+      setHtml(el.innerHTML);
     },
-    []
+    [setHtml]
   );
 
   useEffect(() => {
     const onSelectionChange = () => {
-      if (document.activeElement !== descEditorRef.current) return;
-      captureDescSelection();
+      if (document.activeElement !== editorRef.current) return;
+      captureSelection();
     };
     document.addEventListener("selectionchange", onSelectionChange);
     return () => document.removeEventListener("selectionchange", onSelectionChange);
-  }, [captureDescSelection]);
+  }, [captureSelection]);
+
+  return { editorRef, captureSelection, applyCommand, insertList };
+}
+
+function useProductRichTextEditors(
+  setDescription: (html: string) => void,
+  setSpec: (html: string) => void,
+  setFileSetup: (html: string) => void
+) {
+  const description = useContentEditableRichText(setDescription);
+  const spec = useContentEditableRichText(setSpec);
+  const fileSetup = useContentEditableRichText(setFileSetup);
+  return { description, spec, fileSetup };
+}
+
+function AdminRichTextField({
+  label,
+  dataPlaceholder,
+  editorRef,
+  captureSelection,
+  onBold,
+  onItalic,
+  onBulletList,
+  onNumberedList,
+  onInput,
+}: {
+  label: string;
+  dataPlaceholder: string;
+  editorRef: RefObject<HTMLDivElement | null>;
+  captureSelection: () => void;
+  onBold: () => void;
+  onItalic: () => void;
+  onBulletList: () => void;
+  onNumberedList: () => void;
+  onInput: () => void;
+}) {
+  return (
+    <div className="md:col-span-2">
+      <label className="mb-1 block text-sm font-medium text-slate-700">{label}</label>
+      <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
+        <div className="flex gap-1 rounded-t border-b border-slate-200 bg-slate-50 p-1">
+          <button
+            type="button"
+            title="Bold"
+            onMouseDown={(e) => {
+              e.preventDefault();
+              onBold();
+            }}
+            className="rounded-md px-2 py-1 text-sm font-bold text-slate-700 hover:bg-slate-200"
+          >
+            B
+          </button>
+          <button
+            type="button"
+            title="Italic"
+            onMouseDown={(e) => {
+              e.preventDefault();
+              onItalic();
+            }}
+            className="rounded-md px-2 py-1 text-sm italic text-slate-700 hover:bg-slate-200"
+          >
+            I
+          </button>
+          <button
+            type="button"
+            title="Bullet list"
+            onMouseDown={(e) => {
+              e.preventDefault();
+              onBulletList();
+            }}
+            className="rounded-md px-2 py-1 text-sm text-slate-700 hover:bg-slate-200"
+          >
+            • List
+          </button>
+          <button
+            type="button"
+            title="Numbered list"
+            onMouseDown={(e) => {
+              e.preventDefault();
+              onNumberedList();
+            }}
+            className="rounded-md px-2 py-1 text-sm text-slate-700 hover:bg-slate-200"
+          >
+            1. List
+          </button>
+        </div>
+        <div
+          ref={editorRef}
+          contentEditable
+          suppressContentEditableWarning
+          onMouseUp={captureSelection}
+          onKeyUp={captureSelection}
+          onInput={onInput}
+          className="admin-product-desc-editor max-h-[200px] min-h-[100px] overflow-y-auto px-3 py-2 text-slate-900 focus:outline-none"
+          data-placeholder={dataPlaceholder}
+          style={{ outline: "none" }}
+        />
+      </div>
+    </div>
+  );
+}
+
+export default function AdminProductsPage() {
+  const router = useRouter();
+  const [activeTab, setActiveTab] = useState<Tab>("products");
+  const [categories, setCategories] = useState<Category[]>([]);
+  const [products, setProducts] = useState<Product[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [message, setMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
+
+  // Category form
+  const [catName, setCatName] = useState("");
+  const [catSlug, setCatSlug] = useState("");
+  const [catParentId, setCatParentId] = useState<string>("");
+  const [catDescription, setCatDescription] = useState("");
+  const [editingCategoryId, setEditingCategoryId] = useState<number | null>(null);
+
+  // Product form
+  const [prodName, setProdName] = useState("");
+  const [prodSlug, setProdSlug] = useState("");
+  const [prodDescription, setProdDescription] = useState("");
+  const [prodSpec, setProdSpec] = useState("");
+  const [prodFileSetup, setProdFileSetup] = useState("");
+  const [prodInstallationGuide, setProdInstallationGuide] = useState("");
+  const [prodFaq, setProdFaq] = useState<ProductFaqItem[]>([]);
+  const [prodParentId, setProdParentId] = useState<string>("");
+  const [prodCategoryId, setProdCategoryId] = useState<string>("");
+  const [prodSubcategory, setProdSubcategory] = useState("");
+  const [prodPrice, setProdPrice] = useState("");
+  const [prodPricePerSqft, setProdPricePerSqft] = useState("");
+  const [prodMinCharge, setProdMinCharge] = useState("");
+  const [prodPricingMode, setProdPricingMode] = useState<"" | "fixed" | "area">("");
+  const [prodBaseUnit, setProdBaseUnit] = useState<"inch">("inch");
+  const [prodMinWidth, setProdMinWidth] = useState("");
+  const [prodMaxWidth, setProdMaxWidth] = useState("");
+  const [prodMinHeight, setProdMinHeight] = useState("");
+  const [prodMaxHeight, setProdMaxHeight] = useState("");
+  const [prodMaterial, setProdMaterial] = useState("");
+  /** Ordered product photos; first is listing thumbnail. */
+  const [prodGalleryUrls, setProdGalleryUrls] = useState<string[]>([]);
+  const [prodImageUrlInput, setProdImageUrlInput] = useState("");
+  const [prodSku, setProdSku] = useState("");
+  const [prodIsNew, setProdIsNew] = useState(false);
+  const [prodIsActive, setProdIsActive] = useState(true);
+  const [prodProperties, setProdProperties] = useState<ProductProperty[]>([]);
+  const {
+    description: {
+      editorRef: descEditorRef,
+      captureSelection: captureDescSelection,
+      applyCommand: applyDescCommand,
+      insertList: insertDescList,
+    },
+    spec: {
+      editorRef: specEditorRef,
+      captureSelection: captureSpecSelection,
+      applyCommand: applySpecCommand,
+      insertList: insertSpecList,
+    },
+    fileSetup: {
+      editorRef: fileSetupEditorRef,
+      captureSelection: captureFileSetupSelection,
+      applyCommand: applyFileSetupCommand,
+      insertList: insertFileSetupList,
+    },
+  } = useProductRichTextEditors(setProdDescription, setProdSpec, setProdFileSetup);
 
   const productFormRef = useRef<HTMLFormElement>(null);
   const categoryFormRef = useRef<HTMLFormElement>(null);
@@ -554,6 +691,8 @@ export default function AdminProductsPage() {
       setProdProperties([]);
       setEditingProductId(null);
       if (descEditorRef.current) descEditorRef.current.innerHTML = "";
+      if (specEditorRef.current) specEditorRef.current.innerHTML = "";
+      if (fileSetupEditorRef.current) fileSetupEditorRef.current.innerHTML = "";
       await loadProducts();
       await loadCategories();
     } catch (err: unknown) {
@@ -664,7 +803,9 @@ export default function AdminProductsPage() {
       productFormRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
     }, 0);
     setTimeout(() => {
-      if (descEditorRef.current) descEditorRef.current.innerHTML = p.description || "";
+      if (descEditorRef.current) descEditorRef.current.innerHTML = toEditorInitialHtml(p.description);
+      if (specEditorRef.current) specEditorRef.current.innerHTML = toEditorInitialHtml(p.spec);
+      if (fileSetupEditorRef.current) fileSetupEditorRef.current.innerHTML = toEditorInitialHtml(p.file_setup);
     }, 0);
   };
 
@@ -702,6 +843,8 @@ export default function AdminProductsPage() {
     setProdIsActive(true);
     setProdProperties([]);
     if (descEditorRef.current) descEditorRef.current.innerHTML = "";
+    if (specEditorRef.current) specEditorRef.current.innerHTML = "";
+    if (fileSetupEditorRef.current) fileSetupEditorRef.current.innerHTML = "";
   };
 
   const inputClass =
@@ -787,70 +930,17 @@ export default function AdminProductsPage() {
                         onChange={(e) => setProdSlug(e.target.value)}
                         className={inputClass}
                       />
-                      <div className="md:col-span-2">
-                        <label className="mb-1 block text-sm font-medium text-slate-700">
-                          Description (Word-style formatting)
-                        </label>
-                        <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
-                          <div className="flex gap-1 rounded-t border-b border-slate-200 bg-slate-50 p-1">
-                            <button
-                              type="button"
-                              title="Bold"
-                              onMouseDown={(e) => {
-                                e.preventDefault();
-                                applyDescCommand("bold");
-                              }}
-                              className="rounded-md px-2 py-1 text-sm font-bold text-slate-700 hover:bg-slate-200"
-                            >
-                              B
-                            </button>
-                            <button
-                              type="button"
-                              title="Italic"
-                              onMouseDown={(e) => {
-                                e.preventDefault();
-                                applyDescCommand("italic");
-                              }}
-                              className="rounded-md px-2 py-1 text-sm italic text-slate-700 hover:bg-slate-200"
-                            >
-                              I
-                            </button>
-                            <button
-                              type="button"
-                              title="Bullet list"
-                              onMouseDown={(e) => {
-                                e.preventDefault();
-                                insertDescList(false);
-                              }}
-                              className="rounded-md px-2 py-1 text-sm text-slate-700 hover:bg-slate-200"
-                            >
-                              • List
-                            </button>
-                            <button
-                              type="button"
-                              title="Numbered list"
-                              onMouseDown={(e) => {
-                                e.preventDefault();
-                                insertDescList(true);
-                              }}
-                              className="rounded-md px-2 py-1 text-sm text-slate-700 hover:bg-slate-200"
-                            >
-                              1. List
-                            </button>
-                          </div>
-                          <div
-                            ref={descEditorRef}
-                            contentEditable
-                            suppressContentEditableWarning
-                            onMouseUp={captureDescSelection}
-                            onKeyUp={captureDescSelection}
-                            onInput={() => descEditorRef.current && setProdDescription(descEditorRef.current.innerHTML)}
-                            className="admin-product-desc-editor max-h-[200px] min-h-[100px] overflow-y-auto px-3 py-2 text-slate-900 focus:outline-none"
-                            data-placeholder="Enter description (bold, italic, lists supported)..."
-                            style={{ outline: "none" }}
-                          />
-                        </div>
-                      </div>
+                      <AdminRichTextField
+                        label={`Description${WORD_STYLE_LABEL_SUFFIX}`}
+                        dataPlaceholder={`Enter description (${RICH_PLACEHOLDER_HINT})...`}
+                        editorRef={descEditorRef}
+                        captureSelection={captureDescSelection}
+                        onBold={() => applyDescCommand("bold")}
+                        onItalic={() => applyDescCommand("italic")}
+                        onBulletList={() => insertDescList(false)}
+                        onNumberedList={() => insertDescList(true)}
+                        onInput={() => descEditorRef.current && setProdDescription(descEditorRef.current.innerHTML)}
+                      />
                       <div className="md:col-span-2">
                         <div className="mb-2 flex flex-wrap items-start justify-between mb-4 gap-3">
                           <label className="block text-sm font-medium text-slate-700">
@@ -1134,30 +1224,30 @@ export default function AdminProductsPage() {
                             </ul>
                           ) : null}
                         </div>
-                      <div className="md:col-span-2">
-                        <label className="mb-1 block text-sm font-medium text-slate-700">
-                          Spec
-                        </label>
-                        <textarea
-                          rows={4}
-                          placeholder="Enter spec content"
-                          value={prodSpec}
-                          onChange={(e) => setProdSpec(e.target.value)}
-                          className={inputClass}
-                        />
-                      </div>
-                      <div className="md:col-span-2">
-                        <label className="mb-1 block text-sm font-medium text-slate-700">
-                          File Setup
-                        </label>
-                        <textarea
-                          rows={4}
-                          placeholder="Enter file setup instructions"
-                          value={prodFileSetup}
-                          onChange={(e) => setProdFileSetup(e.target.value)}
-                          className={inputClass}
-                        />
-                      </div>
+                      <AdminRichTextField
+                        label={`Spec${WORD_STYLE_LABEL_SUFFIX}`}
+                        dataPlaceholder={`Enter spec (${RICH_PLACEHOLDER_HINT})...`}
+                        editorRef={specEditorRef}
+                        captureSelection={captureSpecSelection}
+                        onBold={() => applySpecCommand("bold")}
+                        onItalic={() => applySpecCommand("italic")}
+                        onBulletList={() => insertSpecList(false)}
+                        onNumberedList={() => insertSpecList(true)}
+                        onInput={() => specEditorRef.current && setProdSpec(specEditorRef.current.innerHTML)}
+                      />
+                      <AdminRichTextField
+                        label={`File Setup${WORD_STYLE_LABEL_SUFFIX}`}
+                        dataPlaceholder={`Enter file setup (${RICH_PLACEHOLDER_HINT})...`}
+                        editorRef={fileSetupEditorRef}
+                        captureSelection={captureFileSetupSelection}
+                        onBold={() => applyFileSetupCommand("bold")}
+                        onItalic={() => applyFileSetupCommand("italic")}
+                        onBulletList={() => insertFileSetupList(false)}
+                        onNumberedList={() => insertFileSetupList(true)}
+                        onInput={() =>
+                          fileSetupEditorRef.current && setProdFileSetup(fileSetupEditorRef.current.innerHTML)
+                        }
+                      />
                       <div className="md:col-span-2">
                         <label className="mb-1 block text-sm font-medium text-slate-700">
                           Installation Guide

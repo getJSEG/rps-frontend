@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { toast } from "react-toastify";
 import { ordersAPI } from "../../utils/api";
@@ -188,16 +187,7 @@ export default function UploadApproval() {
           <div className="rounded-lg border border-gray-200 bg-white p-12 text-center text-gray-600 shadow-sm">
             Loading jobs…
           </div>
-        ) : !loggedIn ? (
-          <div className="rounded-lg border border-gray-200 bg-white p-12 text-center shadow-sm">
-            <p className="text-gray-700">
-              Sign in with the account menu in the header to see jobs that need artwork or proof approval.
-            </p>
-            <Link href="/register" className="mt-4 inline-block font-medium text-sky-600 hover:underline">
-              Create an account
-            </Link>
-          </div>
-        ) : error ? (
+        ) : !loggedIn ? null : error ? (
           <div className="rounded-lg border border-red-200 bg-red-50 p-8 text-center text-red-800">{error}</div>
         ) : pendingJobs.length === 0 ? (
           <div className="flex min-h-[420px] flex-col items-center justify-center rounded-lg border border-gray-200 bg-white shadow-sm">

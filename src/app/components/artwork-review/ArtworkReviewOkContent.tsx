@@ -52,8 +52,6 @@ export default function ArtworkReviewOkContent({
     () => displayFileName?.trim() || ARTWORK_REVIEW_DEMO.fileNameOk
   );
   const [approving, setApproving] = useState(false);
-  /** After artwork is saved to the order line — primary + reupload stay disabled. */
-  const [uploadSucceeded, setUploadSucceeded] = useState(false);
 
   useEffect(() => {
     setLocalPreviewSrc(previewSrc ?? null);
@@ -97,7 +95,7 @@ export default function ArtworkReviewOkContent({
     [pathname, router]
   );
 
-  const actionsLocked = approving || uploadSucceeded;
+  const actionsLocked = approving;
 
   const onApprove = useCallback(() => {
     void (async () => {
@@ -149,7 +147,7 @@ export default function ArtworkReviewOkContent({
           router.push(guestOrderPlacedHref);
           return;
         }
-        setUploadSucceeded(true);
+        router.push(`/orders?order=${encodeURIComponent(String(oid))}`);
       } catch {
         /* ignore */
       } finally {
@@ -189,11 +187,7 @@ export default function ArtworkReviewOkContent({
           onClick={onApprove}
           className="w-full rounded-md bg-emerald-600 px-4 py-3.5 text-center text-sm font-semibold text-white shadow-sm transition-colors hover:bg-emerald-700 disabled:pointer-events-none disabled:opacity-60"
         >
-          {uploadSucceeded
-            ? "Successfully uploaded"
-            : approving
-              ? "Saving…"
-              : "Approved"}
+          {approving ? "Saving…" : "Approved"}
         </button>
 
         <button

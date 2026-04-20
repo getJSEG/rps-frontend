@@ -46,11 +46,6 @@ const navItems = [
     match: (p: string) => p === "/admin/shipping-rates" || p.startsWith("/admin/shipping-rates"),
   },
   {
-    href: "/admin/store-pickup-addresses",
-    label: "Store Address",
-    match: (p: string) => p === "/admin/store-pickup-addresses" || p.startsWith("/admin/store-pickup-addresses"),
-  },
-  {
     href: "/admin/taxes",
     label: "Taxes",
     match: (p: string) => p === "/admin/taxes" || p.startsWith("/admin/taxes"),

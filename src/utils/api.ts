@@ -754,13 +754,6 @@ export const shippingRatesAPI = {
 
 export const storePickupAddressesAPI = {
   getPublic: async (): Promise<{ addresses: StorePickupAddress[] }> => apiCall('/store-pickup-addresses'),
-  getAdmin: async (): Promise<{ addresses: StorePickupAddress[] }> => apiCall('/store-pickup-addresses/admin'),
-  createAdmin: async (data: Record<string, unknown>) =>
-    apiCall('/store-pickup-addresses/admin', { method: 'POST', body: JSON.stringify(data) }),
-  updateAdmin: async (id: number | string, data: Record<string, unknown>) =>
-    apiCall(`/store-pickup-addresses/admin/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
-  deleteAdmin: async (id: number | string) =>
-    apiCall(`/store-pickup-addresses/admin/${id}`, { method: 'DELETE' }),
 };
 
 export const taxesAPI = {

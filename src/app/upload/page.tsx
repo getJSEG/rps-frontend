@@ -99,7 +99,6 @@ function UploadAfterOrderInner() {
         const pending = buildPendingUploadJobsFromOrders([order]);
         const job = pickFirstOpenablePendingJob(pending);
         if (!job) {
-          toast.info("No artwork upload is needed for this order right now.");
           router.push("/upload-approval");
           return;
         }

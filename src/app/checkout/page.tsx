@@ -520,7 +520,7 @@ export default function CheckoutPage() {
                 >
                   <input type="radio" name="payment" checked disabled className="mt-1" aria-checked="true" />
                   <div className="flex-1">
-                    <span className="font-medium text-gray-900">Pay with card (Stripe)</span>
+                    <span className="font-medium text-gray-900">Pay with card</span>
                   </div>
                 </div>
               </div>
