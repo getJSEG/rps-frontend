@@ -28,12 +28,18 @@ export default function RegisterPage() {
     shippingCountry: "United States",
     shippingTelephone: "",
     newsletter: false,
+    termsAccepted: false,
   });
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
   const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+
+  const showFormError = (message: string) => {
+    setError(message);
+    toast.error(message);
+  };
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
     const { name, value, type } = e.target;
@@ -73,40 +79,75 @@ export default function RegisterPage() {
     if (error) setError("");
   };
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     setError("");
     setSuccess("");
+    const submittedData = new FormData(e.currentTarget);
 
-    if (formData.password !== formData.confirmPassword) {
+    const getTextValue = (key: string, fallback: string = "") => {
+      const value = submittedData.get(key);
+      if (typeof value === "string") {
+        return value.trim();
+      }
+      return fallback.trim();
+    };
+
+    const payload = {
+      email: getTextValue("email", formData.email),
+      password: getTextValue("password", formData.password),
+      confirmPassword: getTextValue("confirmPassword", formData.confirmPassword),
+      fullName: getTextValue("fullName", formData.fullName),
+      hearAboutUs: getTextValue("hearAboutUs", formData.hearAboutUs),
+      streetAddress: getTextValue("streetAddress", formData.streetAddress),
+      addressLine2: getTextValue("addressLine2", formData.addressLine2),
+      city: getTextValue("city", formData.city),
+      state: getTextValue("state", formData.state),
+      postcode: getTextValue("postcode", formData.postcode),
+      telephone: getTextValue("telephone", formData.telephone),
+      shippingStreetAddress: getTextValue("shippingStreetAddress", formData.shippingStreetAddress),
+      shippingAddressLine2: getTextValue("shippingAddressLine2", formData.shippingAddressLine2),
+      shippingCity: getTextValue("shippingCity", formData.shippingCity),
+      shippingState: getTextValue("shippingState", formData.shippingState),
+      shippingPostcode: getTextValue("shippingPostcode", formData.shippingPostcode),
+      shippingCountry: getTextValue("shippingCountry", formData.shippingCountry || "United States"),
+      shippingTelephone: getTextValue("shippingTelephone", formData.shippingTelephone),
+      shippingSameAsBilling: formData.shippingSameAsBilling,
+      newsletter: formData.newsletter,
+      termsAccepted: formData.termsAccepted,
+    };
+
+    if (payload.password !== payload.confirmPassword) {
       const msg = "Passwords do not match.";
-      setError(msg);
-      toast.error(msg);
+      showFormError(msg);
       return;
     }
 
-    if (formData.password.length < 6) {
+    if (payload.password.length < 6) {
       const msg = "Password must be at least 6 characters long.";
-      setError(msg);
-      toast.error(msg);
+      showFormError(msg);
       return;
     }
 
-    if (!formData.email || !formData.fullName ||
-        !formData.hearAboutUs || !formData.streetAddress ||
-        !formData.city || !formData.state || !formData.postcode || !formData.telephone) {
+    if (!payload.email || !payload.fullName ||
+        !payload.hearAboutUs || !payload.streetAddress ||
+        !payload.city || !payload.state || !payload.postcode || !payload.telephone) {
       const msg = "Please fill in all required fields.";
-      setError(msg);
-      toast.error(msg);
+      showFormError(msg);
       return;
     }
 
-    if (!formData.shippingSameAsBilling) {
-      if (!formData.shippingStreetAddress || !formData.shippingCity ||
-          !formData.shippingState || !formData.shippingPostcode || !formData.shippingTelephone) {
+    if (!payload.termsAccepted) {
+      const msg = "Please accept the terms and conditions.";
+      showFormError(msg);
+      return;
+    }
+
+    if (!payload.shippingSameAsBilling) {
+      if (!payload.shippingStreetAddress || !payload.shippingCity ||
+          !payload.shippingState || !payload.shippingPostcode || !payload.shippingTelephone) {
         const msg = "Please fill in all required shipping address fields.";
-        setError(msg);
-        toast.error(msg);
+        showFormError(msg);
         return;
       }
     }
@@ -115,25 +156,26 @@ export default function RegisterPage() {
 
     try {
       const response = await authAPI.register({
-        email: formData.email,
-        password: formData.password,
-        fullName: formData.fullName,
-        hearAboutUs: formData.hearAboutUs,
-        streetAddress: formData.streetAddress,
-        addressLine2: formData.addressLine2 || undefined,
-        city: formData.city,
-        state: formData.state,
-        postcode: formData.postcode,
-        telephone: formData.telephone,
-        shippingSameAsBilling: formData.shippingSameAsBilling,
-        shippingStreetAddress: formData.shippingSameAsBilling ? formData.streetAddress : formData.shippingStreetAddress,
-        shippingAddressLine2: formData.shippingSameAsBilling ? (formData.addressLine2 || undefined) : (formData.shippingAddressLine2 || undefined),
-        shippingCity: formData.shippingSameAsBilling ? formData.city : formData.shippingCity,
-        shippingState: formData.shippingSameAsBilling ? formData.state : formData.shippingState,
-        shippingPostcode: formData.shippingSameAsBilling ? formData.postcode : formData.shippingPostcode,
-        shippingCountry: formData.shippingCountry,
-        shippingTelephone: formData.shippingSameAsBilling ? formData.telephone : formData.shippingTelephone,
-        newsletter: formData.newsletter,
+        email: payload.email,
+        password: payload.password,
+        fullName: payload.fullName,
+        hearAboutUs: payload.hearAboutUs,
+        streetAddress: payload.streetAddress,
+        addressLine2: payload.addressLine2 || undefined,
+        city: payload.city,
+        state: payload.state,
+        postcode: payload.postcode,
+        telephone: payload.telephone,
+        shippingSameAsBilling: payload.shippingSameAsBilling,
+        shippingStreetAddress: payload.shippingSameAsBilling ? payload.streetAddress : payload.shippingStreetAddress,
+        shippingAddressLine2: payload.shippingSameAsBilling ? (payload.addressLine2 || undefined) : (payload.shippingAddressLine2 || undefined),
+        shippingCity: payload.shippingSameAsBilling ? payload.city : payload.shippingCity,
+        shippingState: payload.shippingSameAsBilling ? payload.state : payload.shippingState,
+        shippingPostcode: payload.shippingSameAsBilling ? payload.postcode : payload.shippingPostcode,
+        shippingCountry: payload.shippingCountry,
+        shippingTelephone: payload.shippingSameAsBilling ? payload.telephone : payload.shippingTelephone,
+        newsletter: payload.newsletter,
+        termsAccepted: payload.termsAccepted,
       });
 
       // Store token and user info
@@ -149,8 +191,8 @@ export default function RegisterPage() {
         
         // Store email and password temporarily for login form pre-fill
         // (Only if registration was successful and user might need to login again)
-        localStorage.setItem("registeredEmail", formData.email);
-        localStorage.setItem("registeredPassword", formData.password);
+        localStorage.setItem("registeredEmail", payload.email);
+        localStorage.setItem("registeredPassword", payload.password);
         
         setSuccess(response.message || "Registration successful! Redirecting to home page...");
         toast.success(response.message || "Registration successful!");
@@ -159,22 +201,26 @@ export default function RegisterPage() {
           router.push("/");
         }, 1500);
       }
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error("Registration error:", err);
       let msg: string;
-      if (err.message?.includes("Failed to fetch") || err.message?.includes("NetworkError")) {
+      const errorMessage = err instanceof Error ? err.message : "";
+      if (errorMessage.includes("Failed to fetch") || errorMessage.includes("NetworkError")) {
         msg = "Cannot connect to server. Check your connection and that the API is running.";
-      } else if (err.message?.includes("Email already registered")) {
+      } else if (errorMessage.includes("Email already registered")) {
         msg = "This email is already registered. Please use a different email or try logging in.";
-      } else if (err.message?.includes("Missing required fields")) {
+      } else if (errorMessage.includes("Missing required fields")) {
         msg = "Please fill in all required fields.";
-      } else if (err.message?.includes("Password must be at least")) {
+      } else if (errorMessage.includes("Please accept the terms and conditions")) {
+        msg = "Please accept the terms and conditions.";
+      } else if (errorMessage.includes("Password must be at least")) {
         msg = "Password must be at least 6 characters long.";
+      } else if (errorMessage.includes("uppercase letter and one number")) {
+        msg = "Password must include at least one uppercase letter and one number.";
       } else {
-        msg = err.message || "Registration failed. Please check your connection and try again.";
+        msg = errorMessage || "Registration failed. Please check your connection and try again.";
       }
-      setError(msg);
-      toast.error(msg);
+      showFormError(msg);
     } finally {
       setLoading(false);
     }
@@ -289,7 +335,7 @@ export default function RegisterPage() {
                     name="email"
                     value={formData.email}
                     onChange={handleChange}
-                     placeholder="Email"
+                    placeholder="Email"
                     className={inputClass}
                     required
                   />
@@ -402,7 +448,6 @@ export default function RegisterPage() {
               </div>
             </div>
 
-           
           </div>
 
           {/* Divider */}
@@ -726,6 +771,21 @@ export default function RegisterPage() {
               />
               <label htmlFor="newsletter" className="ml-2 text-slate-700 text-sm">
                 I would like to receive website email newsletters
+              </label>
+            </div>
+
+            <div className="flex items-center">
+              <input
+                type="checkbox"
+                id="termsAccepted"
+                name="termsAccepted"
+                checked={formData.termsAccepted}
+                onChange={handleChange}
+                className="w-4 h-4 text-blue-600 border-gray-300 rounded text-black focus:ring-blue-500"
+                required
+              />
+              <label htmlFor="termsAccepted" className="ml-2 text-slate-700 text-sm">
+                I agree to the Terms and Conditions <span className="text-red-500">*</span>
               </label>
             </div>
 
