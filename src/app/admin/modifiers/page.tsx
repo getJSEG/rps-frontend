@@ -217,11 +217,15 @@ export default function AdminModifiersPage() {
                     <label className="text-xs text-slate-600">Input type</label>
                     <select
                       className="mt-1 w-full rounded border px-2 py-1 text-sm"
-                      value={editorGroup.input_type || "dropdown"}
+                      value={
+                        editorGroup.input_type === "radio"
+                          ? "dropdown"
+                          : editorGroup.input_type || "dropdown"
+                      }
                       onChange={(e) => setEditorGroup((prev) => ({ ...prev, input_type: e.target.value }))}
                     >
                       <option value="dropdown">Dropdown</option>
-                      <option value="radio">Radio</option>
+                      {/* Radio option omitted in UI until storefront supports input_type radio */}
                     </select>
                   </div>
                   <div className="mt-2 space-y-2">
