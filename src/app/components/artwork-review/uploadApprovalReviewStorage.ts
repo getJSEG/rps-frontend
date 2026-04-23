@@ -55,6 +55,7 @@ export type StoredPendingJobLine = {
   /** For ratio checks when switching jobs on the review page */
   requiredWidthIn?: number | null;
   requiredHeightIn?: number | null;
+  isGraphicScenario?: boolean;
   orderedAtLabel?: string;
 };
 
@@ -79,6 +80,7 @@ export type StoredUploadReviewContext = {
   /** Required print size (inches) from order line — used for client-side ratio check. */
   requiredWidthIn?: number;
   requiredHeightIn?: number;
+  isGraphicScenario?: boolean;
   /** Display strings for error page */
   uploadedGraphicLabel?: string;
   requiredGraphicLabel?: string;
@@ -122,6 +124,7 @@ export function reviewContextFromPendingLine(row: StoredPendingJobLine): StoredU
     orderItemId: row.orderItemId,
     requiredWidthIn: rw ?? undefined,
     requiredHeightIn: rh ?? undefined,
+    isGraphicScenario: row.isGraphicScenario === true,
     requiredGraphicLabel: requiredGraphicLabelFromPendingLine(row),
     uploadedGraphicLabel: "Not uploaded yet",
     fileName: REVIEW_PLACEHOLDER_FILE_NAME,

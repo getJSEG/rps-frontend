@@ -47,6 +47,7 @@ export default function ArtworkReviewErrorClient() {
   const [requiredLabel, setRequiredLabel] = useState(
     `${ARTWORK_REVIEW_DEMO.requiredInches.w}" × ${ARTWORK_REVIEW_DEMO.requiredInches.h}"`
   );
+  const [isGraphicScenario, setIsGraphicScenario] = useState(false);
   const [hydrated, setHydrated] = useState(false);
   const [sidebarJobs, setSidebarJobs] = useState<StoredPendingJobLine[] | null>(null);
   const [activeOrderItemId, setActiveOrderItemId] = useState<number | null>(null);
@@ -86,6 +87,7 @@ export default function ArtworkReviewErrorClient() {
         ? ctx.requiredGraphicLabel.trim()
         : `${ARTWORK_REVIEW_DEMO.requiredInches.w}" × ${ARTWORK_REVIEW_DEMO.requiredInches.h}"`
     );
+    setIsGraphicScenario(ctx.isGraphicScenario === true);
     const oi = ctx.orderItemId;
     setActiveOrderItemId(typeof oi === "number" && Number.isFinite(oi) && oi > 0 ? oi : null);
     setActiveJobIdLabel(ctx.jobIdLabel?.trim() || undefined);
@@ -108,6 +110,7 @@ export default function ArtworkReviewErrorClient() {
         if (parsed.requiredGraphicLabel?.trim() && parsed.requiredGraphicLabel !== "—") {
           setRequiredLabel(parsed.requiredGraphicLabel.trim());
         }
+        setIsGraphicScenario(parsed.isGraphicScenario === true);
         const oi = parsed.orderItemId;
         setActiveOrderItemId(
           typeof oi === "number" && Number.isFinite(oi) && oi > 0 ? oi : null
@@ -158,6 +161,7 @@ export default function ArtworkReviewErrorClient() {
         previewMime={previewMime}
         uploadedGraphicLabel={uploadedLabel}
         requiredGraphicLabel={requiredLabel}
+        isGraphicScenario={isGraphicScenario}
       />
     </ArtworkReviewShell>
   );

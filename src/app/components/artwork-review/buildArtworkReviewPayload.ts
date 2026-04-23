@@ -24,6 +24,7 @@ export type ArtworkJobFields = {
   quantity: number;
   requiredWidthIn: number | null;
   requiredHeightIn: number | null;
+  isGraphicScenario?: boolean;
   orderId?: number;
   orderItemId?: number;
   guestTrackingToken?: string;
@@ -50,7 +51,13 @@ export async function buildArtworkReviewPayload(
   const meta = await extractUploadFileMetadata(file);
   const previewMime =
     meta.mimeType || (file.type || "").trim() || guessMimeFromFileName(file.name);
-  const proportion = assessArtworkProportionFromMetadata(meta, job.requiredWidthIn, job.requiredHeightIn);
+  const proportion = job.isGraphicScenario
+    ? {
+        ok: true,
+        uploadedLabel: meta.widthPx && meta.heightPx ? `${meta.widthPx} × ${meta.heightPx}` : "—",
+        requiredLabel: "—",
+      }
+    : assessArtworkProportionFromMetadata(meta, job.requiredWidthIn, job.requiredHeightIn);
 
   const reqW = coercePositiveInch(job.requiredWidthIn);
   const reqH = coercePositiveInch(job.requiredHeightIn);
@@ -73,6 +80,7 @@ export async function buildArtworkReviewPayload(
       : {}),
     requiredWidthIn: reqW ?? undefined,
     requiredHeightIn: reqH ?? undefined,
+    isGraphicScenario: job.isGraphicScenario === true,
     uploadedGraphicLabel: proportion.uploadedLabel,
     requiredGraphicLabel: proportion.requiredLabel,
     ...(meta.widthPx != null &&
@@ -148,6 +156,7 @@ function contextToJob(ctx: StoredUploadReviewContext): ArtworkJobFields {
       typeof ctx.quantity === "number" && Number.isFinite(ctx.quantity) ? ctx.quantity : 1,
     requiredWidthIn: coercePositiveInch(ctx.requiredWidthIn),
     requiredHeightIn: coercePositiveInch(ctx.requiredHeightIn),
+    isGraphicScenario: ctx.isGraphicScenario === true,
     orderId:
       ctx.orderId != null && Number.isFinite(ctx.orderId) && ctx.orderId > 0 ? ctx.orderId : undefined,
     orderItemId:

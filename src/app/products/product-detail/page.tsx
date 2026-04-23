@@ -162,6 +162,10 @@ function inferPricingModeForProduct(product: Product | null): "fixed" | "area" {
   return "fixed";
 }
 
+function modifierOptionValue(option: { value?: string; label?: string } | null | undefined): string {
+  return String(option?.value || option?.label || "").trim();
+}
+
 interface SavedAddress {
   id: number;
   street_address: string;
@@ -345,6 +349,15 @@ function ProductDetailContent() {
     }
   );
 
+  const missingRequiredModifiers = activeModifierGroups
+    .filter((group) => group.is_required)
+    .filter((group) => {
+      const selectedValue = String(selectedModifiers[group.key] || "").trim();
+      if (!selectedValue) return true;
+      const options = Array.isArray(group.options) ? group.options : [];
+      return !options.some((o) => modifierOptionValue(o) === selectedValue);
+    });
+
   // Fetch product data - Reset and fetch when productId changes
   useEffect(() => {
     const fetchProduct = async () => {
@@ -436,7 +449,8 @@ function ProductDetailContent() {
     for (const g of groups) {
       const options = Array.isArray(g.options) ? g.options : [];
       const def = options.find((o) => o.is_default);
-      if (def?.value) defaults[String(g.key)] = String(def.value);
+      const defValue = modifierOptionValue(def);
+      if (defValue) defaults[String(g.key)] = defValue;
     }
     setSelectedModifiers(defaults);
   }, [product, selectedGraphicMode]);
@@ -561,6 +575,10 @@ function ProductDetailContent() {
       setPreviewPricing(null);
       return;
     }
+    if (missingRequiredModifiers.length > 0) {
+      setPreviewPricing(null);
+      return;
+    }
     let cancelled = false;
     const timer = setTimeout(async () => {
       try {
@@ -584,7 +602,7 @@ function ProductDetailContent() {
       cancelled = true;
       clearTimeout(timer);
     };
-  }, [productId, product, width, height, selectedModifiers, isGraphicScenario, selectedGraphicMode]);
+  }, [productId, product, width, height, selectedModifiers, isGraphicScenario, selectedGraphicMode, missingRequiredModifiers.length]);
 
   // Calculate displayed pricing (server preview preferred, fallback mirrors product mode)
   const widthInches = previewPricing?.width ?? (parseFloat(width) || 0);
@@ -604,7 +622,7 @@ function ProductDetailContent() {
       const selectedValue = String(selectedModifiers[group.key] || "");
       if (!selectedValue) return sum;
       const options = Array.isArray(group.options) ? group.options : [];
-      const selectedOption = options.find((o) => String(o.value || "") === selectedValue);
+      const selectedOption = options.find((o) => modifierOptionValue(o) === selectedValue);
       const adjustment = Number(selectedOption?.price_adjustment ?? 0);
       return sum + (Number.isFinite(adjustment) ? adjustment : 0);
     },
@@ -649,6 +667,12 @@ function ProductDetailContent() {
     }
     if (!isGraphicScenario && (widthInches <= 0 || heightInches <= 0)) {
       setMessage("❌ Error: Width and Height must be greater than 0");
+      setTimeout(() => setMessage(""), 5000);
+      return;
+    }
+    if (missingRequiredModifiers.length > 0) {
+      const firstMissing = missingRequiredModifiers[0];
+      setMessage(`❌ Error: Please select ${firstMissing.name || firstMissing.key}`);
       setTimeout(() => setMessage(""), 5000);
       return;
     }
@@ -1095,11 +1119,7 @@ function ProductDetailContent() {
                         Size: {widthInches} in × {heightInches} in ({(widthInches / 12).toFixed(2)} ft ×{" "}
                         {(heightInches / 12).toFixed(2)} ft)
                       </p>
-                    ) : (
-                      <p className="text-sm text-gray-600 mt-1">
-                        Graphic mode pricing (fixed base + selected options)
-                      </p>
-                    )}
+                    ) : null}
                     {previewPricing?.minApplied ? (
                       <p className="text-xs text-amber-700 mt-1">Minimum charge applied.</p>
                     ) : null}
@@ -1178,7 +1198,7 @@ function ProductDetailContent() {
             {activeModifierGroups.length > 0 ? (
               <div className="mb-6 p-4 border border-gray-200 rounded-lg">
                 <div className="space-y-3">
-                  {String(product?.material || "").trim() ? (
+                  {!isGraphicScenario && String(product?.material || "").trim() ? (
                     <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-4">
                       <label className="text-sm font-medium text-gray-700 sm:min-w-[140px]">Material</label>
                       <div className="w-full sm:min-w-[320px] sm:flex-1 rounded-lg border border-gray-300 bg-gray-50 px-3 py-1.5 text-sm text-gray-900">
@@ -1189,11 +1209,13 @@ function ProductDetailContent() {
                   {activeModifierGroups.map((group) => {
                     const options = Array.isArray(group.options) ? group.options : [];
                     const selectedValue = String(selectedModifiers[group.key] || "");
-                    const selectedOption = options.find((o) => String(o.value || "") === selectedValue);
+                    const selectedOption = options.find((o) => modifierOptionValue(o) === selectedValue);
                     const selectedLabel = selectedOption
-                      ? String(selectedOption.value || "") !== String(selectedOption.label || "")
-                        ? `${selectedOption.label} - ${selectedOption.value}`
-                        : String(selectedOption?.label || selectedOption?.value || "Select option")
+                      ? (() => {
+                          const value = modifierOptionValue(selectedOption);
+                          const label = String(selectedOption.label || "").trim();
+                          return value && value !== label ? `${label} - ${value}` : String(label || value || "Select option");
+                        })()
                       : "Select option";
                     return (
                       <div key={group.key} className="flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-4">
@@ -1238,7 +1260,7 @@ function ProductDetailContent() {
                                 </button>
                               ) : null}
                               {options.map((opt, idx) => {
-                                const optValue = String(opt.value || "");
+                                const optValue = modifierOptionValue(opt);
                                 const displayLeft =
                                   optValue && optValue !== String(opt.label || "")
                                     ? `${opt.label} - ${optValue}`
