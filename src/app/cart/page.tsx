@@ -52,7 +52,46 @@ interface CartItem {
   userName?: string;
   userId?: number;
   print_size_label?: string;
+  selectedModifiers?: Record<string, string>;
+  selected_modifiers?: Array<{
+    group_key: string;
+    group_name: string;
+    option_value: string;
+    option_label: string;
+    price_adjustment?: number;
+  }>;
+  pricing_snapshot?: {
+    selection_mode?: string;
+    graphic_scenario_enabled?: boolean;
+    selected_modifiers?: Array<{
+      group_key: string;
+      group_name: string;
+      option_value: string;
+      option_label: string;
+      price_adjustment?: number;
+    }>;
+  };
   [key: string]: any;
+}
+
+function selectedModifiersForCartItem(item: CartItem): Array<{
+  group_key: string;
+  group_name: string;
+  option_value: string;
+  option_label: string;
+  price_adjustment?: number;
+}> {
+  const selected =
+    (Array.isArray(item.selected_modifiers) && item.selected_modifiers) ||
+    (Array.isArray(item.selectedModifiers) && item.selectedModifiers) ||
+    (Array.isArray(item.pricing_snapshot?.selected_modifiers) && item.pricing_snapshot?.selected_modifiers) ||
+    (Array.isArray((item.pricing_snapshot as any)?.selectedModifiers) &&
+      (item.pricing_snapshot as any)?.selectedModifiers) ||
+    [];
+  return selected.filter(
+    (s: { option_label?: string; option_value?: string }) =>
+      !!String(s?.option_label || s?.option_value || "").trim()
+  );
 }
 
 function isStorePickupMode(mode: unknown): boolean {
@@ -66,6 +105,25 @@ function isStorePickupItem(item: CartItem): boolean {
     isStorePickupMode(item.shipping) ||
     (item.storePickupAddressId != null && String(item.storePickupAddressId) !== "")
   );
+}
+
+function isGraphicScenarioItem(item: CartItem): boolean {
+  const selectionMode =
+    String(item.selection_mode || item.selectionMode || item.pricing_snapshot?.selection_mode || "").trim().toLowerCase();
+  const graphicFlag =
+    item.graphic_scenario_enabled === true ||
+    item.graphicScenarioEnabled === true ||
+    item.pricing_snapshot?.graphic_scenario_enabled === true;
+  return graphicFlag || selectionMode === "graphic_only" || selectionMode === "graphic_frame";
+}
+
+function graphicSelectionLabel(item: CartItem): string | null {
+  const mode = String(item.selection_mode || item.selectionMode || item.pricing_snapshot?.selection_mode || "")
+    .trim()
+    .toLowerCase();
+  if (mode === "graphic_only") return "Graphic";
+  if (mode === "graphic_frame") return "Graphic + Frame";
+  return null;
 }
 
 /** Subtotal for one cart row (sums job lines when `jobs` is set). */
@@ -231,7 +289,7 @@ export default function CartPage() {
     }
   };
 
-  const calculateTotal = () => orderSummary?.total ?? subtotalSum + shippingSum;
+  const roundMoney2 = (n: number) => Math.round((Number(n) || 0) * 100) / 100;
 
   if (loading) {
     return (
@@ -286,10 +344,11 @@ export default function CartPage() {
     shippingRates,
     storePickupOrder
   );
-  const shownSubtotal = orderSummary?.subtotal ?? subtotalSum;
-  const shownShipping = orderSummary?.shipping ?? shippingSum;
-  const shownTax = orderSummary?.taxAmount ?? 0;
-  const shownTaxPercentage = orderSummary?.taxPercentage ?? 0;
+  const shownSubtotal = roundMoney2(subtotalSum);
+  const shownShipping = roundMoney2(shippingSum);
+  const shownTaxPercentage = Number(orderSummary?.taxPercentage ?? 0);
+  const shownTax = roundMoney2(((shownSubtotal + shownShipping) * shownTaxPercentage) / 100);
+  const shownTotal = roundMoney2(shownSubtotal + shownShipping + shownTax);
 
   return (
     <>
@@ -382,8 +441,12 @@ export default function CartPage() {
                           <p className="mt-1 text-xs text-gray-500">
                             Added {item.timestamp ? new Date(item.timestamp).toLocaleString('en-US', { weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }) : '—'}
                           </p>
+                          {graphicSelectionLabel(item) ? (
+                            <p className="mt-1 text-xs font-medium text-sky-700">{graphicSelectionLabel(item)}</p>
+                          ) : null}
                         </div>
-                        {(item.width > 0 && item.height > 0) || (item.print_size_label && String(item.print_size_label).trim()) ? (
+                        {!isGraphicScenarioItem(item) &&
+                        ((item.width > 0 && item.height > 0) || (item.print_size_label && String(item.print_size_label).trim())) ? (
                           <div className="shrink-0 rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-right">
                             <p className="text-[10px] font-semibold uppercase tracking-wide text-gray-500">Print size</p>
                             <p className="text-sm font-semibold tabular-nums text-gray-900">
@@ -399,6 +462,22 @@ export default function CartPage() {
                       </div>
 
                       <div className="text-sm text-gray-600">
+                        {(() => {
+                          const selected = selectedModifiersForCartItem(item);
+                          if (!selected.length) return null;
+                          return (
+                            <div className="mb-3 rounded-lg border border-gray-100 bg-gray-50/80 px-3 py-2.5 sm:px-3.5 sm:py-3">
+                              <ul className="space-y-1 text-xs text-gray-700 sm:text-[13px]">
+                                {selected.map((s, idx) => (
+                                  <li key={`${s.group_key}-${s.option_value}-${idx}`}>
+                                    <span className="font-medium">{s.group_name}:</span>{" "}
+                                    <span>{s.option_label || s.option_value}</span>
+                                  </li>
+                                ))}
+                              </ul>
+                            </div>
+                          );
+                        })()}
                         {Array.isArray(item.jobs) && item.jobs.length > 0 ? (
                           <div className="rounded-lg border border-gray-100 bg-gray-50/80 p-3 sm:p-4">
                             <p className="mb-2 text-sm font-semibold text-gray-900">Jobs ({item.jobs.length})</p>
@@ -535,7 +614,7 @@ export default function CartPage() {
                       <span className="text-sm font-medium text-gray-700">
                         Total ({cartItems.length} {cartItems.length === 1 ? "line" : "lines"})
                       </span>
-                      <span className="text-lg font-bold tabular-nums text-gray-900">${calculateTotal().toFixed(2)}</span>
+                      <span className="text-lg font-bold tabular-nums text-gray-900">${shownTotal.toFixed(2)}</span>
                     </div>
                   </div>
                   <button

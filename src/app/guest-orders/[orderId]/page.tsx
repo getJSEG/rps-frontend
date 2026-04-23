@@ -29,8 +29,29 @@ type OrderItem = {
   width_inches?: number | string | null;
   height_inches?: number | string | null;
   image_url?: string | null;
+  selection_mode?: "graphic_only" | "graphic_frame" | null;
+  graphic_scenario_enabled?: boolean | null;
   customer_artwork_url?: string | null;
+  selected_modifiers?: Array<{
+    group_key?: string | null;
+    group_name?: string | null;
+    option_value?: string | null;
+    option_label?: string | null;
+  }> | null;
+  selectedModifiers?: Array<{
+    group_key?: string | null;
+    group_name?: string | null;
+    option_value?: string | null;
+    option_label?: string | null;
+  }> | null;
 };
+
+function lineGraphicSelectionLabel(item: OrderItem): string | null {
+  const mode = String(item.selection_mode || "").trim().toLowerCase();
+  if (mode === "graphic_only") return "Graphic";
+  if (mode === "graphic_frame") return "Graphic + Frame";
+  return null;
+}
 
 type GuestOrder = {
   id: number;
@@ -63,6 +84,22 @@ function canRequestCancellation(status: string | null | undefined): boolean {
   return s === "awaiting_artwork" || s === "on_hold" || s === "awaiting_customer_approval";
 }
 
+function lineSelectedModifiers(item: OrderItem): Array<{
+  group_name: string;
+  option_label: string;
+}> {
+  const raw =
+    (Array.isArray(item.selected_modifiers) && item.selected_modifiers) ||
+    (Array.isArray(item.selectedModifiers) && item.selectedModifiers) ||
+    [];
+  return raw
+    .map((m) => ({
+      group_name: String(m?.group_name || m?.group_key || "").trim(),
+      option_label: String(m?.option_label || m?.option_value || "").trim(),
+    }))
+    .filter((m) => m.group_name && m.option_label);
+}
+
 function GuestOrderTrackInner() {
   const router = useRouter();
   const params = useParams<{ orderId: string }>();
@@ -80,6 +117,7 @@ function GuestOrderTrackInner() {
   const [cancelBusy, setCancelBusy] = useState(false);
   const [cancelMsg, setCancelMsg] = useState<string | null>(null);
   const [confirmCancelOpen, setConfirmCancelOpen] = useState(false);
+  const [expandedModifierLines, setExpandedModifierLines] = useState<Record<string, boolean>>({});
   /** Which order line is opening the upload flow (prevents double navigation). */
   const [uploadBusyItemId, setUploadBusyItemId] = useState<number | null>(null);
 
@@ -158,6 +196,10 @@ function GuestOrderTrackInner() {
         setUploadBusyItemId(null);
       }
     })();
+  };
+
+  const toggleModifierLine = (lineKey: string) => {
+    setExpandedModifierLines((prev) => ({ ...prev, [lineKey]: !prev[lineKey] }));
   };
 
   const submitCancellationRequest = async () => {
@@ -297,6 +339,13 @@ function GuestOrderTrackInner() {
               ) : (
                 <div className="space-y-2">
                   {order.items.map((item, idx) => {
+                    const selectedMods = lineSelectedModifiers(item);
+                    const lineKey = String(item.id ?? idx);
+                    const modifiersOpen = !!expandedModifierLines[lineKey];
+                    const visibleModifiers =
+                      selectedMods.length > 2 && !modifiersOpen
+                        ? selectedMods.slice(0, 2)
+                        : selectedMods;
                     const itemIdNum =
                       item.id != null && Number.isFinite(Number(item.id)) ? Number(item.id) : null;
                     const showRowUpload =
@@ -313,8 +362,30 @@ function GuestOrderTrackInner() {
                     >
                       <div className="min-w-0 sm:justify-self-start">
                         <p className="font-medium text-gray-900">{item.product_name || "Item"}</p>
+                        {lineGraphicSelectionLabel(item) ? (
+                          <p className="text-xs font-medium text-sky-700">{lineGraphicSelectionLabel(item)}</p>
+                        ) : null}
                         {item.job_name && <p className="text-xs text-gray-500">Job: {item.job_name}</p>}
                         <p className="text-xs text-gray-500">Qty: {item.quantity ?? "—"}</p>
+                        {selectedMods.length > 0 ? (
+                          <ul className="mt-1 space-y-0.5 text-xs text-gray-500">
+                            {visibleModifiers.map((m, mIdx) => (
+                              <li key={`${item.id ?? idx}-mod-${mIdx}`}>
+                                {m.group_name}: {m.option_label}
+                              </li>
+                            ))}
+                          </ul>
+                        ) : null}
+                        {selectedMods.length > 2 ? (
+                          <button
+                            type="button"
+                            onClick={() => toggleModifierLine(lineKey)}
+                            className="mt-1 inline-flex items-center gap-1 text-xs font-medium text-[#0B6BCB] hover:text-[#0959a8]"
+                          >
+                            <span aria-hidden>{modifiersOpen ? "▴" : "▾"}</span>
+                            {modifiersOpen ? "Show less" : `Show ${selectedMods.length - 2} more`}
+                          </button>
+                        ) : null}
                       </div>
                       <div className="flex flex-col items-center justify-center justify-self-center gap-2 sm:min-w-[10rem] sm:px-2">
                         {showRowUpload ? (

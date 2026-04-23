@@ -49,7 +49,30 @@ type OrderItem = {
   width_inches?: number | string | null;
   height_inches?: number | string | null;
   customer_artwork_url?: string | null;
+  selection_mode?: "graphic_only" | "graphic_frame" | null;
+  graphic_scenario_enabled?: boolean | null;
+  selected_modifiers?: Array<{
+    group_key?: string | null;
+    group_name?: string | null;
+    option_value?: string | null;
+    option_label?: string | null;
+    price_adjustment?: number | string | null;
+  }> | null;
+  selectedModifiers?: Array<{
+    group_key?: string | null;
+    group_name?: string | null;
+    option_value?: string | null;
+    option_label?: string | null;
+    price_adjustment?: number | string | null;
+  }> | null;
 };
+
+function lineGraphicSelectionLabel(item: OrderItem): string | null {
+  const mode = String(item.selection_mode || "").trim().toLowerCase();
+  if (mode === "graphic_only") return "Graphic";
+  if (mode === "graphic_frame") return "Graphic + Frame";
+  return null;
+}
 
 type OrderRow = {
   id: number;
@@ -126,6 +149,22 @@ function formatPaymentMethod(method: string | null | undefined): string {
   if (m === "stripe") return "Card (Stripe)";
   if (m === "manual") return "Manual / test checkout";
   return formatStatus(method);
+}
+
+function lineSelectedModifiers(item: OrderItem): Array<{
+  group_name: string;
+  option_label: string;
+}> {
+  const raw =
+    (Array.isArray(item.selected_modifiers) && item.selected_modifiers) ||
+    (Array.isArray(item.selectedModifiers) && item.selectedModifiers) ||
+    [];
+  return raw
+    .map((m) => ({
+      group_name: String(m?.group_name || m?.group_key || "").trim(),
+      option_label: String(m?.option_label || m?.option_value || "").trim(),
+    }))
+    .filter((m) => m.group_name && m.option_label);
 }
 
 function statusBadgeClass(status: string | null | undefined): string {
@@ -349,6 +388,7 @@ export default function Orders() {
   const [authReady, setAuthReady] = useState(false);
   const [loggedIn, setLoggedIn] = useState(false);
   const [expanded, setExpanded] = useState<Record<number, boolean>>({});
+  const [expandedModifierLines, setExpandedModifierLines] = useState<Record<string, boolean>>({});
   const [requestingCancellationId, setRequestingCancellationId] = useState<number | null>(null);
   const [confirmCancellationId, setConfirmCancellationId] = useState<number | null>(null);
 
@@ -438,6 +478,10 @@ export default function Orders() {
 
   const toggleExpanded = (id: number) => {
     setExpanded((prev) => ({ ...prev, [id]: !prev[id] }));
+  };
+
+  const toggleModifierLine = (lineKey: string) => {
+    setExpandedModifierLines((prev) => ({ ...prev, [lineKey]: !prev[lineKey] }));
   };
 
   const requestCancellation = async (orderId: number) => {
@@ -805,7 +849,13 @@ export default function Orders() {
                               <tbody>
                                 {items.map((it) => {
                                   const sizeLine = formatLineSizeInches(it.width_inches, it.height_inches);
+                                  const selectedMods = lineSelectedModifiers(it);
                                   const lineKey = it.id ?? `${order.id}-${it.product_name}`;
+                                  const modifiersOpen = !!expandedModifierLines[String(lineKey)];
+                                  const visibleModifiers =
+                                    selectedMods.length > 2 && !modifiersOpen
+                                      ? selectedMods.slice(0, 2)
+                                      : selectedMods;
                                   return (
                                     <tr
                                       key={lineKey}
@@ -818,11 +868,35 @@ export default function Orders() {
                                         <p className="font-medium break-words text-gray-900 [overflow-wrap:anywhere]">
                                           {it.product_name || "Item"}
                                         </p>
+                                        {lineGraphicSelectionLabel(it) ? (
+                                          <p className="mt-0.5 text-xs font-medium text-sky-700">
+                                            {lineGraphicSelectionLabel(it)}
+                                          </p>
+                                        ) : null}
                                         {it.job_name ? (
                                           <p className="mt-0.5 text-xs text-gray-500">Job: {it.job_name}</p>
                                         ) : null}
                                         {sizeLine ? (
                                           <p className="mt-0.5 text-xs text-gray-500">Size: {sizeLine}</p>
+                                        ) : null}
+                                        {selectedMods.length > 0 ? (
+                                          <ul className="mt-1 space-y-0.5 text-xs text-gray-500">
+                                            {visibleModifiers.map((m, idx) => (
+                                              <li key={`${lineKey}-mod-${idx}`}>
+                                                {m.group_name}: {m.option_label}
+                                              </li>
+                                            ))}
+                                          </ul>
+                                        ) : null}
+                                        {selectedMods.length > 2 ? (
+                                          <button
+                                            type="button"
+                                            onClick={() => toggleModifierLine(String(lineKey))}
+                                            className="mt-1 inline-flex items-center gap-1 text-xs font-medium text-[#0B6BCB] hover:text-[#0959a8]"
+                                          >
+                                            <span aria-hidden>{modifiersOpen ? "▴" : "▾"}</span>
+                                            {modifiersOpen ? "Show less" : `Show ${selectedMods.length - 2} more`}
+                                          </button>
                                         ) : null}
                                       </td>
                                       <td className="px-3 py-3 align-top text-slate-700">

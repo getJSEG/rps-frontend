@@ -36,6 +36,22 @@ interface OrderItem {
   customer_artwork_url?: string | null;
   /** Some API responses use camelCase; normalized to `customer_artwork_url` when order loads. */
   customerArtworkUrl?: string | null;
+  selection_mode?: "graphic_only" | "graphic_frame" | null;
+  graphic_scenario_enabled?: boolean | null;
+  selected_modifiers?: Array<{
+    group_key?: string | null;
+    group_name?: string | null;
+    option_value?: string | null;
+    option_label?: string | null;
+    price_adjustment?: number | string | null;
+  }>;
+}
+
+function lineGraphicSelectionLabel(item: OrderItem): string | null {
+  const mode = String(item.selection_mode || "").trim().toLowerCase();
+  if (mode === "graphic_only") return "Graphic";
+  if (mode === "graphic_frame") return "Graphic + Frame";
+  return null;
 }
 
 interface GuestCheckoutShape {
@@ -133,6 +149,24 @@ function formatSizeWxH(w: unknown, h: unknown): string {
   if (!Number.isFinite(nw) || !Number.isFinite(nh) || nw <= 0 || nh <= 0) return "—";
   const fmt = (n: number) => (Number.isInteger(n) ? String(n) : n.toFixed(2).replace(/\.?0+$/, ""));
   return `${fmt(nw)}" × ${fmt(nh)}"`;
+}
+
+function formatSizeForOrderLine(item: OrderItem): string {
+  if (lineGraphicSelectionLabel(item)) return "—";
+  return formatSizeWxH(item.width_inches, item.height_inches);
+}
+
+function lineSelectedModifiers(item: OrderItem): Array<{
+  group_name: string;
+  option_label: string;
+}> {
+  const raw = Array.isArray(item.selected_modifiers) ? item.selected_modifiers : [];
+  return raw
+    .map((m) => ({
+      group_name: String(m?.group_name || m?.group_key || "").trim(),
+      option_label: String(m?.option_label || m?.option_value || "").trim(),
+    }))
+    .filter((m) => m.group_name && m.option_label);
 }
 
 function jobArtworkDownloadName(item: OrderItem, href: string): string {
@@ -385,6 +419,7 @@ export default function OrderDetails() {
   const [deleteOrderModalOpen, setDeleteOrderModalOpen] = useState(false);
   const [refundModalOpen, setRefundModalOpen] = useState(false);
   const [processingRefund, setProcessingRefund] = useState(false);
+  const [expandedModifierLines, setExpandedModifierLines] = useState<Record<string, boolean>>({});
 
   const fetchOrder = useCallback(async () => {
     if (!orderId) {
@@ -486,6 +521,16 @@ export default function OrderDetails() {
                     : item.customerArtworkUrl != null && String(item.customerArtworkUrl).trim() !== ""
                       ? String(item.customerArtworkUrl)
                       : null,
+                selected_modifiers: Array.isArray(item.selected_modifiers)
+                  ? (item.selected_modifiers as OrderItem["selected_modifiers"])
+                  : Array.isArray(item.selectedModifiers)
+                    ? (item.selectedModifiers as OrderItem["selected_modifiers"])
+                    : [],
+                selection_mode:
+                  item.selection_mode === "graphic_only" || item.selection_mode === "graphic_frame"
+                    ? (item.selection_mode as OrderItem["selection_mode"])
+                    : undefined,
+                graphic_scenario_enabled: item.graphic_scenario_enabled === true,
               }))
           : [],
         user_email: mergedUserEmail,
@@ -729,6 +774,10 @@ export default function OrderDetails() {
       );
     }
     return <Image src={imgSrc} alt="" width={48} height={48} className="h-12 w-12 rounded-lg object-cover border border-slate-200" unoptimized />;
+  };
+
+  const toggleModifierLine = (lineKey: string) => {
+    setExpandedModifierLines((prev) => ({ ...prev, [lineKey]: !prev[lineKey] }));
   };
 
   if (loading) {
@@ -1298,7 +1347,15 @@ export default function OrderDetails() {
                     </tr>
                   </thead>
                   <tbody>
-                    {order.items.map((item) => (
+                    {order.items.map((item) => {
+                      const lineKey = String(item.id);
+                      const selectedMods = lineSelectedModifiers(item);
+                      const modifiersOpen = !!expandedModifierLines[lineKey];
+                      const visibleModifiers =
+                        selectedMods.length > 2 && !modifiersOpen
+                          ? selectedMods.slice(0, 2)
+                          : selectedMods;
+                      return (
                       <tr key={item.id} className="border-b border-slate-100 align-top hover:bg-slate-50/50">
                         <td className="px-3 py-3 pl-5">{renderThumb(item)}</td>
                         <td className="px-3 py-3 font-medium text-slate-900">
@@ -1312,13 +1369,39 @@ export default function OrderDetails() {
                           {item.product_id && (
                             <span className="mt-0.5 block text-xs font-normal text-slate-500">ID {item.product_id}</span>
                           )}
+                          {lineGraphicSelectionLabel(item) ? (
+                            <span className="mt-0.5 block text-xs font-medium text-sky-700">
+                              {lineGraphicSelectionLabel(item)}
+                            </span>
+                          ) : null}
                         </td>
-                        <td className="px-3 py-3 text-slate-700">{dash(item.job_name)}</td>
+                        <td className="px-3 py-3 text-slate-700">
+                          <span>{dash(item.job_name)}</span>
+                          {selectedMods.length > 0 ? (
+                            <ul className="mt-1 space-y-0.5 text-xs text-slate-500">
+                              {visibleModifiers.map((m, idx) => (
+                                <li key={`${item.id}-mod-${idx}`}>
+                                  {m.group_name}: {m.option_label}
+                                </li>
+                              ))}
+                            </ul>
+                          ) : null}
+                          {selectedMods.length > 2 ? (
+                            <button
+                              type="button"
+                              onClick={() => toggleModifierLine(lineKey)}
+                              className="mt-1 inline-flex items-center gap-1 text-xs font-medium text-sky-700 hover:text-sky-800"
+                            >
+                              <span aria-hidden>{modifiersOpen ? "▴" : "▾"}</span>
+                              {modifiersOpen ? "Show less" : `Show ${selectedMods.length - 2} more`}
+                            </button>
+                          ) : null}
+                        </td>
                         <td className="px-3 py-3 align-top text-slate-700">
                           <JobArtworkDownloadCell item={item} />
                         </td>
                         <td className="px-3 py-3 text-slate-700 tabular-nums whitespace-nowrap">
-                          {formatSizeWxH(item.width_inches, item.height_inches)}
+                          {formatSizeForOrderLine(item)}
                         </td>
                         <td className="px-3 py-3 font-mono text-xs text-slate-600">{dash(item.product_sku)}</td>
                         <td className="px-3 py-3 text-slate-600">
@@ -1332,7 +1415,8 @@ export default function OrderDetails() {
                         <td className="px-3 py-3 text-right tabular-nums">${formatMoney(item.unit_price)}</td>
                         <td className="px-3 py-3 pr-5 text-right font-semibold tabular-nums text-slate-900">${formatMoney(item.total_price)}</td>
                       </tr>
-                    ))}
+                      );
+                    })}
                   </tbody>
                 </table>
               )}
