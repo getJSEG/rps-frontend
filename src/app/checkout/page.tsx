@@ -67,6 +67,16 @@ interface CartItem {
   width?: number;
   height?: number;
   print_size_label?: string;
+  selection_mode?: string;
+  selectionMode?: string;
+  graphic_scenario_enabled?: boolean;
+  graphicScenarioEnabled?: boolean;
+  pricing_snapshot?: {
+    selection_mode?: string;
+    selectionMode?: string;
+    graphic_scenario_enabled?: boolean;
+    graphicScenarioEnabled?: boolean;
+  };
   jobs?: Array<{ jobName?: string; quantity?: number; unitPrice?: number; lineSubtotal?: number }>;
   [key: string]: unknown;
 }
@@ -83,6 +93,25 @@ function checkoutItemLineSubtotal(item: CartItem): number {
     }, 0);
   }
   return (Number(item.unitPrice) || 0) * (Number(item.quantity) || 1);
+}
+
+function isGraphicScenarioCheckoutItem(item: CartItem): boolean {
+  const selectionMode = String(
+    item.selection_mode ??
+      item.selectionMode ??
+      item.pricing_snapshot?.selection_mode ??
+      item.pricing_snapshot?.selectionMode ??
+      ""
+  ).trim();
+  if (selectionMode === "graphic_only" || selectionMode === "graphic_frame") {
+    return true;
+  }
+  return (
+    item.graphic_scenario_enabled === true ||
+    item.graphicScenarioEnabled === true ||
+    item.pricing_snapshot?.graphic_scenario_enabled === true ||
+    item.pricing_snapshot?.graphicScenarioEnabled === true
+  );
 }
 
 interface StripeElementsRef {
@@ -690,6 +719,7 @@ export default function CheckoutPage() {
                 <div className="mb-4 space-y-3 border-b border-gray-200 pb-4">
                   {cartItems.map((item, idx) => {
                     const name = item.productName ?? item.product_name ?? "Product";
+                    const isGraphicScenario = isGraphicScenarioCheckoutItem(item);
                     const w = Number(item.width ?? 0);
                     const h = Number(item.height ?? 0);
                     const pl =
@@ -704,9 +734,11 @@ export default function CheckoutPage() {
                       >
                         <div className="min-w-0 flex-1">
                           <p className="font-medium text-gray-900">{name}</p>
-                          <p className="text-sm text-gray-600">
-                            Size: <span className="tabular-nums text-gray-800">{sizeLine}</span>
-                          </p>
+                          {!isGraphicScenario && (
+                            <p className="text-sm text-gray-600">
+                              Size: <span className="tabular-nums text-gray-800">{sizeLine}</span>
+                            </p>
+                          )}
                         </div>
                         <p className="shrink-0 text-sm font-semibold tabular-nums text-gray-900">
                           ${lineSub.toFixed(2)}

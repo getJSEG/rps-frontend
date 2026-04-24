@@ -64,6 +64,7 @@ interface Product {
   price_per_sqft?: number | string;
   min_charge?: number;
   pricing_mode?: "fixed" | "area";
+  graphic_scenario_enabled?: boolean;
   size_mode?: "predefined" | "custom";
   base_unit?: "inch";
   min_width?: number | null;
@@ -78,11 +79,33 @@ interface Product {
     unit_price: number | null;
     is_default?: boolean;
   }>;
+  modifier_groups?: Array<{
+    key: string;
+    name: string;
+    mode_scope?: "all" | "graphic_only" | "graphic_frame";
+    input_type?: string;
+    is_required?: boolean;
+    options: Array<{
+      value: string;
+      label: string;
+      price_adjustment?: number;
+      is_default?: boolean;
+    }>;
+  }>;
   properties?: ProductProperty[];
 }
 
 interface PreviewPricing {
   unitPrice: number;
+  baseUnitPrice?: number;
+  modifierTotal?: number;
+  selectedModifiers?: Array<{
+    group_key: string;
+    group_name: string;
+    option_value: string;
+    option_label: string;
+    price_adjustment: number;
+  }>;
   width: number;
   height: number;
   areaSqft: number;
@@ -91,6 +114,7 @@ interface PreviewPricing {
   sizeOptionId: number | null;
   sizeOptionLabel: string | null;
   minApplied: boolean;
+  selection_mode?: "graphic_only" | "graphic_frame" | null;
 }
 
 function normalizeProductGalleryImages(product: Product | null): string[] {
@@ -136,6 +160,10 @@ function inferPricingModeForProduct(product: Product | null): "fixed" | "area" {
   const ppsf = Number(product.price_per_sqft);
   if (Number.isFinite(ppsf) && ppsf > 0) return "area";
   return "fixed";
+}
+
+function modifierOptionValue(option: { value?: string; label?: string } | null | undefined): string {
+  return String(option?.value || option?.label || "").trim();
 }
 
 interface SavedAddress {
@@ -239,6 +267,8 @@ interface ProductJobRow {
   quantity: string;
 }
 
+type GraphicSelectionMode = "graphic_only" | "graphic_frame";
+
 function ProductDetailContent() {
   const searchParams = useSearchParams();
   const router = useRouter();
@@ -250,6 +280,9 @@ function ProductDetailContent() {
   const [width, setWidth] = useState("0");
   const [height, setHeight] = useState("0");
   const [previewPricing, setPreviewPricing] = useState<PreviewPricing | null>(null);
+  const [selectedModifiers, setSelectedModifiers] = useState<Record<string, string>>({});
+  const [selectedGraphicMode, setSelectedGraphicMode] = useState<GraphicSelectionMode>("graphic_only");
+  const [openModifierKey, setOpenModifierKey] = useState<string | null>(null);
   const [previewLoading, setPreviewLoading] = useState(false);
   const [jobs, setJobs] = useState<ProductJobRow[]>(() => [
     { id: newProductJobRowId(), jobName: "", quantity: "1" },
@@ -305,6 +338,25 @@ function ProductDetailContent() {
     Number.isFinite(pricePerSqFtNum) && pricePerSqFtNum > 0 ? pricePerSqFtNum : 3.63;
   const minChargeNum = Number(product?.min_charge);
   const minCharge = Number.isFinite(minChargeNum) && minChargeNum >= 0 ? minChargeNum : 8.0;
+  const isGraphicScenario = !!product?.graphic_scenario_enabled;
+  const activeModifierGroups = (Array.isArray(product?.modifier_groups) ? product.modifier_groups : []).filter(
+    (group) => {
+      const scope = String((group as { mode_scope?: string }).mode_scope || "all").toLowerCase();
+      if (!isGraphicScenario) return true;
+      if (scope === "graphic_only") return selectedGraphicMode === "graphic_only";
+      if (scope === "graphic_frame") return selectedGraphicMode === "graphic_frame";
+      return true;
+    }
+  );
+
+  const missingRequiredModifiers = activeModifierGroups
+    .filter((group) => group.is_required)
+    .filter((group) => {
+      const selectedValue = String(selectedModifiers[group.key] || "").trim();
+      if (!selectedValue) return true;
+      const options = Array.isArray(group.options) ? group.options : [];
+      return !options.some((o) => modifierOptionValue(o) === selectedValue);
+    });
 
   // Fetch product data - Reset and fetch when productId changes
   useEffect(() => {
@@ -379,12 +431,39 @@ function ProductDetailContent() {
     setSelectedImageIndex(0);
     setSelectedProductImageIndex(0);
     setSelectedSubcategory(null);
+    setSelectedGraphicMode("graphic_only");
   }, [productId]);
 
   useEffect(() => {
     if (!product) return;
     setPreviewPricing(null);
-  }, [product]);
+    setOpenModifierKey(null);
+    const groups = (Array.isArray(product.modifier_groups) ? product.modifier_groups : []).filter((group) => {
+      const scope = String((group as { mode_scope?: string }).mode_scope || "all").toLowerCase();
+      if (!product.graphic_scenario_enabled) return true;
+      if (scope === "graphic_only") return selectedGraphicMode === "graphic_only";
+      if (scope === "graphic_frame") return selectedGraphicMode === "graphic_frame";
+      return true;
+    });
+    const defaults: Record<string, string> = {};
+    for (const g of groups) {
+      const options = Array.isArray(g.options) ? g.options : [];
+      const def = options.find((o) => o.is_default);
+      const defValue = modifierOptionValue(def);
+      if (defValue) defaults[String(g.key)] = defValue;
+    }
+    setSelectedModifiers(defaults);
+  }, [product, selectedGraphicMode]);
+
+  useEffect(() => {
+    const onDocMouseDown = (event: MouseEvent) => {
+      const target = event.target as HTMLElement | null;
+      if (target?.closest('[data-modifier-dropdown="true"]')) return;
+      setOpenModifierKey(null);
+    };
+    document.addEventListener("mousedown", onDocMouseDown);
+    return () => document.removeEventListener("mousedown", onDocMouseDown);
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -492,7 +571,11 @@ function ProductDetailContent() {
     if (!productId || !product) return;
     const widthInches = parseFloat(width) || 0;
     const heightInches = parseFloat(height) || 0;
-    if (widthInches <= 0 || heightInches <= 0) {
+    if (!isGraphicScenario && (widthInches <= 0 || heightInches <= 0)) {
+      setPreviewPricing(null);
+      return;
+    }
+    if (missingRequiredModifiers.length > 0) {
       setPreviewPricing(null);
       return;
     }
@@ -503,6 +586,8 @@ function ProductDetailContent() {
         const response = await productsAPI.previewPrice(String(productId), {
           width: widthInches,
           height: heightInches,
+          selectedModifiers,
+          selection_mode: isGraphicScenario ? selectedGraphicMode : undefined,
         });
         if (!cancelled && response?.pricing) {
           setPreviewPricing(response.pricing);
@@ -517,7 +602,7 @@ function ProductDetailContent() {
       cancelled = true;
       clearTimeout(timer);
     };
-  }, [productId, product, width, height]);
+  }, [productId, product, width, height, selectedModifiers, isGraphicScenario, selectedGraphicMode, missingRequiredModifiers.length]);
 
   // Calculate displayed pricing (server preview preferred, fallback mirrors product mode)
   const widthInches = previewPricing?.width ?? (parseFloat(width) || 0);
@@ -532,7 +617,24 @@ function ProductDetailContent() {
     productPricingMode === "fixed"
       ? (fallbackFixedFromOption != null ? fallbackFixedFromOption : fallbackFixedFromProduct)
       : fallbackAreaPrice;
-  const unitPrice = previewPricing?.unitPrice ?? fallbackPrice;
+  const selectedModifierTotal = activeModifierGroups.reduce(
+    (sum, group) => {
+      const selectedValue = String(selectedModifiers[group.key] || "");
+      if (!selectedValue) return sum;
+      const options = Array.isArray(group.options) ? group.options : [];
+      const selectedOption = options.find((o) => modifierOptionValue(o) === selectedValue);
+      const adjustment = Number(selectedOption?.price_adjustment ?? 0);
+      return sum + (Number.isFinite(adjustment) ? adjustment : 0);
+    },
+    0
+  );
+  const previewUnitPrice = (isGraphicScenario ? null : previewPricing?.unitPrice) ?? fallbackPrice;
+  const previewModifierTotal = Number(previewPricing?.modifierTotal);
+  const baseUnitBeforeModifiers =
+    isGraphicScenario
+      ? previewUnitPrice
+      : (Number.isFinite(previewModifierTotal) ? previewUnitPrice - previewModifierTotal : previewUnitPrice);
+  const unitPrice = baseUnitBeforeModifiers + selectedModifierTotal;
   const displayPricingMode: "fixed" | "area" = previewPricing?.pricing_mode ?? productPricingMode;
   const jobLines = jobs.map((j) => {
     const qtyNum = Math.max(0, Math.floor(parseFloat(j.quantity) || 0));
@@ -553,18 +655,24 @@ function ProductDetailContent() {
 
   // Handle Add to Cart (logged-in or guest via X-Guest-Session-Id from api.ts)
   const handleAddToCart = async () => {
-    if (!String(width).trim()) {
+    if (!isGraphicScenario && !String(width).trim()) {
       setMessage("❌ Error: Width is required");
       setTimeout(() => setMessage(""), 5000);
       return;
     }
-    if (!String(height).trim()) {
+    if (!isGraphicScenario && !String(height).trim()) {
       setMessage("❌ Error: Height is required");
       setTimeout(() => setMessage(""), 5000);
       return;
     }
-    if (widthInches <= 0 || heightInches <= 0) {
+    if (!isGraphicScenario && (widthInches <= 0 || heightInches <= 0)) {
       setMessage("❌ Error: Width and Height must be greater than 0");
+      setTimeout(() => setMessage(""), 5000);
+      return;
+    }
+    if (missingRequiredModifiers.length > 0) {
+      const firstMissing = missingRequiredModifiers[0];
+      setMessage(`❌ Error: Please select ${firstMissing.name || firstMissing.key}`);
       setTimeout(() => setMessage(""), 5000);
       return;
     }
@@ -626,6 +734,7 @@ function ProductDetailContent() {
         width: widthInches,
         height: heightInches,
         areaSqFt: areaSqFt,
+        selection_mode: isGraphicScenario ? selectedGraphicMode : undefined,
         jobs: jobsPayload,
         quantity: totalQty,
         jobName: legacyJobName,
@@ -648,6 +757,7 @@ function ProductDetailContent() {
         pricePerSqFt: pricePerSqFt,
         minCharge: minCharge,
         material: productMaterial,
+        selectedModifiers,
         pricing_snapshot: previewPricing ?? undefined,
         timestamp: new Date().toISOString()
       };
@@ -990,12 +1100,12 @@ function ProductDetailContent() {
 
             {/* Price */}
             <div className="mb-6">
-                {widthInches > 0 && heightInches > 0 ? (
+                {(isGraphicScenario || (widthInches > 0 && heightInches > 0)) ? (
                   <div>
                     <p className="text-lg font-semibold text-gray-900">
                       ${unitPrice.toFixed(2)}
                     </p>
-                    {displayPricingMode === "area" ? (
+                    {!isGraphicScenario && displayPricingMode === "area" ? (
                       <>
                         <p className="text-sm text-gray-600 mt-1">
                           Based on {widthInches} in × {heightInches} in ({areaSqFt.toFixed(4)} sq ft)
@@ -1004,12 +1114,12 @@ function ProductDetailContent() {
                           Size in feet: {(widthInches / 12).toFixed(2)} ft × {(heightInches / 12).toFixed(2)} ft
                         </p>
                       </>
-                    ) : (
+                    ) : !isGraphicScenario ? (
                       <p className="text-sm text-gray-600 mt-1">
                         Size: {widthInches} in × {heightInches} in ({(widthInches / 12).toFixed(2)} ft ×{" "}
                         {(heightInches / 12).toFixed(2)} ft)
                       </p>
-                    )}
+                    ) : null}
                     {previewPricing?.minApplied ? (
                       <p className="text-xs text-amber-700 mt-1">Minimum charge applied.</p>
                     ) : null}
@@ -1023,41 +1133,179 @@ function ProductDetailContent() {
 
           {/* Right Panel - Configuration and Order */}
           <div className="min-w-0 max-w-full">
-            {/* Size — width & height (inches) */}
-            <div className="mb-6 p-4 border border-gray-200 rounded-lg">
-              <div className="grid grid-cols-2 gap-4 mb-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Width (inches) <span className="text-red-500">*</span>
-                  </label>
-                  <input
-                    type="number"
-                    value={width}
-                    onChange={(e) => setWidth(e.target.value)}
-                    className="w-full px-3 py-2 border border-gray-300 text-black rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    placeholder="0"
-                    min="0"
-                    step="0.01"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Height (inches) <span className="text-red-500">*</span>
-                  </label>
-                  <input
-                    type="number"
-                    value={height}
-                    onChange={(e) => setHeight(e.target.value)}
-                    className="w-full px-3 py-2 border border-gray-300 text-black rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    placeholder="0"
-                    min="0"
-                    step="0.01"
-                  />
+            {isGraphicScenario ? (
+              <div className="mb-6 p-4 border border-gray-200 rounded-lg">
+                <div className="grid grid-cols-2 gap-4">
+                  <button
+                    type="button"
+                    className={`rounded-lg border px-4 py-3 text-sm font-semibold transition ${
+                      selectedGraphicMode === "graphic_frame"
+                        ? "border-sky-500 bg-sky-50 text-sky-800"
+                        : "border-gray-300 bg-white text-gray-700 hover:bg-gray-50"
+                    }`}
+                    onClick={() => setSelectedGraphicMode("graphic_frame")}
+                  >
+                    Graphic + Frame
+                  </button>
+                  <button
+                    type="button"
+                    className={`rounded-lg border px-4 py-3 text-sm font-semibold transition ${
+                      selectedGraphicMode === "graphic_only"
+                        ? "border-sky-500 bg-sky-50 text-sky-800"
+                        : "border-gray-300 bg-white text-gray-700 hover:bg-gray-50"
+                    }`}
+                    onClick={() => setSelectedGraphicMode("graphic_only")}
+                  >
+                    Graphic Only
+                  </button>
                 </div>
               </div>
-            </div>
+            ) : (
+              <div className="mb-6 p-4 border border-gray-200 rounded-lg">
+                <div className="grid grid-cols-2 gap-4 mb-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Width (inches) <span className="text-red-500">*</span>
+                    </label>
+                    <input
+                      type="number"
+                      value={width}
+                      onChange={(e) => setWidth(e.target.value)}
+                      className="w-full px-3 py-2 border border-gray-300 text-black rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      placeholder="0"
+                      min="0"
+                      step="0.01"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Height (inches) <span className="text-red-500">*</span>
+                    </label>
+                    <input
+                      type="number"
+                      value={height}
+                      onChange={(e) => setHeight(e.target.value)}
+                      className="w-full px-3 py-2 border border-gray-300 text-black rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      placeholder="0"
+                      min="0"
+                      step="0.01"
+                    />
+                  </div>
+                </div>
+              </div>
+            )}
 
-            {/* Job Details — multiple jobs share width/height above */}
+            {activeModifierGroups.length > 0 ? (
+              <div className="mb-6 p-4 border border-gray-200 rounded-lg">
+                <div className="space-y-3">
+                  {!isGraphicScenario && String(product?.material || "").trim() ? (
+                    <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-4">
+                      <label className="text-sm font-medium text-gray-700 sm:min-w-[140px]">Material</label>
+                      <div className="w-full sm:min-w-[320px] sm:flex-1 rounded-lg border border-gray-300 bg-gray-50 px-3 py-1.5 text-sm text-gray-900">
+                        {String(product?.material || "").trim()}
+                      </div>
+                    </div>
+                  ) : null}
+                  {activeModifierGroups.map((group) => {
+                    const options = Array.isArray(group.options) ? group.options : [];
+                    const selectedValue = String(selectedModifiers[group.key] || "");
+                    const selectedOption = options.find((o) => modifierOptionValue(o) === selectedValue);
+                    const selectedLabel = selectedOption
+                      ? (() => {
+                          const value = modifierOptionValue(selectedOption);
+                          const label = String(selectedOption.label || "").trim();
+                          return value && value !== label ? `${label} - ${value}` : String(label || value || "Select option");
+                        })()
+                      : "Select option";
+                    return (
+                      <div key={group.key} className="flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-4">
+                        <label className="text-sm font-medium text-gray-700 sm:min-w-[140px]">
+                          {group.name}
+                          {group.is_required ? <span className="text-red-500"> *</span> : null}
+                        </label>
+                        <div
+                          className="relative w-full sm:min-w-[320px] sm:flex-1"
+                          data-modifier-dropdown="true"
+                        >
+                          <button
+                            type="button"
+                            className="flex w-full items-center justify-between rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-sm text-left text-black shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                            onClick={() =>
+                              setOpenModifierKey((prev) => (prev === group.key ? null : group.key))
+                            }
+                          >
+                            <span className="truncate">{selectedLabel}</span>
+                            <span className="ml-2 text-gray-500">▾</span>
+                          </button>
+                          {openModifierKey === group.key ? (
+                            <div className="absolute z-30 mt-1 max-h-64 w-full overflow-auto rounded-lg border border-gray-200 bg-white shadow-lg">
+                              {!group.is_required ? (
+                                <button
+                                  type="button"
+                                  className={`block w-full px-3 py-2 text-left text-sm ${
+                                    !selectedValue
+                                      ? "bg-blue-50 text-blue-700"
+                                      : "text-gray-700 hover:bg-gray-50"
+                                  }`}
+                                  onClick={() => {
+                                    setSelectedModifiers((prev) => {
+                                      const next = { ...prev };
+                                      delete next[group.key];
+                                      return next;
+                                    });
+                                    setOpenModifierKey(null);
+                                  }}
+                                >
+                                  Select option
+                                </button>
+                              ) : null}
+                              {options.map((opt, idx) => {
+                                const optValue = modifierOptionValue(opt);
+                                const displayLeft =
+                                  optValue && optValue !== String(opt.label || "")
+                                    ? `${opt.label} - ${optValue}`
+                                    : String(opt.label || optValue || `Option ${idx + 1}`);
+                                const isActive = selectedValue === optValue;
+                                return (
+                                  <button
+                                    key={`${group.key}-${optValue}-${idx}`}
+                                    type="button"
+                                    className={`block w-full px-3 py-2 text-left text-sm ${
+                                      isActive
+                                        ? "bg-blue-50 text-blue-700"
+                                        : "text-gray-700 hover:bg-gray-50"
+                                    }`}
+                                    onClick={() => {
+                                      setSelectedModifiers((prev) => {
+                                        const isUnselecting = !group.is_required && prev[group.key] === optValue;
+                                        if (isUnselecting) {
+                                          const next = { ...prev };
+                                          delete next[group.key];
+                                          return next;
+                                        }
+                                        return {
+                                          ...prev,
+                                          [group.key]: optValue,
+                                        };
+                                      });
+                                      setOpenModifierKey(null);
+                                    }}
+                                  >
+                                    {displayLeft}
+                                  </button>
+                                );
+                              })}
+                            </div>
+                          ) : null}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            ) : null}
+
+            {/* Job Details */}
             <div className="mb-6 p-4 border border-gray-200 rounded-lg">
               <h2 className="text-lg font-semibold text-gray-900 mb-4">Job Details</h2>
               <div className="space-y-4">

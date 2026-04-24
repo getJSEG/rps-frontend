@@ -8,6 +8,9 @@ export type UploadApprovalOrderItem = {
   product_description?: string | null;
   width_inches?: number | string | null;
   height_inches?: number | string | null;
+  selection_mode?: string | null;
+  graphic_scenario_enabled?: boolean | null;
+  product_graphic_scenario_enabled?: boolean | null;
   customer_artwork_url?: string | null;
 };
 
@@ -33,6 +36,7 @@ export type PendingJob = {
   quantity: number;
   requiredWidthIn: number | null;
   requiredHeightIn: number | null;
+  isGraphicScenario?: boolean;
 };
 
 function normalizeItems(raw: unknown): UploadApprovalOrderItem[] {
@@ -53,6 +57,13 @@ function parseOrderLineInches(w: unknown, h: unknown): { w: number; h: number } 
   const nh = h != null && h !== "" ? Number(h) : NaN;
   if (!Number.isFinite(nw) || !Number.isFinite(nh) || nw <= 0 || nh <= 0) return null;
   return { w: nw, h: nh };
+}
+
+function isGraphicScenarioItem(item: UploadApprovalOrderItem): boolean {
+  if (item.graphic_scenario_enabled === true) return true;
+  if (item.product_graphic_scenario_enabled === true) return true;
+  const mode = String(item.selection_mode || "").trim().toLowerCase();
+  return mode === "graphic_only" || mode === "graphic_frame";
 }
 
 function orderNeedsUploadOrApproval(status: string | null | undefined): boolean {
@@ -99,6 +110,7 @@ export function buildPendingUploadJobsFromOrders(orders: UploadApprovalOrderRow[
         quantity: 1,
         requiredWidthIn: null,
         requiredHeightIn: null,
+        isGraphicScenario: false,
       });
       continue;
     }
@@ -110,7 +122,8 @@ export function buildPendingUploadJobsFromOrders(orders: UploadApprovalOrderRow[
       const jobIdLabel = `${base}-${String(line).padStart(2, "0")}`;
       const productLabel =
         [it.product_name, it.product_description].filter(Boolean).join(" — ") || "Product";
-      const inches = parseOrderLineInches(it.width_inches, it.height_inches);
+      const graphicScenario = isGraphicScenarioItem(it);
+      const inches = graphicScenario ? null : parseOrderLineInches(it.width_inches, it.height_inches);
       out.push({
         key: `order-${order.id}-item-${it.id ?? line}`,
         orderId: order.id,
@@ -120,10 +133,11 @@ export function buildPendingUploadJobsFromOrders(orders: UploadApprovalOrderRow[
         orderedAt: order.created_at ?? null,
         jobName: (it.job_name || "").trim() || "—",
         productLabel,
-        dimensions: formatLineSizeInches(it.width_inches, it.height_inches),
+        dimensions: graphicScenario ? null : formatLineSizeInches(it.width_inches, it.height_inches),
         quantity: Math.max(1, parseInt(String(it.quantity ?? 1), 10) || 1),
         requiredWidthIn: inches?.w ?? null,
         requiredHeightIn: inches?.h ?? null,
+        isGraphicScenario: graphicScenario,
       });
     });
   }

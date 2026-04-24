@@ -26,6 +26,7 @@ type ArtworkReviewErrorContentProps = {
   previewMime?: string | null;
   uploadedGraphicLabel?: string;
   requiredGraphicLabel?: string;
+  isGraphicScenario?: boolean;
 };
 
 export default function ArtworkReviewErrorContent({
@@ -34,6 +35,7 @@ export default function ArtworkReviewErrorContent({
   previewMime,
   uploadedGraphicLabel: uploadedProp,
   requiredGraphicLabel: requiredProp,
+  isGraphicScenario = false,
 }: ArtworkReviewErrorContentProps) {
   const hideArtworkLibrary = shouldHideArtworkLibrary();
   const router = useRouter();
@@ -149,14 +151,21 @@ export default function ArtworkReviewErrorContent({
           <>
             <h2 className="text-lg font-bold text-sky-800">Upload artwork for this job</h2>
             <p className="text-sm leading-relaxed text-gray-700">
-              Choose a PNG, JPG, or single-page PDF. Your file must match this job&apos;s print size{" "}
-              <span className="font-medium">shape</span> (width-to-height aspect ratio)
+              Choose a PNG, JPG, or single-page PDF.
+              {!isGraphicScenario && (
+                <>
+                  {" "}Your file must match this job&apos;s print size{" "}
+                  <span className="font-medium">shape</span> (width-to-height aspect ratio)
+                </>
+              )}
             </p>
             <div className="space-y-1 text-sm text-gray-600">
-              <p>
-                Required print size:{" "}
-                <span className="font-bold text-gray-900">{requiredLabel}</span>
-              </p>
+              {!isGraphicScenario && (
+                <p>
+                  Required print size:{" "}
+                  <span className="font-bold text-gray-900">{requiredLabel}</span>
+                </p>
+              )}
               <p className="text-gray-500">Uploaded file: not selected yet</p>
             </div>
           </>
@@ -168,15 +177,19 @@ export default function ArtworkReviewErrorContent({
                 Uploaded graphic:{" "}
                 <span className="font-bold text-gray-900">{uploadedLabel}</span>
               </p>
-              <p>
-                Required print size (aspect target):{" "}
-                <span className="font-bold text-gray-900">{requiredLabel}</span>
-              </p>
+              {!isGraphicScenario && (
+                <p>
+                  Required print size (aspect target):{" "}
+                  <span className="font-bold text-gray-900">{requiredLabel}</span>
+                </p>
+              )}
             </div>
-            <div className="border-t border-gray-200 pt-4 text-sm leading-relaxed text-gray-700">
-              The image must have the same width-to-height proportion as the job dimensions. Please upload a
-              different file or crop to match.
-            </div>
+            {!isGraphicScenario && (
+              <div className="border-t border-gray-200 pt-4 text-sm leading-relaxed text-gray-700">
+                The image must have the same width-to-height proportion as the job dimensions. Please upload a
+                different file or crop to match.
+              </div>
+            )}
           </>
         )}
 

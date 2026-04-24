@@ -161,6 +161,29 @@ export type Tax = {
   updated_at?: string;
 };
 
+export type ModifierOption = {
+  id?: number;
+  label: string;
+  value: string;
+  price_adjustment?: number;
+  price_type?: string;
+  is_default?: boolean;
+  is_active?: boolean;
+  sort_order?: number;
+};
+
+export type ModifierGroup = {
+  id?: number;
+  key: string;
+  name: string;
+  input_type?: string;
+  is_required?: boolean;
+  mode_scope?: "all" | "graphic_only" | "graphic_frame";
+  is_active?: boolean;
+  sort_order?: number;
+  options: ModifierOption[];
+};
+
 export type ArtworkUploadPayload = {
   widthPx: number | null;
   heightPx: number | null;
@@ -651,6 +674,10 @@ export const productsAPI = {
       height?: number;
       size_option_id?: number;
       sizeOptionId?: number;
+      selectedModifiers?: Record<string, string>;
+      selected_modifiers?: Record<string, string>;
+      selection_mode?: "graphic_only" | "graphic_frame";
+      selectionMode?: "graphic_only" | "graphic_frame";
     }
   ) => {
     return apiCall(`/products/${id}/price-preview`, {
@@ -723,6 +750,29 @@ export const productsAPI = {
       throw new Error(data.message || data.error || 'Upload failed');
     }
     return res.json();
+  },
+  getModifierCatalogAdmin: async () => {
+    return apiCall('/products/admin/modifier-catalog');
+  },
+  updateModifierCatalogAdmin: async (data: { groups: ModifierGroup[] }) => {
+    return apiCall('/products/admin/modifier-catalog', {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    });
+  },
+  deleteModifierCatalogGroupAdmin: async (key: string) => {
+    return apiCall(`/products/admin/modifier-catalog/${encodeURIComponent(String(key || '').trim())}`, {
+      method: 'DELETE',
+    });
+  },
+  getProductModifiersAdmin: async (id: string) => {
+    return apiCall(`/products/admin/products/${id}/modifiers`);
+  },
+  updateProductModifiersAdmin: async (id: string, data: { groups: Array<{ key: string; is_required?: boolean; sort_order?: number; mode_scope?: "all" | "graphic_only" | "graphic_frame"; options: Array<{ option_id?: number; value: string; is_default?: boolean; price_adjustment_override?: number | null }> }> }) => {
+    return apiCall(`/products/admin/products/${id}/modifiers`, {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    });
   },
 };
 
