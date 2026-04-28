@@ -241,7 +241,29 @@ export default function AdminModifiersPage() {
                       <div key={`opt-row-${oi}`} className="grid grid-cols-5 gap-2">
                         <input className="rounded border px-2 py-1 text-sm" value={opt.label} onChange={(e) => setEditorGroup((prev) => ({ ...prev, options: prev.options.map((o, j) => j === oi ? { ...o, label: e.target.value } : o) }))} />
                         <input className="rounded border px-2 py-1 text-sm" value={opt.value} onChange={(e) => setEditorGroup((prev) => ({ ...prev, options: prev.options.map((o, j) => j === oi ? { ...o, value: e.target.value } : o) }))} />
-                        <input className="rounded border px-2 py-1 text-sm" type="number" step="0.01" value={String(opt.price_adjustment ?? 0)} onChange={(e) => setEditorGroup((prev) => ({ ...prev, options: prev.options.map((o, j) => j === oi ? { ...o, price_adjustment: Number(e.target.value || 0), price_type: "percent" } : o) }))} placeholder="0.00" />
+                        <input
+                          className="rounded border px-2 py-1 text-sm"
+                          type="text"
+                          inputMode="decimal"
+                          value={String(opt.price_adjustment ?? "")}
+                          onChange={(e) => {
+                            const v = e.target.value;
+                            if (v !== "" && !/^\d*\.?\d*$/.test(v)) return;
+                            setEditorGroup((prev) => ({
+                              ...prev,
+                              options: prev.options.map((o, j) =>
+                                j === oi
+                                  ? {
+                                      ...o,
+                                      price_adjustment: v === "" ? 0 : Number(v),
+                                      price_type: "percent",
+                                    }
+                                  : o
+                              ),
+                            }));
+                          }}
+                          placeholder="0.00"
+                        />
                         <label className="inline-flex items-center gap-1 text-xs text-slate-600">
                           <input
                             type="checkbox"

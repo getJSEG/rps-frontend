@@ -21,6 +21,8 @@ const EMPTY_FORM: FormState = {
   isActive: true,
 };
 
+const isFloatInput = (v: string) => v === "" || /^\d*\.?\d*$/.test(v);
+
 function normalizePolicy(res: { freeShippingEnabled?: boolean; freeShippingThreshold?: number }): FreeShippingPolicy {
   return {
     freeShippingEnabled: !!res.freeShippingEnabled,
@@ -164,11 +166,13 @@ export default function AdminShippingRatesPage() {
             <label className="block text-xs font-medium text-slate-600 mb-1">Minimum subtotal ($)</label>
             <input
               className="w-full border rounded-lg px-3 py-2 text-sm"
-              type="number"
-              min={0}
-              step={0.01}
+              type="text"
+              inputMode="decimal"
               value={freeThresholdInput}
-              onChange={(e) => setFreeThresholdInput(e.target.value)}
+              onChange={(e) => {
+                const v = e.target.value;
+                if (isFloatInput(v)) setFreeThresholdInput(v);
+              }}
             />
           </div>
           <button
@@ -199,11 +203,13 @@ export default function AdminShippingRatesPage() {
               <input
                 className="w-full border rounded-lg px-3 py-2"
                 placeholder="Price"
-                type="number"
-                min={0}
-                step={0.01}
+                type="text"
+                inputMode="decimal"
                 value={form.price}
-                onChange={(e) => setForm((p) => ({ ...p, price: e.target.value }))}
+                onChange={(e) => {
+                  const v = e.target.value;
+                  if (isFloatInput(v)) setForm((p) => ({ ...p, price: v }));
+                }}
                 required
               />
             </div>
