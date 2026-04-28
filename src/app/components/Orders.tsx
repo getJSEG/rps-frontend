@@ -105,6 +105,7 @@ type OrderRow = {
   tax_name?: string | null;
   tax_percentage?: number | string | null;
   tax_amount?: number | string | null;
+  order_tracking_id?: string | null;
 };
 
 function parseGuestCheckout(raw: OrderRow["guest_checkout"]): GuestCheckout | null {
@@ -679,7 +680,7 @@ export default function Orders() {
                     onClick={() => toggleExpanded(order.id)}
                     className="w-full text-left px-4 py-4 sm:px-5 sm:py-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 hover:bg-gray-50/80 transition-colors"
                   >
-                    <div className="min-w-0 flex-1">
+                      <div className="min-w-0 flex-1">
                       <div className="flex flex-wrap items-center gap-2">
                         <span className="font-semibold text-gray-900">
                           {order.order_number || `Order #${order.id}`}
@@ -689,6 +690,15 @@ export default function Orders() {
                         >
                           {formatStatus(order.status)}
                         </span>
+                        {canonicalOrderStatus(order.status) === "shipped" &&
+                          order.order_tracking_id?.trim() && (
+                            <span
+                              className="text-xs font-medium px-2.5 py-0.5 rounded-full bg-blue-100 text-blue-800"
+                              title="Tracking number"
+                            >
+                              Tracking No: {order.order_tracking_id}
+                            </span>
+                          )}
                       </div>
                       <p className="text-sm text-gray-600 mt-1">
                         Placed {whenPlaced}
@@ -796,6 +806,15 @@ export default function Orders() {
                           <span className="text-gray-500">Order ID</span>
                           <p className="font-medium text-gray-900">{order.id}</p>
                         </div>
+                        {canonicalOrderStatus(order.status) === "shipped" &&
+                          order.order_tracking_id?.trim() && (
+                            <div>
+                              <span className="text-gray-500">Tracking number</span>
+                              <p className="font-mono font-medium text-gray-900 break-all">
+                                {order.order_tracking_id}
+                              </p>
+                            </div>
+                          )}
                         {whenUpdated && (
                           <div>
                             <span className="text-gray-500">Last updated</span>

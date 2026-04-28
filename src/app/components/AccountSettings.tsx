@@ -85,10 +85,29 @@ export default function AccountSettings() {
     }
     try {
       setSaving(true);
+      const trimmedName = formData.fullName.trim();
+      const trimmedTel = formData.telephone.trim();
       await usersAPI.updateProfile({
-        fullName: formData.fullName.trim() || undefined,
-        telephone: formData.telephone.trim() || undefined,
+        fullName: trimmedName || undefined,
+        telephone: trimmedTel || undefined,
       });
+
+      if (typeof window !== "undefined") {
+        try {
+          const cached = JSON.parse(localStorage.getItem("user") || "{}");
+          const merged = {
+            ...cached,
+            full_name: trimmedName,
+            fullName: trimmedName,
+            telephone: trimmedTel || cached.telephone || null,
+          };
+          localStorage.setItem("user", JSON.stringify(merged));
+          window.dispatchEvent(new Event("loginStatusChanged"));
+        } catch {
+          /* cache refresh is best-effort */
+        }
+      }
+
       toast.success("Profile updated successfully.");
     } catch (err: any) {
       toast.error(err?.message || "Failed to update profile.");

@@ -277,8 +277,8 @@ function ProductDetailContent() {
   const [product, setProduct] = useState<Product | null>(null);
   const [loading, setLoading] = useState(true);
   const [addingToCart, setAddingToCart] = useState(false);
-  const [width, setWidth] = useState("0");
-  const [height, setHeight] = useState("0");
+  const [width, setWidth] = useState("");
+  const [height, setHeight] = useState("");
   const [previewPricing, setPreviewPricing] = useState<PreviewPricing | null>(null);
   const [selectedModifiers, setSelectedModifiers] = useState<Record<string, string>>({});
   const [selectedGraphicMode, setSelectedGraphicMode] = useState<GraphicSelectionMode>("graphic_only");
@@ -1168,13 +1168,15 @@ function ProductDetailContent() {
                       Width (inches) <span className="text-red-500">*</span>
                     </label>
                     <input
-                      type="number"
+                      type="text"
+                      inputMode="decimal"
                       value={width}
-                      onChange={(e) => setWidth(e.target.value)}
-                      className="w-full px-3 py-2 border border-gray-300 text-black rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      onChange={(e) => {
+                        const v = e.target.value;
+                        if (v === "" || /^\d*\.?\d*$/.test(v)) setWidth(v);
+                      }}
                       placeholder="0"
-                      min="0"
-                      step="0.01"
+                      className="w-full px-3 py-2 border border-gray-300 text-black rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
                     />
                   </div>
                   <div>
@@ -1182,13 +1184,15 @@ function ProductDetailContent() {
                       Height (inches) <span className="text-red-500">*</span>
                     </label>
                     <input
-                      type="number"
+                      type="text"
+                      inputMode="decimal"
                       value={height}
-                      onChange={(e) => setHeight(e.target.value)}
-                      className="w-full px-3 py-2 border border-gray-300 text-black rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      onChange={(e) => {
+                        const v = e.target.value;
+                        if (v === "" || /^\d*\.?\d*$/.test(v)) setHeight(v);
+                      }}
                       placeholder="0"
-                      min="0"
-                      step="0.01"
+                      className="w-full px-3 py-2 border border-gray-300 text-black rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
                     />
                   </div>
                 </div>
@@ -1757,8 +1761,8 @@ function ProductDetailContent() {
                     router.push(`/products/product-detail?productId=${relatedProduct.id}`);
 
                     // Reset form values for new product
-                    setWidth("0");
-                    setHeight("0");
+                    setWidth("");
+                    setHeight("");
                     setJobs([{ id: newProductJobRowId(), jobName: "", quantity: "1" }]);
 
                     // Scroll to top to show new product

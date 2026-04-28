@@ -11,7 +11,11 @@ import {
   writeUploadReviewSessionForGuestJob,
 } from "../../components/artwork-review/openUploadReviewSession";
 import { ordersAPI } from "../../../utils/api";
-import { customerOrderStatusDescription, customerOrderStatusTitle } from "../../../utils/orderStatuses";
+import {
+  canonicalOrderStatus,
+  customerOrderStatusDescription,
+  customerOrderStatusTitle,
+} from "../../../utils/orderStatuses";
 import {
   buildPendingUploadJobsFromOrders,
   orderItemNeedsCustomerArtworkUpload,
@@ -68,6 +72,7 @@ type GuestOrder = {
   tax_percentage?: number | string | null;
   tax_name?: string | null;
   items?: OrderItem[] | null;
+  order_tracking_id?: string | null;
 };
 
 function money(v: unknown): string {
@@ -329,6 +334,15 @@ function GuestOrderTrackInner() {
                       : "—"}
                   </p>
                 </div>
+                {canonicalOrderStatus(order.status) === "shipped" &&
+                  order.order_tracking_id?.trim() && (
+                    <div className="sm:col-span-3">
+                      <p className="text-gray-500">Tracking number</p>
+                      <p className="font-mono font-medium text-gray-900 break-all">
+                        {order.order_tracking_id}
+                      </p>
+                    </div>
+                  )}
               </div>
             </div>
 

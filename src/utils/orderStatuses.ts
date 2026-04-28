@@ -7,6 +7,7 @@ export const ADMIN_ORDER_STATUS_OPTIONS: { value: string; label: string }[] = [
   { value: "pending_payment", label: "Pending payment" },
   { value: "awaiting_artwork", label: "Awaiting artwork" },
   { value: "on_hold", label: "On hold" },
+  { value: "processing", label: "Processing" },
   { value: "printing", label: "Printing" },
   { value: "trimming", label: "Trimming" },
   { value: "shipped", label: "Shipped" },
@@ -27,7 +28,6 @@ export function canonicalOrderStatus(raw: string | null | undefined): string {
     .replace(/\s+/g, "_");
   const legacy: Record<string, string> = {
     pending: "awaiting_artwork",
-    processing: "printing",
     complete: "completed",
     delivered: "completed",
     approval_needed: "awaiting_customer_approval",
@@ -72,6 +72,8 @@ export function customerOrderStatusDescription(
       return "There's an issue with your job. We'll email you with further instructions.";
     case "awaiting_customer_approval":
       return "Please check your email to approve the proofs we sent.";
+    case "processing":
+      return "Your job has been received and is being prepared for printing.";
     case "printing":
       return "Your job is on the press and being printed.";
     case "trimming":
@@ -146,7 +148,7 @@ export function customerOrderProgressKind(
   if (c === "completed") return { stage: 5 };
   if (c === "shipped") return { stage: 4 };
   if (c === "trimming") return { stage: 3 };
-  if (c === "printing" || c === "reprint") return { stage: 2 };
+  if (c === "printing" || c === "reprint" || c === "processing") return { stage: 2 };
   if (c === "awaiting_artwork" || c === "cancellation_requested" || c === "on_hold" || c === "awaiting_customer_approval")
     return { stage: 1 };
   return { stage: 1 };

@@ -418,7 +418,10 @@ export default function Navbar() {
                   </p>
                 )}
                 <div className="flex min-w-0 items-center justify-end gap-2">
-                <div className="flex min-w-0 items-center gap-1.5 rounded-sm border border-slate-200 bg-white/90 p-1">
+                <form
+                  onSubmit={(e) => { e.preventDefault(); handleLogin(); }}
+                  className="flex min-w-0 items-center gap-1.5 rounded-sm border border-slate-200 bg-white/90 p-1"
+                >
                   <input
                     type="email"
                     value={email}
@@ -451,7 +454,7 @@ export default function Navbar() {
                     </div>
                   </div>
                   <button
-                    onClick={handleLogin}
+                    type="submit"
                     className="bg-[#0B6BCB] hover:bg-blue-700 text-white px-4 py-1.5 rounded-sm text-sm font-semibold transition-colors whitespace-nowrap border border-[#0B6BCB]"
                   >
                     Sign In
@@ -462,7 +465,7 @@ export default function Navbar() {
                   >
                     Register
                   </a>
-                </div>
+                </form>
                 <CartIconLink count={cartCount} />
                 </div>
               </div>
