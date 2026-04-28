@@ -21,7 +21,7 @@ function emptyEditorGroup(): UiModifierGroup {
     key: "",
     name: "",
     input_type: "dropdown",
-    options: [{ label: "", value: "", price_adjustment: 0, is_default: false }],
+    options: [{ label: "", value: "", price_adjustment: 0, price_type: "percent", is_default: false }],
   };
 }
 
@@ -106,6 +106,7 @@ export default function AdminModifiersPage() {
               label: String(o.label || "").trim(),
               value: String(o.value || o.label || "").trim(),
               price_adjustment: Number(o.price_adjustment || 0),
+              price_type: "percent",
               is_default: !!o.is_default,
             }))
           : [],
@@ -232,7 +233,7 @@ export default function AdminModifiersPage() {
                     <div className="grid grid-cols-5 gap-2 text-[11px] font-semibold uppercase tracking-wide text-slate-500">
                       <span>Label</span>
                       <span>Value</span>
-                      <span>Price</span>
+                      <span>Percent</span>
                       <span>Default</span>
                       <span>Action</span>
                     </div>
@@ -240,7 +241,7 @@ export default function AdminModifiersPage() {
                       <div key={`opt-row-${oi}`} className="grid grid-cols-5 gap-2">
                         <input className="rounded border px-2 py-1 text-sm" value={opt.label} onChange={(e) => setEditorGroup((prev) => ({ ...prev, options: prev.options.map((o, j) => j === oi ? { ...o, label: e.target.value } : o) }))} />
                         <input className="rounded border px-2 py-1 text-sm" value={opt.value} onChange={(e) => setEditorGroup((prev) => ({ ...prev, options: prev.options.map((o, j) => j === oi ? { ...o, value: e.target.value } : o) }))} />
-                        <input className="rounded border px-2 py-1 text-sm" type="number" step="0.01" value={String(opt.price_adjustment ?? 0)} onChange={(e) => setEditorGroup((prev) => ({ ...prev, options: prev.options.map((o, j) => j === oi ? { ...o, price_adjustment: Number(e.target.value || 0) } : o) }))} placeholder="0.00" />
+                        <input className="rounded border px-2 py-1 text-sm" type="number" step="0.01" value={String(opt.price_adjustment ?? 0)} onChange={(e) => setEditorGroup((prev) => ({ ...prev, options: prev.options.map((o, j) => j === oi ? { ...o, price_adjustment: Number(e.target.value || 0), price_type: "percent" } : o) }))} placeholder="0.00" />
                         <label className="inline-flex items-center gap-1 text-xs text-slate-600">
                           <input
                             type="checkbox"
@@ -284,6 +285,7 @@ export default function AdminModifiersPage() {
                                 label: "",
                                 value: "",
                                 price_adjustment: 0,
+                                price_type: "percent",
                                 is_default: false,
                               },
                             ],
@@ -366,7 +368,7 @@ export default function AdminModifiersPage() {
                                 <li key={`${g.__uiid}-opt-${oi}`} className="text-[11px] text-slate-700">
                                   {o.label || "(no label)"} [{o.value || "no_value"}] -{" "}
                                   {Number(o.price_adjustment || 0) >= 0 ? "+" : ""}
-                                  ${Number(o.price_adjustment || 0).toFixed(2)}
+                                  {Number(o.price_adjustment || 0).toFixed(2)}%
                                   {o.is_default ? " (default)" : ""}
                                 </li>
                               ))}

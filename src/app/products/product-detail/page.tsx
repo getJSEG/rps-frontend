@@ -89,6 +89,7 @@ interface Product {
       value: string;
       label: string;
       price_adjustment?: number;
+      price_type?: string;
       is_default?: boolean;
     }>;
   }>;
@@ -164,6 +165,17 @@ function inferPricingModeForProduct(product: Product | null): "fixed" | "area" {
 
 function modifierOptionValue(option: { value?: string; label?: string } | null | undefined): string {
   return String(option?.value || option?.label || "").trim();
+}
+
+function resolveModifierAdjustmentAmount(
+  baseUnitBeforeModifiers: number,
+  option: { price_adjustment?: number; price_type?: string } | null | undefined
+): number {
+  const raw = Number(option?.price_adjustment ?? 0);
+  if (!Number.isFinite(raw)) return 0;
+  const type = String(option?.price_type || "percent").trim().toLowerCase();
+  if (type === "fixed") return raw;
+  return baseUnitBeforeModifiers * (raw / 100);
 }
 
 interface SavedAddress {
@@ -617,23 +629,19 @@ function ProductDetailContent() {
     productPricingMode === "fixed"
       ? (fallbackFixedFromOption != null ? fallbackFixedFromOption : fallbackFixedFromProduct)
       : fallbackAreaPrice;
-  const selectedModifierTotal = activeModifierGroups.reduce(
-    (sum, group) => {
-      const selectedValue = String(selectedModifiers[group.key] || "");
-      if (!selectedValue) return sum;
-      const options = Array.isArray(group.options) ? group.options : [];
-      const selectedOption = options.find((o) => modifierOptionValue(o) === selectedValue);
-      const adjustment = Number(selectedOption?.price_adjustment ?? 0);
-      return sum + (Number.isFinite(adjustment) ? adjustment : 0);
-    },
-    0
-  );
   const previewUnitPrice = (isGraphicScenario ? null : previewPricing?.unitPrice) ?? fallbackPrice;
   const previewModifierTotal = Number(previewPricing?.modifierTotal);
   const baseUnitBeforeModifiers =
     isGraphicScenario
       ? previewUnitPrice
       : (Number.isFinite(previewModifierTotal) ? previewUnitPrice - previewModifierTotal : previewUnitPrice);
+  const selectedModifierTotal = activeModifierGroups.reduce((sum, group) => {
+    const selectedValue = String(selectedModifiers[group.key] || "");
+    if (!selectedValue) return sum;
+    const options = Array.isArray(group.options) ? group.options : [];
+    const selectedOption = options.find((o) => modifierOptionValue(o) === selectedValue);
+    return sum + resolveModifierAdjustmentAmount(baseUnitBeforeModifiers, selectedOption);
+  }, 0);
   const unitPrice = baseUnitBeforeModifiers + selectedModifierTotal;
   const displayPricingMode: "fixed" | "area" = previewPricing?.pricing_mode ?? productPricingMode;
   const jobLines = jobs.map((j) => {
