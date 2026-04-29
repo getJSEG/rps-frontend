@@ -100,6 +100,8 @@ function descriptionPreview(html: string | null | undefined): string {
 const WORD_STYLE_LABEL_SUFFIX = " (Word-style formatting)";
 const RICH_PLACEHOLDER_HINT = "bold, italic, lists supported";
 
+const isFloatInput = (v: string) => v === "" || /^\d*\.?\d*$/.test(v);
+
 /** Seed contenteditable: existing HTML as-is; plain text escaped with line breaks as &lt;br&gt;. */
 function toEditorInitialHtml(raw: string | null | undefined): string {
   if (!raw) return "";
@@ -1136,11 +1138,14 @@ export default function AdminProductsPage() {
                         </p>
                       ) : null}
                       <input
-                        type="number"
-                        step="0.01"
+                        type="text"
+                        inputMode="decimal"
                         placeholder="Price"
                         value={prodPrice}
-                        onChange={(e) => setProdPrice(e.target.value)}
+                        onChange={(e) => {
+                          const v = e.target.value;
+                          if (isFloatInput(v)) setProdPrice(v);
+                        }}
                         className={inputClassDisabled}
                         disabled={prodPricingMode === "" || prodPricingMode === "area"}
                         title={
@@ -1152,11 +1157,14 @@ export default function AdminProductsPage() {
                         }
                       />
                       <input
-                        type="number"
-                        step="0.01"
+                        type="text"
+                        inputMode="decimal"
                         placeholder="Price per sq ft"
                         value={prodPricePerSqft}
-                        onChange={(e) => setProdPricePerSqft(e.target.value)}
+                        onChange={(e) => {
+                          const v = e.target.value;
+                          if (isFloatInput(v)) setProdPricePerSqft(v);
+                        }}
                         className={inputClassDisabled}
                         disabled={prodPricingMode === "" || prodPricingMode === "fixed"}
                         title={
@@ -1168,11 +1176,14 @@ export default function AdminProductsPage() {
                         }
                       />
                       <input
-                        type="number"
-                        step="0.01"
+                        type="text"
+                        inputMode="decimal"
                         placeholder="Min charge"
                         value={prodMinCharge}
-                        onChange={(e) => setProdMinCharge(e.target.value)}
+                        onChange={(e) => {
+                          const v = e.target.value;
+                          if (isFloatInput(v)) setProdMinCharge(v);
+                        }}
                         className={inputClass}
                       />
                       <input
@@ -1185,35 +1196,47 @@ export default function AdminProductsPage() {
                       {!prodGraphicScenarioEnabled ? (
                         <>
                           <input
-                            type="number"
-                            step="0.01"
+                            type="text"
+                            inputMode="decimal"
                             placeholder="Min width (inches)"
                             value={prodMinWidth}
-                            onChange={(e) => setProdMinWidth(e.target.value)}
+                            onChange={(e) => {
+                              const v = e.target.value;
+                              if (isFloatInput(v)) setProdMinWidth(v);
+                            }}
                             className={inputClass}
                           />
                           <input
-                            type="number"
-                            step="0.01"
+                            type="text"
+                            inputMode="decimal"
                             placeholder="Max width (inches)"
                             value={prodMaxWidth}
-                            onChange={(e) => setProdMaxWidth(e.target.value)}
+                            onChange={(e) => {
+                              const v = e.target.value;
+                              if (isFloatInput(v)) setProdMaxWidth(v);
+                            }}
                             className={inputClass}
                           />
                           <input
-                            type="number"
-                            step="0.01"
+                            type="text"
+                            inputMode="decimal"
                             placeholder="Min height (inches)"
                             value={prodMinHeight}
-                            onChange={(e) => setProdMinHeight(e.target.value)}
+                            onChange={(e) => {
+                              const v = e.target.value;
+                              if (isFloatInput(v)) setProdMinHeight(v);
+                            }}
                             className={inputClass}
                           />
                           <input
-                            type="number"
-                            step="0.01"
+                            type="text"
+                            inputMode="decimal"
                             placeholder="Max height (inches)"
                             value={prodMaxHeight}
-                            onChange={(e) => setProdMaxHeight(e.target.value)}
+                            onChange={(e) => {
+                              const v = e.target.value;
+                              if (isFloatInput(v)) setProdMaxHeight(v);
+                            }}
                             className={inputClass}
                           />
                         </>

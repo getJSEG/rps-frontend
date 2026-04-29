@@ -256,10 +256,12 @@ function OrderProgressBar({ status }: { status: string | null | undefined }) {
   if (kind === "cancelled") {
     return null;
   }
+  const canonical = canonicalOrderStatus(status);
   const firstLabel = customerOrderProgressFirstStepLabel(status);
+  const secondLabel = canonical === "processing" ? "Processing" : canonical === "reprint" ? "Reprint" : "Printing";
   const steps = [
     { label: firstLabel, min: 1 },
-    { label: "Printing", min: 2 },
+    { label: secondLabel, min: 2 },
     { label: "Trimming", min: 3 },
     { label: "Shipped", min: 4 },
     { label: "Completed", min: 5 },
