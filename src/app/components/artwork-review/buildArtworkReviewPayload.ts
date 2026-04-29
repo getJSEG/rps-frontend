@@ -12,6 +12,7 @@ import { ARTWORK_REVIEW_DEMO } from "./artworkReviewMock";
 import {
   UPLOAD_APPROVAL_REVIEW_CONTEXT_KEY,
   revokeStoredUploadPreview,
+  saveReviewDraft,
   type StoredUploadReviewContext,
 } from "./uploadApprovalReviewStorage";
 
@@ -123,6 +124,8 @@ export async function buildArtworkReviewPayload(
       throw new Error("Could not save preview.");
     }
   }
+
+  saveReviewDraft(storedPayload);
 
   return {
     payload: storedPayload,

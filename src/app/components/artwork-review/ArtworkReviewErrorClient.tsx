@@ -1,15 +1,18 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import ArtworkReviewShell, { type ArtworkReviewJobMeta } from "./ArtworkReviewShell";
 import ArtworkReviewErrorContent from "./ArtworkReviewErrorContent";
 import { ARTWORK_REVIEW_DEMO } from "./artworkReviewMock";
+import { UPLOAD_APPROVAL_REVIEW_OK_ROUTE } from "./buildArtworkReviewPayload";
 import {
   REVIEW_PLACEHOLDER_FILE_NAME,
   UPLOAD_APPROVAL_PENDING_JOBS_KEY,
   UPLOAD_APPROVAL_REVIEW_CONTEXT_KEY,
-  revokeStoredUploadPreview,
+  loadReviewDraft,
   reviewContextFromPendingLine,
+  saveReviewDraft,
   type StoredPendingJobLine,
   type StoredUploadReviewContext,
 } from "./uploadApprovalReviewStorage";
@@ -30,6 +33,7 @@ function mergeMeta(stored: StoredUploadReviewContext | null): ArtworkReviewJobMe
 }
 
 export default function ArtworkReviewErrorClient() {
+  const router = useRouter();
   const [meta, setMeta] = useState<ArtworkReviewJobMeta>(() => ({
     jobIdLabel: ARTWORK_REVIEW_DEMO.jobIdLabel,
     orderedAtLabel: ARTWORK_REVIEW_DEMO.orderedAtLabel,
@@ -58,29 +62,56 @@ export default function ArtworkReviewErrorClient() {
       const prevRaw = sessionStorage.getItem(UPLOAD_APPROVAL_REVIEW_CONTEXT_KEY);
       if (prevRaw) {
         const prev = JSON.parse(prevRaw) as StoredUploadReviewContext;
+        /** Snapshot outgoing context so its preview survives a job switch. */
+        saveReviewDraft(prev);
         const gt = typeof prev.guestTrackingToken === "string" ? prev.guestTrackingToken.trim() : "";
         if (gt) preservedGuestToken = gt;
       }
     } catch {
       preservedGuestToken = undefined;
     }
-    const ctx = reviewContextFromPendingLine(row);
-    if (!ctx) {
-      return;
+
+    const incomingId = row.orderItemId;
+    const draft =
+      incomingId != null && Number.isFinite(incomingId) && incomingId > 0
+        ? loadReviewDraft(incomingId)
+        : null;
+
+    let ctx: StoredUploadReviewContext | null;
+    if (draft) {
+      ctx = { ...draft };
+      if (preservedGuestToken && !ctx.guestTrackingToken) {
+        ctx.guestTrackingToken = preservedGuestToken;
+      }
+    } else {
+      ctx = reviewContextFromPendingLine(row);
+      if (!ctx) return;
+      if (preservedGuestToken) ctx.guestTrackingToken = preservedGuestToken;
     }
-    if (preservedGuestToken) {
-      ctx.guestTrackingToken = preservedGuestToken;
-    }
+
     try {
-      revokeStoredUploadPreview();
       sessionStorage.setItem(UPLOAD_APPROVAL_REVIEW_CONTEXT_KEY, JSON.stringify(ctx));
     } catch {
       return;
     }
+
+    /** A hydrated draft that previously matched the required ratio belongs on the OK page. */
+    const hasOkPreview =
+      Boolean(ctx.previewDataUrl?.trim() || ctx.previewUrl?.trim()) &&
+      Boolean(ctx.uploadedGraphicLabel?.trim()) &&
+      ctx.uploadedGraphicLabel !== "Not uploaded yet" &&
+      Boolean(ctx.fileName?.trim()) &&
+      ctx.fileName !== REVIEW_PLACEHOLDER_FILE_NAME;
+    if (hasOkPreview) {
+      router.push(UPLOAD_APPROVAL_REVIEW_OK_ROUTE);
+      return;
+    }
+
     setMeta(mergeMeta(ctx));
     setDisplayFileName(ctx.fileName?.trim() || REVIEW_PLACEHOLDER_FILE_NAME);
-    setPreviewSrc(null);
-    setPreviewMime(null);
+    const previewSource = ctx.previewDataUrl?.trim() || ctx.previewUrl?.trim() || null;
+    setPreviewSrc(previewSource);
+    setPreviewMime(ctx.previewMime?.trim() || null);
     setUploadedLabel(ctx.uploadedGraphicLabel?.trim() || "Not uploaded yet");
     setRequiredLabel(
       ctx.requiredGraphicLabel?.trim() && ctx.requiredGraphicLabel !== "—"
@@ -91,7 +122,7 @@ export default function ArtworkReviewErrorClient() {
     const oi = ctx.orderItemId;
     setActiveOrderItemId(typeof oi === "number" && Number.isFinite(oi) && oi > 0 ? oi : null);
     setActiveJobIdLabel(ctx.jobIdLabel?.trim() || undefined);
-  }, []);
+  }, [router]);
 
   useEffect(() => {
     try {

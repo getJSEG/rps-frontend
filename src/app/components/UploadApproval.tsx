@@ -4,7 +4,11 @@ import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "react-toastify";
 import { ordersAPI } from "../../utils/api";
-import { UPLOAD_APPROVAL_REVIEW_CONTEXT_KEY, revokeStoredUploadPreview } from "./artwork-review/uploadApprovalReviewStorage";
+import {
+  UPLOAD_APPROVAL_REVIEW_CONTEXT_KEY,
+  clearAllReviewDrafts,
+  revokeStoredUploadPreview,
+} from "./artwork-review/uploadApprovalReviewStorage";
 import {
   UPLOAD_REVIEW_ERROR_CLIENT_PATH,
   writeUploadReviewSessionForJob,
@@ -84,11 +88,12 @@ export default function UploadApproval() {
     setAuthReady(true);
   }, []);
 
-  /** Drop stale review preview/context when visiting the list; keep pending job lines for review sidebar. */
+  /** Drop stale review preview/context and per-job drafts when visiting the list; keep pending job lines for review sidebar. */
   useEffect(() => {
     try {
       revokeStoredUploadPreview();
       sessionStorage.removeItem(UPLOAD_APPROVAL_REVIEW_CONTEXT_KEY);
+      clearAllReviewDrafts();
     } catch {
       /* ignore */
     }

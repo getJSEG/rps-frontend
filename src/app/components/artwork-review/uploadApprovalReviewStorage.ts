@@ -1,6 +1,4 @@
-/** Placeholder before a file is chosen; must match checks in review UI. */
 export const REVIEW_PLACEHOLDER_FILE_NAME = "\u2014";
-
 import { coercePositiveInch } from "../../../utils/artworkProportion";
 
 /** Populated by Upload Approval before navigating to the review-ok screen. */
@@ -12,6 +10,8 @@ export const UPLOAD_APPROVAL_PENDING_JOBS_KEY = "uploadApprovalPendingJobs";
 /** Guest flow: "Back to upload list" navigates here (path + query). */
 export const UPLOAD_APPROVAL_GUEST_RETURN_URL_KEY = "uploadApprovalGuestReturnUrl";
 
+/** Per-orderItemId map of unsaved review contexts — survives switching jobs in the sidebar. */
+const UPLOAD_APPROVAL_REVIEW_DRAFTS_KEY = "uploadApprovalReviewDrafts";
 export function clearGuestUploadReturnUrl(): void {
   try {
     sessionStorage.removeItem(UPLOAD_APPROVAL_GUEST_RETURN_URL_KEY);
@@ -32,7 +32,6 @@ export function setGuestUploadReturnUrl(orderId: number, guestTrackingToken: str
   }
 }
 
-/** Read guest return path and remove it (one-shot). */
 export function consumeGuestUploadReturnUrl(): string | null {
   try {
     const u = sessionStorage.getItem(UPLOAD_APPROVAL_GUEST_RETURN_URL_KEY)?.trim();
@@ -151,15 +150,90 @@ export function removePendingJobLineFromSession(orderItemId: number): void {
   }
 }
 
+type DraftsMap = Record<string, StoredUploadReviewContext>;
+
+function readDrafts(): DraftsMap {
+  try {
+    const raw = sessionStorage.getItem(UPLOAD_APPROVAL_REVIEW_DRAFTS_KEY);
+    if (!raw) return {};
+    const parsed = JSON.parse(raw) as unknown;
+    if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+      return parsed as DraftsMap;
+    }
+    return {};
+  } catch {
+    return {};
+  }
+}
+
+function writeDrafts(map: DraftsMap): void {
+  try {
+    if (Object.keys(map).length === 0) {
+      sessionStorage.removeItem(UPLOAD_APPROVAL_REVIEW_DRAFTS_KEY);
+      return;
+    }
+    sessionStorage.setItem(UPLOAD_APPROVAL_REVIEW_DRAFTS_KEY, JSON.stringify(map));
+  } catch {
+    /* ignore quota errors */
+  }
+}
+
+/** Persist a context as a per-orderItemId draft. No-op if the context has no preview. */
+export function saveReviewDraft(ctx: StoredUploadReviewContext | null | undefined): void {
+  if (!ctx) return;
+  const id = ctx.orderItemId;
+  if (id == null || !Number.isFinite(id) || id <= 0) return;
+  const hasFile = Boolean(ctx.previewDataUrl?.trim() || ctx.previewUrl?.trim());
+  if (!hasFile) return;
+  const map = readDrafts();
+  map[String(id)] = ctx;
+  writeDrafts(map);
+}
+
+/** Read the saved draft for an order line, if any. */
+export function loadReviewDraft(orderItemId: number): StoredUploadReviewContext | null {
+  if (!Number.isFinite(orderItemId) || orderItemId <= 0) return null;
+  const map = readDrafts();
+  return map[String(orderItemId)] ?? null;
+}
+
+/** Drop a single draft (and revoke its blob URL if any). Called after Approve / explicit reset. */
+export function removeReviewDraft(orderItemId: number): void {
+  if (!Number.isFinite(orderItemId) || orderItemId <= 0) return;
+  const map = readDrafts();
+  const key = String(orderItemId);
+  const ctx = map[key];
+  if (!ctx) return;
+  if (typeof ctx.previewUrl === "string" && ctx.previewUrl.startsWith("blob:")) {
+    try { URL.revokeObjectURL(ctx.previewUrl); } catch { /* ignore */ }
+  }
+  delete map[key];
+  writeDrafts(map);
+}
+
+/** Remove every draft (revoking blob URLs). Used on Upload Approval list mount. */
+export function clearAllReviewDrafts(): void {
+  const map = readDrafts();
+  for (const ctx of Object.values(map)) {
+    if (typeof ctx?.previewUrl === "string" && ctx.previewUrl.startsWith("blob:")) {
+      try { URL.revokeObjectURL(ctx.previewUrl); } catch { /* ignore */ }
+    }
+  }
+  try { sessionStorage.removeItem(UPLOAD_APPROVAL_REVIEW_DRAFTS_KEY); } catch { /* ignore */ }
+}
+
 /** Revoke blob URL stored in the current context (call before removeItem or replace). */
 export function revokeStoredUploadPreview(): void {
   try {
     const raw = sessionStorage.getItem(UPLOAD_APPROVAL_REVIEW_CONTEXT_KEY);
     if (!raw) return;
     const p = JSON.parse(raw) as StoredUploadReviewContext;
-    if (typeof p.previewUrl === "string" && p.previewUrl.startsWith("blob:")) {
-      URL.revokeObjectURL(p.previewUrl);
-    }
+    if (typeof p.previewUrl !== "string" || !p.previewUrl.startsWith("blob:")) return;
+    /** Don't revoke if a saved draft still references this blob — switching jobs would lose it otherwise. */
+    const drafts = readDrafts();
+    const stillReferenced = Object.values(drafts).some((d) => d.previewUrl === p.previewUrl);
+    if (stillReferenced) return;
+    URL.revokeObjectURL(p.previewUrl);
   } catch {
     /* ignore */
   }

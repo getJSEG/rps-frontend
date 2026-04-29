@@ -6,15 +6,19 @@ import ArtworkReviewShell, { type ArtworkReviewJobMeta } from "./ArtworkReviewSh
 import ArtworkReviewOkContent from "./ArtworkReviewOkContent";
 import { ARTWORK_REVIEW_DEMO } from "./artworkReviewMock";
 import {
+  UPLOAD_APPROVAL_REVIEW_ERROR_ROUTE,
+  UPLOAD_APPROVAL_REVIEW_OK_ROUTE,
+} from "./buildArtworkReviewPayload";
+import {
+  REVIEW_PLACEHOLDER_FILE_NAME,
   UPLOAD_APPROVAL_PENDING_JOBS_KEY,
   UPLOAD_APPROVAL_REVIEW_CONTEXT_KEY,
-  revokeStoredUploadPreview,
+  loadReviewDraft,
   reviewContextFromPendingLine,
+  saveReviewDraft,
   type StoredPendingJobLine,
   type StoredUploadReviewContext,
 } from "./uploadApprovalReviewStorage";
-
-const REVIEW_ERROR_PATH = "/upload-approval/review/error";
 
 function mergeMeta(stored: StoredUploadReviewContext | null): ArtworkReviewJobMeta {
   return {
@@ -78,24 +82,46 @@ export default function ArtworkReviewOkClient() {
         const prevRaw = sessionStorage.getItem(UPLOAD_APPROVAL_REVIEW_CONTEXT_KEY);
         if (prevRaw) {
           const prev = JSON.parse(prevRaw) as StoredUploadReviewContext;
+          /** Snapshot outgoing context so its preview survives a job switch. */
+          saveReviewDraft(prev);
           const gt = typeof prev.guestTrackingToken === "string" ? prev.guestTrackingToken.trim() : "";
           if (gt) preservedGuestToken = gt;
         }
       } catch {
         preservedGuestToken = undefined;
       }
-      const ctx = reviewContextFromPendingLine(row);
-      if (!ctx) return;
-      if (preservedGuestToken) {
-        ctx.guestTrackingToken = preservedGuestToken;
+
+      const incomingId = row.orderItemId;
+      const draft =
+        incomingId != null && Number.isFinite(incomingId) && incomingId > 0
+          ? loadReviewDraft(incomingId)
+          : null;
+
+      let ctx: StoredUploadReviewContext | null;
+      if (draft) {
+        ctx = { ...draft };
+        if (preservedGuestToken && !ctx.guestTrackingToken) {
+          ctx.guestTrackingToken = preservedGuestToken;
+        }
+      } else {
+        ctx = reviewContextFromPendingLine(row);
+        if (!ctx) return;
+        if (preservedGuestToken) ctx.guestTrackingToken = preservedGuestToken;
       }
+
       try {
-        revokeStoredUploadPreview();
         sessionStorage.setItem(UPLOAD_APPROVAL_REVIEW_CONTEXT_KEY, JSON.stringify(ctx));
       } catch {
         return;
       }
-      router.push(REVIEW_ERROR_PATH);
+
+      const hasOkPreview =
+        Boolean(ctx.previewDataUrl?.trim() || ctx.previewUrl?.trim()) &&
+        Boolean(ctx.uploadedGraphicLabel?.trim()) &&
+        ctx.uploadedGraphicLabel !== "Not uploaded yet" &&
+        Boolean(ctx.fileName?.trim()) &&
+        ctx.fileName !== REVIEW_PLACEHOLDER_FILE_NAME;
+      router.push(hasOkPreview ? UPLOAD_APPROVAL_REVIEW_OK_ROUTE : UPLOAD_APPROVAL_REVIEW_ERROR_ROUTE);
     },
     [router, activeOrderItemId]
   );

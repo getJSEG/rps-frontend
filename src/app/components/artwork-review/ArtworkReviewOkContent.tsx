@@ -3,15 +3,26 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { ordersAPI } from "../../../utils/api";
 import { IoCheckmarkCircle } from "react-icons/io5";
+import { toast } from "react-toastify";
 import { usePathname, useRouter } from "next/navigation";
 import ArtworkReviewFilePreview from "./ArtworkReviewFilePreview";
-import { commitFilePreviewToSession } from "./buildArtworkReviewPayload";
+import {
+  commitFilePreviewToSession,
+  UPLOAD_APPROVAL_REVIEW_ERROR_ROUTE,
+  UPLOAD_APPROVAL_REVIEW_OK_ROUTE,
+} from "./buildArtworkReviewPayload";
 import { ARTWORK_REVIEW_DEMO } from "./artworkReviewMock";
 import { artworkReviewBackButtonLabel, navigateBackFromArtworkReview } from "./artworkReviewBackNavigation";
 import {
+  REVIEW_PLACEHOLDER_FILE_NAME,
+  UPLOAD_APPROVAL_PENDING_JOBS_KEY,
   UPLOAD_APPROVAL_REVIEW_CONTEXT_KEY,
   clearGuestUploadReturnUrl,
+  loadReviewDraft,
   removePendingJobLineFromSession,
+  removeReviewDraft,
+  reviewContextFromPendingLine,
+  type StoredPendingJobLine,
   type StoredUploadReviewContext,
 } from "./uploadApprovalReviewStorage";
 
@@ -138,12 +149,51 @@ export default function ArtworkReviewOkContent({
         try {
           sessionStorage.removeItem(UPLOAD_APPROVAL_REVIEW_CONTEXT_KEY);
           removePendingJobLineFromSession(iid);
-          if (guestOrderPlacedHref) clearGuestUploadReturnUrl();
+          removeReviewDraft(iid);
         } catch {
           /* ignore */
         }
         onArtworkSaved?.();
+
+        /** Stay in the upload-approval flow if any other line on this order is still pending. */
+        let nextRow: StoredPendingJobLine | undefined;
+        try {
+          const raw = sessionStorage.getItem(UPLOAD_APPROVAL_PENDING_JOBS_KEY);
+          const list = raw ? (JSON.parse(raw) as StoredPendingJobLine[]) : [];
+          nextRow = list.find(
+            (r) => r.orderId === oid && r.orderItemId != null && r.orderItemId > 0
+          );
+        } catch {
+          nextRow = undefined;
+        }
+
+        if (nextRow) {
+          const nextDraft = loadReviewDraft(nextRow.orderItemId as number);
+          const nextCtx: StoredUploadReviewContext | null = nextDraft
+            ? { ...nextDraft }
+            : reviewContextFromPendingLine(nextRow);
+          if (nextCtx) {
+            if (guestTok && !nextCtx.guestTrackingToken) nextCtx.guestTrackingToken = guestTok;
+            try {
+              sessionStorage.setItem(UPLOAD_APPROVAL_REVIEW_CONTEXT_KEY, JSON.stringify(nextCtx));
+            } catch {
+              /* ignore */
+            }
+            const hasOkPreview =
+              Boolean(nextCtx.previewDataUrl?.trim() || nextCtx.previewUrl?.trim()) &&
+              Boolean(nextCtx.uploadedGraphicLabel?.trim()) &&
+              nextCtx.uploadedGraphicLabel !== "Not uploaded yet" &&
+              Boolean(nextCtx.fileName?.trim()) &&
+              nextCtx.fileName !== REVIEW_PLACEHOLDER_FILE_NAME;
+            toast.success("Artwork approved. Continue with the next product.");
+            router.push(hasOkPreview ? UPLOAD_APPROVAL_REVIEW_OK_ROUTE : UPLOAD_APPROVAL_REVIEW_ERROR_ROUTE);
+            return;
+          }
+        }
+
+        toast.success("Artwork approved.");
         if (guestOrderPlacedHref) {
+          clearGuestUploadReturnUrl();
           router.push(guestOrderPlacedHref);
           return;
         }
