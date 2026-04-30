@@ -61,6 +61,7 @@ export default function ArtworkReviewOkClient() {
   const [previewSrc, setPreviewSrc] = useState<string | null>(null);
   const [previewMime, setPreviewMime] = useState<string | null>(null);
   const [hydrated, setHydrated] = useState(false);
+  const [isAlreadyApproved, setIsAlreadyApproved] = useState(false);
   const [sidebarJobs, setSidebarJobs] = useState<StoredPendingJobLine[] | null>(null);
   const [activeOrderItemId, setActiveOrderItemId] = useState<number | null>(null);
   const [activeJobIdLabel, setActiveJobIdLabel] = useState<string | undefined>(undefined);
@@ -121,7 +122,26 @@ export default function ArtworkReviewOkClient() {
         ctx.uploadedGraphicLabel !== "Not uploaded yet" &&
         Boolean(ctx.fileName?.trim()) &&
         ctx.fileName !== REVIEW_PLACEHOLDER_FILE_NAME;
-      router.push(hasOkPreview ? UPLOAD_APPROVAL_REVIEW_OK_ROUTE : UPLOAD_APPROVAL_REVIEW_ERROR_ROUTE);
+
+      /**
+       * If the target job also belongs on this (ok) page, update state in-place.
+       * router.push to the same URL is a no-op in Next.js and would leave the page stale.
+       */
+      if (hasOkPreview) {
+        setMeta(mergeMeta(ctx));
+        setDisplayFileName(ctx.fileName?.trim() || ARTWORK_REVIEW_DEMO.fileNameOk);
+        const data = ctx.previewDataUrl?.trim();
+        const blob = ctx.previewUrl?.trim();
+        setPreviewSrc(data || blob || null);
+        setPreviewMime(ctx.previewMime?.trim() || null);
+        setIsAlreadyApproved(ctx.hasArtwork === true);
+        const oi = ctx.orderItemId;
+        setActiveOrderItemId(typeof oi === "number" && Number.isFinite(oi) && oi > 0 ? oi : null);
+        setActiveJobIdLabel(ctx.jobIdLabel?.trim() || undefined);
+      } else {
+        setIsAlreadyApproved(ctx.hasArtwork === true);
+        router.push(UPLOAD_APPROVAL_REVIEW_ERROR_ROUTE);
+      }
     },
     [router, activeOrderItemId]
   );
@@ -137,6 +157,7 @@ export default function ArtworkReviewOkClient() {
         const blob = parsed.previewUrl?.trim();
         setPreviewSrc(data || blob || null);
         setPreviewMime(parsed.previewMime?.trim() || null);
+        setIsAlreadyApproved(parsed.hasArtwork === true);
         const oi = parsed.orderItemId;
         setActiveOrderItemId(
           typeof oi === "number" && Number.isFinite(oi) && oi > 0 ? oi : null
@@ -171,6 +192,8 @@ export default function ArtworkReviewOkClient() {
         displayFileName={displayFileName}
         previewSrc={previewSrc}
         previewMime={previewMime}
+        isAlreadyApproved={isAlreadyApproved}
+        dimensions={meta.dimensions}
         onArtworkSaved={refreshPendingSidebar}
       />
     </ArtworkReviewShell>

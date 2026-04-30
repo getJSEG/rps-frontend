@@ -38,6 +38,8 @@ function pendingJobToStoredLine(j: PendingJob): StoredPendingJobLine {
     requiredHeightIn: j.requiredHeightIn,
     isGraphicScenario: j.isGraphicScenario === true,
     orderedAtLabel: formatJobDate(j.orderedAt),
+    hasArtwork: j.hasArtwork === true,
+    artworkUrl: j.artworkUrl ?? null,
   };
 }
 

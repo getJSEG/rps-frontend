@@ -749,26 +749,17 @@ export default function OrderDetails() {
   };
 
   const renderThumb = (item: OrderItem) => {
-    const artHref = getProductImageUrl(lineCustomerArtworkSource(item));
-    const productSrc = getProductImageUrl(item.product_image);
-    const artExt = artHref ? artHref.split("?")[0].split(".").pop()?.toLowerCase() || "" : "";
-    const useArtThumb =
-      !!artHref && ["jpg", "jpeg", "png", "gif", "webp", "bmp", "svg"].includes(artExt);
-    const imgSrc = useArtThumb ? artHref : productSrc;
+    const imgSrc = getProductImageUrl(item.product_image);
     if (!imgSrc) {
       return <div className="h-12 w-12 rounded-lg bg-slate-200 text-[8px] leading-tight text-slate-500 flex items-center justify-center p-1 text-center">No img</div>;
     }
-    const isBackend =
-      (item.product_image && String(item.product_image).startsWith("/uploads/")) ||
-      useArtThumb ||
-      String(imgSrc).includes("/uploads/");
+    const isBackend = String(imgSrc).includes("/uploads/");
     if (isBackend) {
       return (
         // eslint-disable-next-line @next/next/no-img-element
         <img
           src={imgSrc}
           alt=""
-          title={useArtThumb ? "Uploaded job artwork" : undefined}
           className="h-12 w-12 rounded-lg object-cover border border-slate-200"
         />
       );

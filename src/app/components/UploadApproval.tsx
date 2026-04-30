@@ -15,7 +15,7 @@ import {
 } from "./artwork-review/openUploadReviewSession";
 import { isAuthenticated } from "../../utils/roles";
 import {
-  buildPendingUploadJobsFromOrders,
+  buildAllUploadJobsFromOrders,
   type PendingJob,
   type UploadApprovalOrderRow as OrderRow,
 } from "../../utils/uploadApprovalPending";
@@ -152,11 +152,11 @@ export default function UploadApproval() {
     };
   }, [authReady, loggedIn]);
 
-  const pendingJobs: PendingJob[] = useMemo(() => buildPendingUploadJobsFromOrders(orders), [orders]);
+  const allJobs: PendingJob[] = useMemo(() => buildAllUploadJobsFromOrders(orders), [orders]);
 
   const pendingOrderGroups: PendingOrderGroup[] = useMemo(() => {
     const byOrder = new Map<number, PendingOrderGroup>();
-    for (const job of pendingJobs) {
+    for (const job of allJobs) {
       let g = byOrder.get(job.orderId);
       if (!g) {
         g = {
@@ -170,7 +170,7 @@ export default function UploadApproval() {
       g.jobs.push(job);
     }
     return Array.from(byOrder.values());
-  }, [pendingJobs]);
+  }, [allJobs]);
 
   return (
     <div className="relative min-h-screen bg-[#f5f5f5] pb-16 pt-24">
@@ -194,7 +194,7 @@ export default function UploadApproval() {
           </div>
         ) : !loggedIn ? null : error ? (
           <div className="rounded-lg border border-red-200 bg-red-50 p-8 text-center text-red-800">{error}</div>
-        ) : pendingJobs.length === 0 ? (
+        ) : allJobs.length === 0 ? (
           <div className="flex min-h-[420px] flex-col items-center justify-center rounded-lg border border-gray-200 bg-white shadow-sm">
             <svg
               className="mb-4 h-24 w-24 text-gray-300"
@@ -228,6 +228,15 @@ export default function UploadApproval() {
                       <span className="text-gray-500">
                         {group.jobs.length} job{group.jobs.length === 1 ? "" : "s"}
                       </span>
+                      {(() => {
+                        const approved = group.jobs.filter((j) => j.hasArtwork).length;
+                        return approved > 0 ? (
+                          <>
+                            <span className="mx-2 text-gray-300">·</span>
+                            <span className="text-emerald-600 font-medium">{approved}/{group.jobs.length} approved</span>
+                          </>
+                        ) : null;
+                      })()}
                     </span>
                     <span className="text-gray-500">{formatJobDate(group.orderedAt)}</span>
                   </div>
@@ -258,13 +267,25 @@ export default function UploadApproval() {
                               <span className="font-medium text-gray-600">Qty: </span>x{job.quantity}
                             </p>
                           </div>
-                          <div className="flex shrink-0 sm:justify-end">
+                          <div className="flex shrink-0 flex-col items-stretch gap-2 sm:items-end">
+                            {job.hasArtwork && (
+                              <span className="flex items-center justify-center gap-1.5 rounded-full bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-700 ring-1 ring-emerald-200">
+                                <svg className="h-3.5 w-3.5 shrink-0" viewBox="0 0 20 20" fill="currentColor" aria-hidden>
+                                  <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                                </svg>
+                                Approved
+                              </span>
+                            )}
                             <button
                               type="button"
                               onClick={() => openReviewForJob(router, group, job)}
-                              className="w-full min-w-[10.5rem] rounded-md bg-sky-600 px-3 py-2.5 text-center text-sm font-semibold text-white shadow-sm transition-colors hover:bg-sky-700 sm:w-auto"
+                              className={`w-full min-w-[10.5rem] rounded-md px-3 py-2.5 text-center text-sm font-semibold text-white shadow-sm transition-colors sm:w-auto ${
+                                job.hasArtwork
+                                  ? "bg-gray-500 hover:bg-gray-600"
+                                  : "bg-sky-600 hover:bg-sky-700"
+                              }`}
                             >
-                              Upload artwork
+                              {job.hasArtwork ? "Reupload artwork" : "Upload artwork"}
                             </button>
                           </div>
                         </li>

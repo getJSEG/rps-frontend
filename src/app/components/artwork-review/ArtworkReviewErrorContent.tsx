@@ -27,6 +27,8 @@ type ArtworkReviewErrorContentProps = {
   uploadedGraphicLabel?: string;
   requiredGraphicLabel?: string;
   isGraphicScenario?: boolean;
+  /** True when the customer already approved artwork for this job (reupload scenario). */
+  isAlreadyApproved?: boolean;
 };
 
 export default function ArtworkReviewErrorContent({
@@ -36,6 +38,7 @@ export default function ArtworkReviewErrorContent({
   uploadedGraphicLabel: uploadedProp,
   requiredGraphicLabel: requiredProp,
   isGraphicScenario = false,
+  isAlreadyApproved = false,
 }: ArtworkReviewErrorContentProps) {
   const hideArtworkLibrary = shouldHideArtworkLibrary();
   const router = useRouter();
@@ -147,7 +150,27 @@ export default function ArtworkReviewErrorContent({
       </div>
 
       <div className="flex w-full shrink-0 flex-col justify-center gap-4 lg:max-w-sm">
-        {awaitingFileSelection ? (
+        {isAlreadyApproved ? (
+          <>
+            <div className="flex items-center gap-2 rounded-md bg-emerald-50 px-4 py-3 ring-1 ring-emerald-200">
+              <svg className="h-5 w-5 shrink-0 text-emerald-600" viewBox="0 0 20 20" fill="currentColor" aria-hidden>
+                <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+              </svg>
+              <span className="text-sm font-semibold text-emerald-700">Artwork uploaded successfully</span>
+            </div>
+            <p className="text-sm leading-relaxed text-gray-600">
+              Your artwork has been approved for this job. You can upload a new file below to replace it.
+            </p>
+            {!isGraphicScenario && (
+              <div className="space-y-1 text-sm text-gray-600">
+                <p>
+                  Required print size:{" "}
+                  <span className="font-bold text-gray-900">{requiredLabel}</span>
+                </p>
+              </div>
+            )}
+          </>
+        ) : awaitingFileSelection ? (
           <>
             <h2 className="text-lg font-bold text-sky-800">Upload artwork for this job</h2>
             <p className="text-sm leading-relaxed text-gray-700">
@@ -197,12 +220,14 @@ export default function ArtworkReviewErrorContent({
           type="button"
           onClick={openReupload}
           className={`w-full rounded-md px-4 py-3.5 text-center text-sm font-semibold text-white shadow-sm transition-colors ${
-            awaitingFileSelection
-              ? "bg-sky-600 hover:bg-sky-700"
-              : "bg-red-600 hover:bg-red-700"
+            isAlreadyApproved
+              ? "bg-gray-500 hover:bg-gray-600"
+              : awaitingFileSelection
+                ? "bg-sky-600 hover:bg-sky-700"
+                : "bg-red-600 hover:bg-red-700"
           }`}
         >
-          {awaitingFileSelection ? "Choose file" : "Upload image"}
+          {isAlreadyApproved ? "Choose new file" : awaitingFileSelection ? "Choose file" : "Upload image"}
         </button>
 
         {!hideArtworkLibrary && (
@@ -211,7 +236,7 @@ export default function ArtworkReviewErrorContent({
             onClick={() => setLibraryOpen(true)}
             className="w-full rounded-md bg-sky-600 px-4 py-3.5 text-center text-sm font-semibold text-white shadow-sm transition-colors hover:bg-sky-700"
           >
-            Upload my artwork
+            {isAlreadyApproved ? "Replace from my artwork library" : "Upload my artwork"}
           </button>
         )}
 

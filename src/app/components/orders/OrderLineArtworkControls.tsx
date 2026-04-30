@@ -51,16 +51,13 @@ function ArtworkDownloadIcon({ className = "h-5 w-5" }: { className?: string }) 
 }
 
 /**
- * Thumbnail: prefer customer artwork when it is a raster URL; otherwise product image.
- * Mirrors admin order detail `renderThumb`.
+ * Thumbnail: always shows the product image (never the customer artwork).
+ * The uploaded artwork is shown separately in the Download column.
  */
 export function OrderLineThumbnail({ item }: { item: OrderLineArtworkItem }) {
-  const artHref = getProductImageUrl(lineCustomerArtworkSource(item));
   const productSrc = getProductImageUrl(item.image_url ?? item.product_image ?? undefined);
-  const artExt = artHref ? artHref.split("?")[0].split(".").pop()?.toLowerCase() || "" : "";
-  const useArtThumb =
-    !!artHref && ["jpg", "jpeg", "png", "gif", "webp", "bmp", "svg"].includes(artExt);
-  const imgSrc = useArtThumb ? artHref : productSrc;
+  const imgSrc = productSrc;
+  const useArtThumb = false;
   if (!imgSrc) {
     return (
       <div className="flex h-12 w-12 items-center justify-center rounded-lg border border-slate-200 bg-slate-100 p-1 text-center text-[8px] leading-tight text-slate-500">

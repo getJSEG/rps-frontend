@@ -37,6 +37,10 @@ export type PendingJob = {
   requiredWidthIn: number | null;
   requiredHeightIn: number | null;
   isGraphicScenario?: boolean;
+  /** True when the customer has already uploaded artwork for this job. */
+  hasArtwork?: boolean;
+  /** The saved artwork URL from the backend (customer_artwork_url) — present when hasArtwork is true. */
+  artworkUrl?: string | null;
 };
 
 function normalizeItems(raw: unknown): UploadApprovalOrderItem[] {
@@ -86,11 +90,7 @@ export function orderItemNeedsCustomerArtworkUpload(
   return !url;
 }
 
-/**
- * Same rules as the Pending Upload and Approval page: orders awaiting artwork or customer
- * approval, counting each line item that still has no customer_artwork_url.
- */
-export function buildPendingUploadJobsFromOrders(orders: UploadApprovalOrderRow[]): PendingJob[] {
+function buildJobsFromOrders(orders: UploadApprovalOrderRow[], onlyPending: boolean): PendingJob[] {
   const out: PendingJob[] = [];
   for (const order of orders) {
     if (!orderNeedsUploadOrApproval(order.status)) continue;
@@ -111,12 +111,14 @@ export function buildPendingUploadJobsFromOrders(orders: UploadApprovalOrderRow[
         requiredWidthIn: null,
         requiredHeightIn: null,
         isGraphicScenario: false,
+        hasArtwork: false,
       });
       continue;
     }
     items.forEach((it, idx) => {
       const url = it.customer_artwork_url != null ? String(it.customer_artwork_url).trim() : "";
-      if (url) return;
+      const hasArtwork = Boolean(url);
+      if (onlyPending && hasArtwork) return;
       const itemId = it.id != null && Number.isFinite(Number(it.id)) ? Number(it.id) : null;
       const line = idx + 1;
       const jobIdLabel = `${base}-${String(line).padStart(2, "0")}`;
@@ -138,8 +140,26 @@ export function buildPendingUploadJobsFromOrders(orders: UploadApprovalOrderRow[
         requiredWidthIn: inches?.w ?? null,
         requiredHeightIn: inches?.h ?? null,
         isGraphicScenario: graphicScenario,
+        hasArtwork,
+        artworkUrl: hasArtwork ? url : null,
       });
     });
   }
   return out;
+}
+
+/**
+ * Orders awaiting artwork / customer approval — only lines with no customer_artwork_url yet.
+ * Used for navbar badge count.
+ */
+export function buildPendingUploadJobsFromOrders(orders: UploadApprovalOrderRow[]): PendingJob[] {
+  return buildJobsFromOrders(orders, true);
+}
+
+/**
+ * All jobs for orders awaiting artwork / customer approval, including already-approved lines.
+ * Used for the Upload and Approval page (approved jobs stay visible with a Reupload button).
+ */
+export function buildAllUploadJobsFromOrders(orders: UploadApprovalOrderRow[]): PendingJob[] {
+  return buildJobsFromOrders(orders, false);
 }

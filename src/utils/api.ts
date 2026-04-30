@@ -987,6 +987,8 @@ export const ordersAPI = {
       orderItemId: number;
       customerArtworkUrl: string;
       orderId: number;
+      /** Present when every job on the order has artwork and the order advanced to processing. */
+      orderStatus?: string;
     }>;
   },
 
@@ -1015,6 +1017,8 @@ export const ordersAPI = {
       orderItemId: number;
       customerArtworkUrl: string;
       orderId: number;
+      /** Present when every job on the order has artwork and the order advanced to processing. */
+      orderStatus?: string;
     }>;
   },
 };

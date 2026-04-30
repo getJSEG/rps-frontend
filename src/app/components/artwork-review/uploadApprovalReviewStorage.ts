@@ -56,6 +56,10 @@ export type StoredPendingJobLine = {
   requiredHeightIn?: number | null;
   isGraphicScenario?: boolean;
   orderedAtLabel?: string;
+  /** True once the customer has approved artwork for this job in the current session. */
+  hasArtwork?: boolean;
+  /** Saved artwork URL from the backend — present when hasArtwork is true. */
+  artworkUrl?: string | null;
 };
 
 export type StoredUploadReviewContext = {
@@ -87,6 +91,8 @@ export type StoredUploadReviewContext = {
   uploadedWidthPx?: number;
   uploadedHeightPx?: number;
   uploadedSizeBytes?: number;
+  /** True when the customer has already approved artwork for this job in a previous step. */
+  hasArtwork?: boolean;
 };
 
 function fmtInch(n: number): string {
@@ -112,6 +118,26 @@ export function reviewContextFromPendingLine(row: StoredPendingJobLine): StoredU
   const dims = row.dimensions?.trim() ? row.dimensions : "—";
   const rw = coercePositiveInch(row.requiredWidthIn);
   const rh = coercePositiveInch(row.requiredHeightIn);
+  const alreadyApproved = row.hasArtwork === true;
+
+  /** Build a proxied preview URL from the saved backend artwork URL so the image is displayable. */
+  let savedPreviewUrl: string | undefined;
+  let savedFileName: string | undefined;
+  if (alreadyApproved && row.artworkUrl) {
+    const src = row.artworkUrl.trim();
+    if (src) {
+      savedPreviewUrl = `/api/artwork-file?source=${encodeURIComponent(src)}`;
+      try {
+        const u = new URL(src);
+        const parts = u.pathname.split("/");
+        const last = parts[parts.length - 1] || "";
+        if (last) savedFileName = decodeURIComponent(last);
+      } catch {
+        /* ignore — fileName stays undefined */
+      }
+    }
+  }
+
   return {
     jobIdLabel: row.jobIdLabel,
     orderedAtLabel: row.orderedAtLabel?.trim() || "—",
@@ -125,8 +151,10 @@ export function reviewContextFromPendingLine(row: StoredPendingJobLine): StoredU
     requiredHeightIn: rh ?? undefined,
     isGraphicScenario: row.isGraphicScenario === true,
     requiredGraphicLabel: requiredGraphicLabelFromPendingLine(row),
-    uploadedGraphicLabel: "Not uploaded yet",
-    fileName: REVIEW_PLACEHOLDER_FILE_NAME,
+    uploadedGraphicLabel: alreadyApproved ? "Previously uploaded" : "Not uploaded yet",
+    fileName: savedFileName ?? REVIEW_PLACEHOLDER_FILE_NAME,
+    previewUrl: savedPreviewUrl,
+    hasArtwork: alreadyApproved,
   };
 }
 
@@ -220,6 +248,41 @@ export function clearAllReviewDrafts(): void {
     }
   }
   try { sessionStorage.removeItem(UPLOAD_APPROVAL_REVIEW_DRAFTS_KEY); } catch { /* ignore */ }
+}
+
+/**
+ * Mark an order item as having approved artwork in the pending-jobs session list.
+ * The row stays in the list (so UploadApproval shows it with a Reupload option);
+ * only the hasArtwork flag is updated.
+ */
+export function markPendingJobArtworkApproved(orderItemId: number, artworkUrl?: string): void {
+  try {
+    const raw = sessionStorage.getItem(UPLOAD_APPROVAL_PENDING_JOBS_KEY);
+    if (!raw) return;
+    const arr = JSON.parse(raw) as unknown;
+    if (!Array.isArray(arr)) return;
+    const next = (arr as StoredPendingJobLine[]).map((j) =>
+      j.orderItemId === orderItemId
+        ? { ...j, hasArtwork: true, artworkUrl: artworkUrl ?? j.artworkUrl ?? null }
+        : j
+    );
+    sessionStorage.setItem(UPLOAD_APPROVAL_PENDING_JOBS_KEY, JSON.stringify(next));
+  } catch {
+    /* ignore */
+  }
+  /** Also stamp the active review context so the upload page shows "already approved" state. */
+  try {
+    const ctxRaw = sessionStorage.getItem(UPLOAD_APPROVAL_REVIEW_CONTEXT_KEY);
+    if (!ctxRaw) return;
+    const ctx = JSON.parse(ctxRaw) as StoredUploadReviewContext;
+    if (ctx.orderItemId === orderItemId) {
+      ctx.hasArtwork = true;
+      if (artworkUrl) ctx.previewUrl = `/api/artwork-file?source=${encodeURIComponent(artworkUrl)}`;
+      sessionStorage.setItem(UPLOAD_APPROVAL_REVIEW_CONTEXT_KEY, JSON.stringify(ctx));
+    }
+  } catch {
+    /* ignore */
+  }
 }
 
 /** Revoke blob URL stored in the current context (call before removeItem or replace). */
