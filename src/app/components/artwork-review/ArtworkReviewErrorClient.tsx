@@ -11,7 +11,10 @@ import {
   UPLOAD_APPROVAL_PENDING_JOBS_KEY,
   UPLOAD_APPROVAL_REVIEW_CONTEXT_KEY,
   loadReviewDraft,
+  mergeReviewContextWithSidebarRow,
+  reviewContextBelongsOnOkRoute,
   reviewContextFromPendingLine,
+  reviewContextHasUploadPreview,
   saveReviewDraft,
   type StoredPendingJobLine,
   type StoredUploadReviewContext,
@@ -90,20 +93,18 @@ export default function ArtworkReviewErrorClient() {
       if (preservedGuestToken) ctx.guestTrackingToken = preservedGuestToken;
     }
 
+    ctx = mergeReviewContextWithSidebarRow(ctx, row);
+
     try {
       sessionStorage.setItem(UPLOAD_APPROVAL_REVIEW_CONTEXT_KEY, JSON.stringify(ctx));
     } catch {
       return;
     }
 
-    /** A hydrated draft that previously matched the required ratio belongs on the OK page. */
-    const hasOkPreview =
-      Boolean(ctx.previewDataUrl?.trim() || ctx.previewUrl?.trim()) &&
-      Boolean(ctx.uploadedGraphicLabel?.trim()) &&
-      ctx.uploadedGraphicLabel !== "Not uploaded yet" &&
-      Boolean(ctx.fileName?.trim()) &&
-      ctx.fileName !== REVIEW_PLACEHOLDER_FILE_NAME;
-    if (hasOkPreview) {
+    const hasUploadPreview = reviewContextHasUploadPreview(ctx);
+    const belongsOnOk =
+      reviewContextBelongsOnOkRoute(ctx) || (ctx.hasArtwork === true && hasUploadPreview);
+    if (hasUploadPreview && belongsOnOk) {
       router.push(UPLOAD_APPROVAL_REVIEW_OK_ROUTE);
       return;
     }
@@ -127,35 +128,62 @@ export default function ArtworkReviewErrorClient() {
   }, [router]);
 
   useEffect(() => {
+    let redirected = false;
     try {
-      const raw = sessionStorage.getItem(UPLOAD_APPROVAL_REVIEW_CONTEXT_KEY);
-      if (raw) {
-        const parsed = JSON.parse(raw) as StoredUploadReviewContext;
-        setMeta(mergeMeta(parsed));
-        setDisplayFileName(parsed.fileName?.trim() || ARTWORK_REVIEW_DEMO.fileNameError);
-        const data = parsed.previewDataUrl?.trim();
-        const blob = parsed.previewUrl?.trim();
-        setPreviewSrc(data || blob || null);
-        setPreviewMime(parsed.previewMime?.trim() || null);
-        if (parsed.uploadedGraphicLabel?.trim()) {
-          setUploadedLabel(parsed.uploadedGraphicLabel.trim());
-        }
-        if (parsed.requiredGraphicLabel?.trim() && parsed.requiredGraphicLabel !== "—") {
-          setRequiredLabel(parsed.requiredGraphicLabel.trim());
-        }
-        setIsGraphicScenario(parsed.isGraphicScenario === true);
-        setIsAlreadyApproved(parsed.hasArtwork === true);
-        const oi = parsed.orderItemId;
-        setActiveOrderItemId(
-          typeof oi === "number" && Number.isFinite(oi) && oi > 0 ? oi : null
-        );
-        setActiveJobIdLabel(parsed.jobIdLabel?.trim() || undefined);
-      }
+      let sidebarParsed: StoredPendingJobLine[] | null = null;
       const rawJobs = sessionStorage.getItem(UPLOAD_APPROVAL_PENDING_JOBS_KEY);
       if (rawJobs) {
         const arr = JSON.parse(rawJobs) as unknown;
         if (Array.isArray(arr) && arr.length > 0) {
-          setSidebarJobs(arr as StoredPendingJobLine[]);
+          sidebarParsed = arr as StoredPendingJobLine[];
+          setSidebarJobs(sidebarParsed);
+        }
+      }
+
+      const raw = sessionStorage.getItem(UPLOAD_APPROVAL_REVIEW_CONTEXT_KEY);
+      if (raw) {
+        let parsed = JSON.parse(raw) as StoredUploadReviewContext;
+        if (sidebarParsed?.length) {
+          const oi0 = parsed.orderItemId;
+          if (typeof oi0 === "number" && Number.isFinite(oi0) && oi0 > 0) {
+            const match = sidebarParsed.find((j) => j.orderItemId === oi0);
+            if (match) parsed = mergeReviewContextWithSidebarRow(parsed, match);
+          }
+        }
+
+        const hasUploadPreview = reviewContextHasUploadPreview(parsed);
+        const belongsOnOk =
+          reviewContextBelongsOnOkRoute(parsed) || (parsed.hasArtwork === true && hasUploadPreview);
+        if (hasUploadPreview && belongsOnOk) {
+          try {
+            sessionStorage.setItem(UPLOAD_APPROVAL_REVIEW_CONTEXT_KEY, JSON.stringify(parsed));
+          } catch {
+            /* ignore */
+          }
+          redirected = true;
+          router.replace(UPLOAD_APPROVAL_REVIEW_OK_ROUTE);
+        }
+
+        if (!redirected) {
+          setMeta(mergeMeta(parsed));
+          setDisplayFileName(parsed.fileName?.trim() || ARTWORK_REVIEW_DEMO.fileNameError);
+          const data = parsed.previewDataUrl?.trim();
+          const blob = parsed.previewUrl?.trim();
+          setPreviewSrc(data || blob || null);
+          setPreviewMime(parsed.previewMime?.trim() || null);
+          if (parsed.uploadedGraphicLabel?.trim()) {
+            setUploadedLabel(parsed.uploadedGraphicLabel.trim());
+          }
+          if (parsed.requiredGraphicLabel?.trim() && parsed.requiredGraphicLabel !== "—") {
+            setRequiredLabel(parsed.requiredGraphicLabel.trim());
+          }
+          setIsGraphicScenario(parsed.isGraphicScenario === true);
+          setIsAlreadyApproved(parsed.hasArtwork === true);
+          const oi = parsed.orderItemId;
+          setActiveOrderItemId(
+            typeof oi === "number" && Number.isFinite(oi) && oi > 0 ? oi : null
+          );
+          setActiveJobIdLabel(parsed.jobIdLabel?.trim() || undefined);
         }
       }
     } catch {
@@ -163,7 +191,7 @@ export default function ArtworkReviewErrorClient() {
     } finally {
       setHydrated(true);
     }
-  }, []);
+  }, [router]);
 
   if (!hydrated) {
     return (

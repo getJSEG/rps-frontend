@@ -10,11 +10,13 @@ import {
   UPLOAD_APPROVAL_REVIEW_OK_ROUTE,
 } from "./buildArtworkReviewPayload";
 import {
-  REVIEW_PLACEHOLDER_FILE_NAME,
   UPLOAD_APPROVAL_PENDING_JOBS_KEY,
   UPLOAD_APPROVAL_REVIEW_CONTEXT_KEY,
   loadReviewDraft,
+  mergeReviewContextWithSidebarRow,
+  reviewContextBelongsOnOkRoute,
   reviewContextFromPendingLine,
+  reviewContextHasUploadPreview,
   saveReviewDraft,
   type StoredPendingJobLine,
   type StoredUploadReviewContext,
@@ -110,24 +112,23 @@ export default function ArtworkReviewOkClient() {
         if (preservedGuestToken) ctx.guestTrackingToken = preservedGuestToken;
       }
 
+      ctx = mergeReviewContextWithSidebarRow(ctx, row);
+
       try {
         sessionStorage.setItem(UPLOAD_APPROVAL_REVIEW_CONTEXT_KEY, JSON.stringify(ctx));
       } catch {
         return;
       }
 
-      const hasOkPreview =
-        Boolean(ctx.previewDataUrl?.trim() || ctx.previewUrl?.trim()) &&
-        Boolean(ctx.uploadedGraphicLabel?.trim()) &&
-        ctx.uploadedGraphicLabel !== "Not uploaded yet" &&
-        Boolean(ctx.fileName?.trim()) &&
-        ctx.fileName !== REVIEW_PLACEHOLDER_FILE_NAME;
+      const hasUploadPreview = reviewContextHasUploadPreview(ctx);
+      const belongsOnOk =
+        reviewContextBelongsOnOkRoute(ctx) || (ctx.hasArtwork === true && hasUploadPreview);
 
       /**
        * If the target job also belongs on this (ok) page, update state in-place.
        * router.push to the same URL is a no-op in Next.js and would leave the page stale.
        */
-      if (hasOkPreview) {
+      if (hasUploadPreview && belongsOnOk) {
         setMeta(mergeMeta(ctx));
         setDisplayFileName(ctx.fileName?.trim() || ARTWORK_REVIEW_DEMO.fileNameOk);
         const data = ctx.previewDataUrl?.trim();
@@ -147,22 +148,48 @@ export default function ArtworkReviewOkClient() {
   );
 
   useEffect(() => {
+    let redirected = false;
     try {
       const raw = sessionStorage.getItem(UPLOAD_APPROVAL_REVIEW_CONTEXT_KEY);
       if (raw) {
-        const parsed = JSON.parse(raw) as StoredUploadReviewContext;
-        setMeta(mergeMeta(parsed));
-        setDisplayFileName(parsed.fileName?.trim() || ARTWORK_REVIEW_DEMO.fileNameOk);
-        const data = parsed.previewDataUrl?.trim();
-        const blob = parsed.previewUrl?.trim();
-        setPreviewSrc(data || blob || null);
-        setPreviewMime(parsed.previewMime?.trim() || null);
-        setIsAlreadyApproved(parsed.hasArtwork === true);
-        const oi = parsed.orderItemId;
-        setActiveOrderItemId(
-          typeof oi === "number" && Number.isFinite(oi) && oi > 0 ? oi : null
-        );
-        setActiveJobIdLabel(parsed.jobIdLabel?.trim() || undefined);
+        let parsed = JSON.parse(raw) as StoredUploadReviewContext;
+        const sidebar = readPendingJobsFromSession();
+        if (sidebar?.length) {
+          const oi0 = parsed.orderItemId;
+          if (typeof oi0 === "number" && Number.isFinite(oi0) && oi0 > 0) {
+            const match = sidebar.find((j) => j.orderItemId === oi0);
+            if (match) parsed = mergeReviewContextWithSidebarRow(parsed, match);
+          }
+        }
+
+        const hasUploadPreview = reviewContextHasUploadPreview(parsed);
+        const belongsOnOk =
+          reviewContextBelongsOnOkRoute(parsed) ||
+          (parsed.hasArtwork === true && hasUploadPreview);
+        if (hasUploadPreview && !belongsOnOk) {
+          try {
+            sessionStorage.setItem(UPLOAD_APPROVAL_REVIEW_CONTEXT_KEY, JSON.stringify(parsed));
+          } catch {
+            /* ignore */
+          }
+          redirected = true;
+          router.replace(UPLOAD_APPROVAL_REVIEW_ERROR_ROUTE);
+        }
+
+        if (!redirected) {
+          setMeta(mergeMeta(parsed));
+          setDisplayFileName(parsed.fileName?.trim() || ARTWORK_REVIEW_DEMO.fileNameOk);
+          const data = parsed.previewDataUrl?.trim();
+          const blob = parsed.previewUrl?.trim();
+          setPreviewSrc(data || blob || null);
+          setPreviewMime(parsed.previewMime?.trim() || null);
+          setIsAlreadyApproved(parsed.hasArtwork === true);
+          const oi = parsed.orderItemId;
+          setActiveOrderItemId(
+            typeof oi === "number" && Number.isFinite(oi) && oi > 0 ? oi : null
+          );
+          setActiveJobIdLabel(parsed.jobIdLabel?.trim() || undefined);
+        }
       }
       setSidebarJobs(readPendingJobsFromSession());
     } catch {
@@ -170,7 +197,7 @@ export default function ArtworkReviewOkClient() {
     } finally {
       setHydrated(true);
     }
-  }, []);
+  }, [router]);
 
   if (!hydrated) {
     return (
@@ -179,6 +206,13 @@ export default function ArtworkReviewOkClient() {
       </div>
     );
   }
+
+  const selectionKey =
+    activeOrderItemId != null && activeOrderItemId > 0
+      ? `oi-${activeOrderItemId}`
+      : activeJobIdLabel
+        ? `jl-${activeJobIdLabel}`
+        : "none";
 
   return (
     <ArtworkReviewShell
@@ -189,6 +223,7 @@ export default function ArtworkReviewOkClient() {
       onSelectJob={sidebarJobs?.length ? applyJobRow : undefined}
     >
       <ArtworkReviewOkContent
+        key={selectionKey}
         displayFileName={displayFileName}
         previewSrc={previewSrc}
         previewMime={previewMime}

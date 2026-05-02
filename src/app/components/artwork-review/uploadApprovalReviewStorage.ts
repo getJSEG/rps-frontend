@@ -1,5 +1,8 @@
 export const REVIEW_PLACEHOLDER_FILE_NAME = "\u2014";
-import { coercePositiveInch } from "../../../utils/artworkProportion";
+import {
+  assessArtworkProportionFromMetadata,
+  coercePositiveInch,
+} from "../../../utils/artworkProportion";
 
 /** Populated by Upload Approval before navigating to the review-ok screen. */
 export const UPLOAD_APPROVAL_REVIEW_CONTEXT_KEY = "uploadApprovalReviewContext";
@@ -60,6 +63,12 @@ export type StoredPendingJobLine = {
   hasArtwork?: boolean;
   /** Saved artwork URL from the backend — present when hasArtwork is true. */
   artworkUrl?: string | null;
+  /**
+   * True when the customer re-uploaded a replacement file for an already-approved job but
+   * has NOT yet clicked Approve on the new file. Used to prevent a sibling-job approval from
+   * triggering the "all done" order redirect while this job still has an un-submitted replacement.
+   */
+  hasPendingReplacement?: boolean;
 };
 
 export type StoredUploadReviewContext = {
@@ -93,7 +102,91 @@ export type StoredUploadReviewContext = {
   uploadedSizeBytes?: number;
   /** True when the customer has already approved artwork for this job in a previous step. */
   hasArtwork?: boolean;
+  /**
+   * From last client proportion check — must be honored when switching jobs so a mismatch
+   * draft is not shown on the OK review screen. Omitted on legacy session data (inferred).
+   */
+  proportionOk?: boolean;
 };
+
+/**
+ * Whether this context should use the aspect-OK review UI (or graphic scenario, which skips aspect).
+ * Legacy drafts without `proportionOk` are inferred from stored pixel size vs required inches.
+ */
+export function reviewContextBelongsOnOkRoute(ctx: StoredUploadReviewContext | null | undefined): boolean {
+  if (!ctx) return false;
+  if (ctx.isGraphicScenario === true) return true;
+  if (typeof ctx.proportionOk === "boolean") return ctx.proportionOk;
+
+  const uw = ctx.uploadedWidthPx;
+  const uh = ctx.uploadedHeightPx;
+  const meta = {
+    mimeType: (ctx.previewMime || "").trim() || "application/octet-stream",
+    fileName: (ctx.fileName || "").trim() || "file",
+    sizeBytes: typeof ctx.uploadedSizeBytes === "number" ? ctx.uploadedSizeBytes : 0,
+    widthPx: typeof uw === "number" && uw > 0 ? uw : null,
+    heightPx: typeof uh === "number" && uh > 0 ? uh : null,
+    pdfPageCount: null as number | null,
+  };
+
+  return assessArtworkProportionFromMetadata(
+    meta,
+    coercePositiveInch(ctx.requiredWidthIn),
+    coercePositiveInch(ctx.requiredHeightIn)
+  ).ok;
+}
+
+/** Stored file preview/metadata present for sidebar job restore (ratio check is separate). */
+export function reviewContextHasUploadPreview(ctx: StoredUploadReviewContext | null | undefined): boolean {
+  if (!ctx) return false;
+  return (
+    Boolean(ctx.previewDataUrl?.trim() || ctx.previewUrl?.trim()) &&
+    Boolean(ctx.uploadedGraphicLabel?.trim()) &&
+    ctx.uploadedGraphicLabel !== "Not uploaded yet" &&
+    Boolean(ctx.fileName?.trim()) &&
+    ctx.fileName !== REVIEW_PLACEHOLDER_FILE_NAME
+  );
+}
+
+/**
+ * Pending sidebar row overrides job-type and required-inch fields on drafts — drafts alone can omit
+ * or stale `requiredWidthIn`/`requiredHeightIn`, and legacy inference wrongly treats missing inches as proportion-OK.
+ */
+export function mergeReviewContextWithSidebarRow(
+  ctx: StoredUploadReviewContext,
+  row: StoredPendingJobLine
+): StoredUploadReviewContext {
+  if (
+    ctx.orderItemId == null ||
+    row.orderItemId == null ||
+    Number(ctx.orderItemId) !== Number(row.orderItemId)
+  ) {
+    return ctx;
+  }
+
+  const out: StoredUploadReviewContext = { ...ctx };
+  const graphic = row.isGraphicScenario === true;
+  out.isGraphicScenario = graphic;
+
+  if (graphic) {
+    out.requiredWidthIn = undefined;
+    out.requiredHeightIn = undefined;
+  } else {
+    const rw = coercePositiveInch(row.requiredWidthIn);
+    const rh = coercePositiveInch(row.requiredHeightIn);
+    if (rw != null) out.requiredWidthIn = rw;
+    if (rh != null) out.requiredHeightIn = rh;
+  }
+
+  const jl = row.jobIdLabel?.trim();
+  if (jl) out.jobIdLabel = jl;
+  const dim = row.dimensions?.trim();
+  if (dim) out.dimensions = dim;
+  if (typeof row.quantity === "number" && Number.isFinite(row.quantity))
+    out.quantity = row.quantity;
+
+  return out;
+}
 
 function fmtInch(n: number): string {
   return Number.isInteger(n) ? String(n) : n.toFixed(2).replace(/\.?0+$/, "");
@@ -155,6 +248,7 @@ export function reviewContextFromPendingLine(row: StoredPendingJobLine): StoredU
     fileName: savedFileName ?? REVIEW_PLACEHOLDER_FILE_NAME,
     previewUrl: savedPreviewUrl,
     hasArtwork: alreadyApproved,
+    proportionOk: alreadyApproved ? true : undefined,
   };
 }
 
@@ -250,6 +344,39 @@ export function clearAllReviewDrafts(): void {
   try { sessionStorage.removeItem(UPLOAD_APPROVAL_REVIEW_DRAFTS_KEY); } catch { /* ignore */ }
 }
 
+/** Read pending-job sidebar list from session (returns null when none stored). */
+export function readPendingJobsFromSession(): StoredPendingJobLine[] | null {
+  try {
+    const raw = sessionStorage.getItem(UPLOAD_APPROVAL_PENDING_JOBS_KEY);
+    if (!raw) return null;
+    const arr = JSON.parse(raw) as unknown;
+    if (!Array.isArray(arr) || arr.length === 0) return null;
+    return arr as StoredPendingJobLine[];
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Flag an already-approved job as having an un-submitted replacement file.
+ * Called immediately after the user selects a new file on an approved job's review screen
+ * (before clicking Approve on the new file). Cleared by markPendingJobArtworkApproved.
+ */
+export function markPendingJobReplacementPending(orderItemId: number): void {
+  try {
+    const raw = sessionStorage.getItem(UPLOAD_APPROVAL_PENDING_JOBS_KEY);
+    if (!raw) return;
+    const arr = JSON.parse(raw) as unknown;
+    if (!Array.isArray(arr)) return;
+    const next = (arr as StoredPendingJobLine[]).map((j) =>
+      j.orderItemId === orderItemId ? { ...j, hasPendingReplacement: true } : j
+    );
+    sessionStorage.setItem(UPLOAD_APPROVAL_PENDING_JOBS_KEY, JSON.stringify(next));
+  } catch {
+    /* ignore */
+  }
+}
+
 /**
  * Mark an order item as having approved artwork in the pending-jobs session list.
  * The row stays in the list (so UploadApproval shows it with a Reupload option);
@@ -263,7 +390,7 @@ export function markPendingJobArtworkApproved(orderItemId: number, artworkUrl?: 
     if (!Array.isArray(arr)) return;
     const next = (arr as StoredPendingJobLine[]).map((j) =>
       j.orderItemId === orderItemId
-        ? { ...j, hasArtwork: true, artworkUrl: artworkUrl ?? j.artworkUrl ?? null }
+        ? { ...j, hasArtwork: true, hasPendingReplacement: false, artworkUrl: artworkUrl ?? j.artworkUrl ?? null }
         : j
     );
     sessionStorage.setItem(UPLOAD_APPROVAL_PENDING_JOBS_KEY, JSON.stringify(next));
@@ -277,6 +404,7 @@ export function markPendingJobArtworkApproved(orderItemId: number, artworkUrl?: 
     const ctx = JSON.parse(ctxRaw) as StoredUploadReviewContext;
     if (ctx.orderItemId === orderItemId) {
       ctx.hasArtwork = true;
+      ctx.proportionOk = true;
       if (artworkUrl) ctx.previewUrl = `/api/artwork-file?source=${encodeURIComponent(artworkUrl)}`;
       sessionStorage.setItem(UPLOAD_APPROVAL_REVIEW_CONTEXT_KEY, JSON.stringify(ctx));
     }

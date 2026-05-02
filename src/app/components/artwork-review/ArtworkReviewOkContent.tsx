@@ -17,6 +17,8 @@ import {
   UPLOAD_APPROVAL_REVIEW_CONTEXT_KEY,
   clearGuestUploadReturnUrl,
   markPendingJobArtworkApproved,
+  markPendingJobReplacementPending,
+  readPendingJobsFromSession,
   removeReviewDraft,
   type StoredUploadReviewContext,
 } from "./uploadApprovalReviewStorage";
@@ -97,6 +99,14 @@ export default function ArtworkReviewOkContent({
             router.push(r.nextPath);
             return;
           }
+          /** Job was previously approved — user is replacing the artwork without re-approving yet. */
+          const prevItemId =
+            typeof existing?.orderItemId === "number" && existing.orderItemId > 0
+              ? existing.orderItemId
+              : null;
+          if (existing?.hasArtwork === true && prevItemId != null) {
+            markPendingJobReplacementPending(prevItemId);
+          }
           setLocalPreviewSrc(r.previewSrc);
           setLocalPreviewMime(r.previewMime);
           setLocalFileName(r.fileName);
@@ -133,6 +143,14 @@ export default function ArtworkReviewOkContent({
           if (r.nextPath !== pathname) {
             router.push(r.nextPath);
             return;
+          }
+          /** Job was previously approved — user is replacing the artwork without re-approving yet. */
+          const prevItemId =
+            typeof existing?.orderItemId === "number" && existing.orderItemId > 0
+              ? existing.orderItemId
+              : null;
+          if (existing?.hasArtwork === true && prevItemId != null) {
+            markPendingJobReplacementPending(prevItemId);
           }
           setLocalPreviewSrc(r.previewSrc);
           setLocalPreviewMime(r.previewMime);
@@ -191,8 +209,23 @@ export default function ArtworkReviewOkContent({
         }
         onArtworkSaved?.();
 
-        /** All jobs done — redirect to order status page. */
+        /**
+         * All jobs done per backend — but check session for any job that had a replacement
+         * file chosen locally but not yet re-approved. If found, block the redirect so the user
+         * can go approve that job's new file.
+         */
         if (result.orderStatus === "processing") {
+          const pendingJobs = readPendingJobsFromSession();
+          const unsubmittedReplacement = pendingJobs?.find(
+            (j) => j.hasPendingReplacement === true && j.orderItemId !== iid
+          ) ?? null;
+
+          if (unsubmittedReplacement) {
+            /** Stay on this page — sidebar lets the user click the other job. */
+            setUploadedSuccess(true);
+            return;
+          }
+
           toast.success("All artwork approved! Your order is now being processed.");
           if (guestTok) {
             clearGuestUploadReturnUrl();
