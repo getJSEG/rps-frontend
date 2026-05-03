@@ -95,17 +95,17 @@ export default function ArtworkReviewOkContent({
       void (async () => {
         try {
           const r = await commitFilePreviewToSession(f, existing);
-          if (r.nextPath !== pathname) {
-            router.push(r.nextPath);
-            return;
-          }
-          /** Job was previously approved — user is replacing the artwork without re-approving yet. */
+          /** Mark pending replacement BEFORE routing — applies whether the new file is right-size or wrong-size. */
           const prevItemId =
             typeof existing?.orderItemId === "number" && existing.orderItemId > 0
               ? existing.orderItemId
               : null;
           if (existing?.hasArtwork === true && prevItemId != null) {
             markPendingJobReplacementPending(prevItemId);
+          }
+          if (r.nextPath !== pathname) {
+            router.push(r.nextPath);
+            return;
           }
           setLocalPreviewSrc(r.previewSrc);
           setLocalPreviewMime(r.previewMime);
@@ -140,17 +140,17 @@ export default function ArtworkReviewOkContent({
       void (async () => {
         try {
           const r = await commitFilePreviewToSession(f, existing);
-          if (r.nextPath !== pathname) {
-            router.push(r.nextPath);
-            return;
-          }
-          /** Job was previously approved — user is replacing the artwork without re-approving yet. */
+          /** Mark pending replacement BEFORE routing — applies whether the new file is right-size or wrong-size. */
           const prevItemId =
             typeof existing?.orderItemId === "number" && existing.orderItemId > 0
               ? existing.orderItemId
               : null;
           if (existing?.hasArtwork === true && prevItemId != null) {
             markPendingJobReplacementPending(prevItemId);
+          }
+          if (r.nextPath !== pathname) {
+            router.push(r.nextPath);
+            return;
           }
           setLocalPreviewSrc(r.previewSrc);
           setLocalPreviewMime(r.previewMime);
