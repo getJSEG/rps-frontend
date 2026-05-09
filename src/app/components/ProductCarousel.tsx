@@ -22,6 +22,8 @@ export type CarouselProduct = {
   description?: string | null;
   price?: string | number | null;
   price_per_sqft?: number | string | null;
+  /** True for hardware/options products — listing shows "Starting from $X" */
+  graphic_scenario_enabled?: boolean | null;
 };
 
 function descriptionPreview(html: string | null | undefined): string {
@@ -109,9 +111,8 @@ export default function ProductCarousel({ products }: ProductCarouselProps) {
         breakpoints={{
           480: { slidesPerView: 1.5, spaceBetween: 16 },
           640: { slidesPerView: 2, spaceBetween: 16 },
-          900: { slidesPerView: 3, spaceBetween: 20 },
-          1200: { slidesPerView: 4, spaceBetween: 20 },
-          1536: { slidesPerView: 5, spaceBetween: 20 },
+          900: { slidesPerView: 3, spaceBetween: 18 },
+          1024: { slidesPerView: 4, spaceBetween: 16 },
         }}
         onSwiper={(swiper) => {
           swiperRef.current = swiper;
@@ -140,7 +141,7 @@ export default function ProductCarousel({ products }: ProductCarouselProps) {
             <SwiperSlide key={product.id} className="!h-auto">
               <Link href={`/products/product-detail?productId=${product.id}`} className="block h-full">
                 <div className="group flex h-full cursor-pointer flex-col overflow-hidden rounded-lg border-2 border-gray-200 bg-white shadow-md transition-all hover:border-gray-300 hover:shadow-lg">
-                  <div className="relative h-40 w-full overflow-hidden bg-gray-200">
+                  <div className="relative h-56 w-full overflow-hidden bg-gray-200">
                     {imageSrc ? (
                       isBackendUpload ? (
                         <img
@@ -187,16 +188,19 @@ export default function ProductCarousel({ products }: ProductCarouselProps) {
                     ) : null}
                     {unit != null ? (
                       <div className="mt-1 border-t border-gray-200 pt-2">
-                        <p className="text-base font-bold text-gray-900 sm:text-lg">${unit.toFixed(2)}</p>
+                        <div className="flex items-center justify-between gap-2 px-2 text-sm text-gray-700">
+                          <span className="font-normal">Starting at</span>
+                          <span className="text-base font-semibold tabular-nums">${unit.toFixed(2)}</span>
+                        </div>
                       </div>
                     ) : ppsf != null ? (
                       <div className="mt-1 min-w-0 border-t border-gray-200 pt-2">
-                        <p
-                          className="truncate text-xs font-bold tabular-nums leading-snug text-gray-900 sm:text-sm"
-                          title={`Starting at $${ppsf.toFixed(2)} per ft²`}
-                        >
-                          {`Starting at $${ppsf.toFixed(2)} per ft²`}
-                        </p>
+                        <div className="flex items-center justify-between gap-2 px-2 text-sm text-gray-700">
+                          <span className="font-normal">Starting at</span>
+                          <span className="truncate text-base font-semibold tabular-nums" title={`$${ppsf.toFixed(2)}/ft²`}>
+                            ${ppsf.toFixed(2)}/ft²
+                          </span>
+                        </div>
                       </div>
                     ) : (
                       <p className="text-sm text-gray-700">Price on request</p>

@@ -51,6 +51,8 @@ type OrderItem = {
   customer_artwork_url?: string | null;
   selection_mode?: "graphic_only" | "graphic_frame" | null;
   graphic_scenario_enabled?: boolean | null;
+  purchase_option_key?: string | null;
+  purchase_option_label?: string | null;
   selected_modifiers?: Array<{
     group_key?: string | null;
     group_name?: string | null;
@@ -68,6 +70,8 @@ type OrderItem = {
 };
 
 function lineGraphicSelectionLabel(item: OrderItem): string | null {
+  const purchaseLabel = String(item.purchase_option_label || "").trim();
+  if (purchaseLabel) return purchaseLabel;
   const mode = String(item.selection_mode || "").trim().toLowerCase();
   if (mode === "graphic_only") return "Graphic";
   if (mode === "graphic_frame") return "Graphic + Frame";
@@ -869,7 +873,8 @@ export default function Orders() {
                               </thead>
                               <tbody>
                                 {items.map((it) => {
-                                  const sizeLine = formatLineSizeInches(it.width_inches, it.height_inches);
+                                  const optionLabel = lineGraphicSelectionLabel(it);
+                                  const sizeLine = (optionLabel || it.graphic_scenario_enabled) ? null : formatLineSizeInches(it.width_inches, it.height_inches);
                                   const selectedMods = lineSelectedModifiers(it);
                                   const lineKey = it.id ?? `${order.id}-${it.product_name}`;
                                   const modifiersOpen = !!expandedModifierLines[String(lineKey)];
@@ -889,9 +894,9 @@ export default function Orders() {
                                         <p className="font-medium break-words text-gray-900 [overflow-wrap:anywhere]">
                                           {it.product_name || "Item"}
                                         </p>
-                                        {lineGraphicSelectionLabel(it) ? (
+                                        {optionLabel ? (
                                           <p className="mt-0.5 text-xs font-medium text-sky-700">
-                                            {lineGraphicSelectionLabel(it)}
+                                            {optionLabel}
                                           </p>
                                         ) : null}
                                         {it.job_name ? (

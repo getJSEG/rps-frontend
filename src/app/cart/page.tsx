@@ -60,9 +60,15 @@ interface CartItem {
     option_label: string;
     price_adjustment?: number;
   }>;
+  purchase_option_key?: string;
+  purchase_option_label?: string;
+  purchaseOptionKey?: string;
+  purchaseOptionLabel?: string;
   pricing_snapshot?: {
     selection_mode?: string;
     graphic_scenario_enabled?: boolean;
+    purchase_option_key?: string;
+    purchase_option_label?: string;
     selected_modifiers?: Array<{
       group_key: string;
       group_name: string;
@@ -124,6 +130,15 @@ function graphicSelectionLabel(item: CartItem): string | null {
   if (mode === "graphic_only") return "Graphic";
   if (mode === "graphic_frame") return "Graphic + Frame";
   return null;
+}
+
+function purchaseOptionLabel(item: CartItem): string | null {
+  const label =
+    item.purchase_option_label ||
+    item.purchaseOptionLabel ||
+    item.pricing_snapshot?.purchase_option_label ||
+    "";
+  return String(label).trim() || null;
 }
 
 /** Subtotal for one cart row (sums job lines when `jobs` is set). */
@@ -441,7 +456,11 @@ export default function CartPage() {
                           <p className="mt-1 text-xs text-gray-500">
                             Added {item.timestamp ? new Date(item.timestamp).toLocaleString('en-US', { weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }) : '—'}
                           </p>
-                          {graphicSelectionLabel(item) ? (
+                          {purchaseOptionLabel(item) ? (
+                            <p className="mt-1 text-xs font-medium text-sky-700">
+                              {purchaseOptionLabel(item)}
+                            </p>
+                          ) : graphicSelectionLabel(item) ? (
                             <p className="mt-1 text-xs font-medium text-sky-700">{graphicSelectionLabel(item)}</p>
                           ) : null}
                         </div>

@@ -82,7 +82,8 @@ interface Product {
   modifier_groups?: Array<{
     key: string;
     name: string;
-    mode_scope?: "all" | "graphic_only" | "graphic_frame";
+    /** Any option key or "all" — not limited to the legacy graphic_only/graphic_frame values. */
+    mode_scope?: string;
     input_type?: string;
     is_required?: boolean;
     options: Array<{
@@ -92,6 +93,17 @@ interface Product {
       price_type?: string;
       is_default?: boolean;
     }>;
+  }>;
+  purchase_options?: Array<{
+    id: number;
+    label: string;
+    option_key: string;
+    pricing_mode?: string;
+    unit_price?: number | null;
+    price_per_sqft?: number | null;
+    min_charge?: number | null;
+    sort_order?: number;
+    is_default?: boolean;
   }>;
   properties?: ProductProperty[];
 }
@@ -116,6 +128,8 @@ interface PreviewPricing {
   sizeOptionLabel: string | null;
   minApplied: boolean;
   selection_mode?: "graphic_only" | "graphic_frame" | null;
+  purchase_option_key?: string | null;
+  purchase_option_label?: string | null;
 }
 
 function normalizeProductGalleryImages(product: Product | null): string[] {
@@ -294,6 +308,8 @@ function ProductDetailContent() {
   const [previewPricing, setPreviewPricing] = useState<PreviewPricing | null>(null);
   const [selectedModifiers, setSelectedModifiers] = useState<Record<string, string>>({});
   const [selectedGraphicMode, setSelectedGraphicMode] = useState<GraphicSelectionMode>("graphic_only");
+  /** Key of the selected purchase option (new dynamic system). Null when no purchase_options. */
+  const [selectedPurchaseOptionKey, setSelectedPurchaseOptionKey] = useState<string | null>(null);
   const [openModifierKey, setOpenModifierKey] = useState<string | null>(null);
   const [previewLoading, setPreviewLoading] = useState(false);
   const [jobs, setJobs] = useState<ProductJobRow[]>(() => [
@@ -351,13 +367,36 @@ function ProductDetailContent() {
   const minChargeNum = Number(product?.min_charge);
   const minCharge = Number.isFinite(minChargeNum) && minChargeNum >= 0 ? minChargeNum : 8.0;
   const isGraphicScenario = !!product?.graphic_scenario_enabled;
+  const purchaseOptions = Array.isArray(product?.purchase_options) ? product.purchase_options : [];
+  const hasPurchaseOptions = purchaseOptions.length > 0;
+
+  // Determine the effective scope key for modifier filtering
+  const effectiveScopeKey: string | null = hasPurchaseOptions
+    ? (selectedPurchaseOptionKey ??
+        (purchaseOptions.find((o) => o.is_default) || purchaseOptions[0])?.option_key ??
+        null)
+    : isGraphicScenario
+      ? selectedGraphicMode
+      : null;
+
+  // Which purchase option is currently active?
+  const activePurchaseOption = hasPurchaseOptions
+    ? (purchaseOptions.find((o) => o.option_key === effectiveScopeKey) ||
+        purchaseOptions.find((o) => o.is_default) ||
+        purchaseOptions[0])
+    : null;
+  const activePurchaseOptionIsFixed = activePurchaseOption
+    ? String(activePurchaseOption.pricing_mode || "fixed") === "fixed"
+    : false;
+  /** True when no width/height input is needed (graphic scenario OR fixed-price purchase option) */
+  const skipDimensionsForPrice = isGraphicScenario || (hasPurchaseOptions && activePurchaseOptionIsFixed);
+
   const activeModifierGroups = (Array.isArray(product?.modifier_groups) ? product.modifier_groups : []).filter(
     (group) => {
+      if (!effectiveScopeKey) return true;
       const scope = String((group as { mode_scope?: string }).mode_scope || "all").toLowerCase();
-      if (!isGraphicScenario) return true;
-      if (scope === "graphic_only") return selectedGraphicMode === "graphic_only";
-      if (scope === "graphic_frame") return selectedGraphicMode === "graphic_frame";
-      return true;
+      if (scope === "all") return true;
+      return scope === effectiveScopeKey;
     }
   );
 
@@ -444,18 +483,30 @@ function ProductDetailContent() {
     setSelectedProductImageIndex(0);
     setSelectedSubcategory(null);
     setSelectedGraphicMode("graphic_only");
+    setSelectedPurchaseOptionKey(null);
   }, [productId]);
 
   useEffect(() => {
     if (!product) return;
     setPreviewPricing(null);
     setOpenModifierKey(null);
+
+    // Initialize selectedPurchaseOptionKey from default when product loads
+    const pOpts = Array.isArray(product.purchase_options) ? product.purchase_options : [];
+    if (pOpts.length > 0) {
+      const defaultOpt = pOpts.find((o) => o.is_default) || pOpts[0];
+      setSelectedPurchaseOptionKey(defaultOpt?.option_key ?? null);
+    }
+
+    const scopeKey = pOpts.length > 0
+      ? (pOpts.find((o) => o.is_default) || pOpts[0])?.option_key ?? null
+      : product.graphic_scenario_enabled ? selectedGraphicMode : null;
+
     const groups = (Array.isArray(product.modifier_groups) ? product.modifier_groups : []).filter((group) => {
+      if (!scopeKey) return true;
       const scope = String((group as { mode_scope?: string }).mode_scope || "all").toLowerCase();
-      if (!product.graphic_scenario_enabled) return true;
-      if (scope === "graphic_only") return selectedGraphicMode === "graphic_only";
-      if (scope === "graphic_frame") return selectedGraphicMode === "graphic_frame";
-      return true;
+      if (scope === "all") return true;
+      return scope === scopeKey;
     });
     const defaults: Record<string, string> = {};
     for (const g of groups) {
@@ -583,7 +634,7 @@ function ProductDetailContent() {
     if (!productId || !product) return;
     const widthInches = parseFloat(width) || 0;
     const heightInches = parseFloat(height) || 0;
-    if (!isGraphicScenario && (widthInches <= 0 || heightInches <= 0)) {
+    if (!skipDimensionsForPrice && (widthInches <= 0 || heightInches <= 0)) {
       setPreviewPricing(null);
       return;
     }
@@ -599,7 +650,8 @@ function ProductDetailContent() {
           width: widthInches,
           height: heightInches,
           selectedModifiers,
-          selection_mode: isGraphicScenario ? selectedGraphicMode : undefined,
+          purchase_option_key: hasPurchaseOptions ? (effectiveScopeKey ?? undefined) : undefined,
+          selection_mode: (!hasPurchaseOptions && isGraphicScenario) ? selectedGraphicMode : undefined,
         });
         if (!cancelled && response?.pricing) {
           setPreviewPricing(response.pricing);
@@ -614,27 +666,35 @@ function ProductDetailContent() {
       cancelled = true;
       clearTimeout(timer);
     };
-  }, [productId, product, width, height, selectedModifiers, isGraphicScenario, selectedGraphicMode, missingRequiredModifiers.length]);
+  }, [productId, product, width, height, selectedModifiers, isGraphicScenario, selectedGraphicMode, selectedPurchaseOptionKey, hasPurchaseOptions, effectiveScopeKey, skipDimensionsForPrice, missingRequiredModifiers.length]);
 
   // Calculate displayed pricing (server preview preferred, fallback mirrors product mode)
   const widthInches = previewPricing?.width ?? (parseFloat(width) || 0);
   const heightInches = previewPricing?.height ?? (parseFloat(height) || 0);
   const areaSqFt = previewPricing?.areaSqft ?? ((widthInches * heightInches) / 144);
   const productPricingMode = inferPricingModeForProduct(product ?? null);
-  const fallbackFixedFromOption = null;
   const listFixedUnit = parseProductMoney(product?.price);
   const fallbackFixedFromProduct = listFixedUnit != null ? listFixedUnit : 0;
   const fallbackAreaPrice = Math.max(areaSqFt * pricePerSqFt, minCharge);
-  const fallbackPrice =
-    productPricingMode === "fixed"
-      ? (fallbackFixedFromOption != null ? fallbackFixedFromOption : fallbackFixedFromProduct)
-      : fallbackAreaPrice;
-  const previewUnitPrice = (isGraphicScenario ? null : previewPricing?.unitPrice) ?? fallbackPrice;
-  const previewModifierTotal = Number(previewPricing?.modifierTotal);
-  const baseUnitBeforeModifiers =
-    isGraphicScenario
-      ? previewUnitPrice
-      : (Number.isFinite(previewModifierTotal) ? previewUnitPrice - previewModifierTotal : previewUnitPrice);
+
+  // Base price for modifier percentage calculations — always the raw option/product price,
+  // never the server total (which already includes modifiers).
+  // For purchase-options products: use the currently selected option's unit_price.
+  // For plain/area products: derive from server baseUnitPrice if available, else product price.
+  const baseUnitBeforeModifiers = hasPurchaseOptions
+    ? (activePurchaseOption?.unit_price != null ? Number(activePurchaseOption.unit_price) : fallbackFixedFromProduct)
+    : isGraphicScenario
+      ? fallbackFixedFromProduct
+      : (() => {
+          const previewBase = Number(previewPricing?.baseUnitPrice);
+          if (Number.isFinite(previewBase) && previewBase > 0) return previewBase;
+          const previewTotal = Number(previewPricing?.unitPrice);
+          const previewMod = Number(previewPricing?.modifierTotal);
+          if (Number.isFinite(previewTotal) && Number.isFinite(previewMod)) return previewTotal - previewMod;
+          return productPricingMode === "fixed" ? fallbackFixedFromProduct : fallbackAreaPrice;
+        })();
+
+  // Client-side modifier total — used as fallback before server preview arrives.
   const selectedModifierTotal = activeModifierGroups.reduce((sum, group) => {
     const selectedValue = String(selectedModifiers[group.key] || "");
     if (!selectedValue) return sum;
@@ -642,7 +702,10 @@ function ProductDetailContent() {
     const selectedOption = options.find((o) => modifierOptionValue(o) === selectedValue);
     return sum + resolveModifierAdjustmentAmount(baseUnitBeforeModifiers, selectedOption);
   }, 0);
-  const unitPrice = baseUnitBeforeModifiers + selectedModifierTotal;
+
+  // Final price: server preview is authoritative (already includes modifiers correctly).
+  // Client calculation is the immediate fallback before the preview response arrives.
+  const unitPrice = previewPricing?.unitPrice ?? (baseUnitBeforeModifiers + selectedModifierTotal);
   const displayPricingMode: "fixed" | "area" = previewPricing?.pricing_mode ?? productPricingMode;
   const jobLines = jobs.map((j) => {
     const qtyNum = Math.max(0, Math.floor(parseFloat(j.quantity) || 0));
@@ -663,17 +726,17 @@ function ProductDetailContent() {
 
   // Handle Add to Cart (logged-in or guest via X-Guest-Session-Id from api.ts)
   const handleAddToCart = async () => {
-    if (!isGraphicScenario && !String(width).trim()) {
+    if (!skipDimensionsForPrice && !String(width).trim()) {
       setMessage("❌ Error: Width is required");
       setTimeout(() => setMessage(""), 5000);
       return;
     }
-    if (!isGraphicScenario && !String(height).trim()) {
+    if (!skipDimensionsForPrice && !String(height).trim()) {
       setMessage("❌ Error: Height is required");
       setTimeout(() => setMessage(""), 5000);
       return;
     }
-    if (!isGraphicScenario && (widthInches <= 0 || heightInches <= 0)) {
+    if (!skipDimensionsForPrice && (widthInches <= 0 || heightInches <= 0)) {
       setMessage("❌ Error: Width and Height must be greater than 0");
       setTimeout(() => setMessage(""), 5000);
       return;
@@ -742,7 +805,8 @@ function ProductDetailContent() {
         width: widthInches,
         height: heightInches,
         areaSqFt: areaSqFt,
-        selection_mode: isGraphicScenario ? selectedGraphicMode : undefined,
+        purchase_option_key: hasPurchaseOptions ? (effectiveScopeKey ?? undefined) : undefined,
+        selection_mode: (!hasPurchaseOptions && isGraphicScenario) ? selectedGraphicMode : undefined,
         jobs: jobsPayload,
         quantity: totalQty,
         jobName: legacyJobName,
@@ -1108,12 +1172,12 @@ function ProductDetailContent() {
 
             {/* Price */}
             <div className="mb-6">
-                {(isGraphicScenario || (widthInches > 0 && heightInches > 0)) ? (
+                {(skipDimensionsForPrice || (widthInches > 0 && heightInches > 0)) ? (
                   <div>
                     <p className="text-lg font-semibold text-gray-900">
                       ${unitPrice.toFixed(2)}
                     </p>
-                    {!isGraphicScenario && displayPricingMode === "area" ? (
+                    {!skipDimensionsForPrice && displayPricingMode === "area" ? (
                       <>
                         <p className="text-sm text-gray-600 mt-1">
                           Based on {widthInches} in × {heightInches} in ({areaSqFt.toFixed(4)} sq ft)
@@ -1122,7 +1186,7 @@ function ProductDetailContent() {
                           Size in feet: {(widthInches / 12).toFixed(2)} ft × {(heightInches / 12).toFixed(2)} ft
                         </p>
                       </>
-                    ) : !isGraphicScenario ? (
+                    ) : !skipDimensionsForPrice ? (
                       <p className="text-sm text-gray-600 mt-1">
                         Size: {widthInches} in × {heightInches} in ({(widthInches / 12).toFixed(2)} ft ×{" "}
                         {(heightInches / 12).toFixed(2)} ft)
@@ -1141,7 +1205,47 @@ function ProductDetailContent() {
 
           {/* Right Panel - Configuration and Order */}
           <div className="min-w-0 max-w-full">
-            {isGraphicScenario ? (
+            {hasPurchaseOptions ? (
+              /* New dynamic purchase options system */
+              <div className="mb-6 p-4 border border-gray-200 rounded-lg">
+                <div className="grid grid-cols-2 gap-3">
+                  {purchaseOptions.map((opt) => {
+                    const isSelected = effectiveScopeKey === opt.option_key;
+                    return (
+                      <button
+                        key={opt.option_key}
+                        type="button"
+                        className={`rounded-lg border px-4 py-3 text-sm font-semibold transition flex min-h-[50px] flex-col items-center justify-center text-center ${
+                          isSelected
+                            ? "border-sky-500 bg-sky-50 text-sky-800"
+                            : "border-gray-300 bg-white text-gray-700 hover:bg-gray-50"
+                        }`}
+                        onClick={() => {
+                          setSelectedPurchaseOptionKey(opt.option_key);
+                          // Re-compute modifier defaults for the new scope
+                          const newScope = opt.option_key;
+                          const groups = (Array.isArray(product?.modifier_groups) ? product.modifier_groups : []).filter((group) => {
+                            const scope = String((group as { mode_scope?: string }).mode_scope || "all").toLowerCase();
+                            return scope === "all" || scope === newScope;
+                          });
+                          const defaults: Record<string, string> = {};
+                          for (const g of groups) {
+                            const options = Array.isArray(g.options) ? g.options : [];
+                            const def = options.find((o) => o.is_default);
+                            const defValue = modifierOptionValue(def);
+                            if (defValue) defaults[String(g.key)] = defValue;
+                          }
+                          setSelectedModifiers(defaults);
+                        }}
+                      >
+                        <span className="block">{opt.label}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            ) : isGraphicScenario ? (
+              /* Legacy graphic scenario (no purchase_options defined yet) */
               <div className="mb-6 p-4 border border-gray-200 rounded-lg">
                 <div className="grid grid-cols-2 gap-4">
                   <button

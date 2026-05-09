@@ -35,6 +35,8 @@ type OrderItem = {
   image_url?: string | null;
   selection_mode?: "graphic_only" | "graphic_frame" | null;
   graphic_scenario_enabled?: boolean | null;
+  purchase_option_key?: string | null;
+  purchase_option_label?: string | null;
   customer_artwork_url?: string | null;
   selected_modifiers?: Array<{
     group_key?: string | null;
@@ -51,6 +53,8 @@ type OrderItem = {
 };
 
 function lineGraphicSelectionLabel(item: OrderItem): string | null {
+  const purchaseLabel = String(item.purchase_option_label || "").trim();
+  if (purchaseLabel) return purchaseLabel;
   const mode = String(item.selection_mode || "").trim().toLowerCase();
   if (mode === "graphic_only") return "Graphic";
   if (mode === "graphic_frame") return "Graphic + Frame";
@@ -353,6 +357,7 @@ function GuestOrderTrackInner() {
               ) : (
                 <div className="space-y-2">
                   {order.items.map((item, idx) => {
+                    const optionLabel = lineGraphicSelectionLabel(item);
                     const selectedMods = lineSelectedModifiers(item);
                     const lineKey = String(item.id ?? idx);
                     const modifiersOpen = !!expandedModifierLines[lineKey];
@@ -376,8 +381,8 @@ function GuestOrderTrackInner() {
                     >
                       <div className="min-w-0 sm:justify-self-start">
                         <p className="font-medium text-gray-900">{item.product_name || "Item"}</p>
-                        {lineGraphicSelectionLabel(item) ? (
-                          <p className="text-xs font-medium text-sky-700">{lineGraphicSelectionLabel(item)}</p>
+                        {optionLabel ? (
+                          <p className="text-xs font-medium text-sky-700">{optionLabel}</p>
                         ) : null}
                         {item.job_name && <p className="text-xs text-gray-500">Job: {item.job_name}</p>}
                         <p className="text-xs text-gray-500">Qty: {item.quantity ?? "—"}</p>
