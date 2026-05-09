@@ -18,6 +18,7 @@ interface Product {
   image?: string;
   image_url?: string;
   category_name?: string;
+  graphic_scenario_enabled?: boolean | null;
 }
 
 interface CategoryItem {
@@ -217,7 +218,7 @@ export default function Products({ forcedCategorySlug = null }: { forcedCategory
     return (
       <Link href={`/products/product-detail?productId=${product.id}`} className="block h-full">
         <div className="group flex h-full cursor-pointer flex-col overflow-hidden rounded-lg border-2 border-gray-200 bg-white shadow-md transition-all hover:border-gray-300 hover:shadow-lg">
-          <div className="relative h-48 w-full overflow-hidden bg-gray-200">
+          <div className="relative h-58 w-full overflow-hidden bg-gray-200">
             {imageSrc ? (
               isBackendUpload ? (
                 <img
@@ -268,16 +269,19 @@ export default function Products({ forcedCategorySlug = null }: { forcedCategory
             ) : null}
             {unit != null ? (
               <div className="mt-1 border-t border-gray-200 pt-2">
-                <p className="text-lg font-bold text-gray-900">${unit.toFixed(2)}</p>
+                <div className="flex items-center justify-between gap-2 px-2 text-sm text-gray-700">
+                  <span className="font-normal">Starting at</span>
+                  <span className="text-base font-semibold tabular-nums">${unit.toFixed(2)}</span>
+                </div>
               </div>
             ) : ppsf != null ? (
               <div className="mt-1 min-w-0 border-t border-gray-200 pt-2">
-                <p
-                  className="truncate text-xs font-bold tabular-nums leading-snug text-gray-900 sm:text-sm"
-                  title={`Starting at $${ppsf.toFixed(2)} per ft²`}
-                >
-                  {`Starting at $${ppsf.toFixed(2)} per ft²`}
-                </p>
+                <div className="flex items-center justify-between gap-2 px-2 text-sm text-gray-700">
+                  <span className="font-normal">Starting at</span>
+                  <span className="truncate text-base font-semibold tabular-nums" title={`$${ppsf.toFixed(2)}/ft²`}>
+                    ${ppsf.toFixed(2)}/ft²
+                  </span>
+                </div>
               </div>
             ) : (
               <p className="text-sm text-gray-700">Price on request</p>
@@ -343,7 +347,7 @@ export default function Products({ forcedCategorySlug = null }: { forcedCategory
               </div>
             ) : (
               <>
-                <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
+                <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4">
                   {products.map((product) => (
                     <ProductCard key={product.id} product={product} />
                   ))}

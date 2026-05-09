@@ -38,6 +38,8 @@ interface OrderItem {
   customerArtworkUrl?: string | null;
   selection_mode?: "graphic_only" | "graphic_frame" | null;
   graphic_scenario_enabled?: boolean | null;
+  purchase_option_key?: string | null;
+  purchase_option_label?: string | null;
   selected_modifiers?: Array<{
     group_key?: string | null;
     group_name?: string | null;
@@ -48,10 +50,16 @@ interface OrderItem {
 }
 
 function lineGraphicSelectionLabel(item: OrderItem): string | null {
+  const purchaseLabel = String(item.purchase_option_label || "").trim();
+  if (purchaseLabel) return purchaseLabel;
   const mode = String(item.selection_mode || "").trim().toLowerCase();
   if (mode === "graphic_only") return "Graphic";
   if (mode === "graphic_frame") return "Graphic + Frame";
   return null;
+}
+
+function isHardwareItem(item: OrderItem): boolean {
+  return !!item.graphic_scenario_enabled || !!lineGraphicSelectionLabel(item);
 }
 
 interface GuestCheckoutShape {
@@ -152,7 +160,7 @@ function formatSizeWxH(w: unknown, h: unknown): string {
 }
 
 function formatSizeForOrderLine(item: OrderItem): string {
-  if (lineGraphicSelectionLabel(item)) return "—";
+  if (isHardwareItem(item)) return "—";
   return formatSizeWxH(item.width_inches, item.height_inches);
 }
 
@@ -531,6 +539,8 @@ export default function OrderDetails() {
                     ? (item.selection_mode as OrderItem["selection_mode"])
                     : undefined,
                 graphic_scenario_enabled: item.graphic_scenario_enabled === true,
+                purchase_option_key: item.purchase_option_key ? String(item.purchase_option_key) : undefined,
+                purchase_option_label: item.purchase_option_label ? String(item.purchase_option_label) : undefined,
               }))
           : [],
         user_email: mergedUserEmail,
@@ -1340,6 +1350,7 @@ export default function OrderDetails() {
                   <tbody>
                     {order.items.map((item) => {
                       const lineKey = String(item.id);
+                      const optionLabel = lineGraphicSelectionLabel(item);
                       const selectedMods = lineSelectedModifiers(item);
                       const modifiersOpen = !!expandedModifierLines[lineKey];
                       const visibleModifiers =
@@ -1360,9 +1371,9 @@ export default function OrderDetails() {
                           {item.product_id && (
                             <span className="mt-0.5 block text-xs font-normal text-slate-500">ID {item.product_id}</span>
                           )}
-                          {lineGraphicSelectionLabel(item) ? (
+                          {optionLabel ? (
                             <span className="mt-0.5 block text-xs font-medium text-sky-700">
-                              {lineGraphicSelectionLabel(item)}
+                              {optionLabel}
                             </span>
                           ) : null}
                         </td>

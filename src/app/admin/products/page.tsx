@@ -1,11 +1,17 @@
 "use client";
 
-import { useState, useEffect, useRef, useCallback, type RefObject } from "react";
+import { useState, useEffect, useRef, useCallback, useMemo, type RefObject } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import AdminNavbar from "../../components/AdminNavbar";
 import { canAccessAdminPanel, isAuthenticated } from "../../../utils/roles";
-import { getProductImageUrl, productsAPI, type ModifierGroup } from "../../../utils/api";
+import {
+  getProductImageUrl,
+  productsAPI,
+  type HardwareTemplate,
+  type ModifierGroup,
+  type ProductPurchaseOption,
+} from "../../../utils/api";
 import { FiEdit, FiTrash2, FiChevronUp, FiChevronDown } from "react-icons/fi";
 
 type Tab = "products" | "categories" | "subcategories";
@@ -47,8 +53,15 @@ interface Product {
   price: number | null;
   price_per_sqft: number | null;
   min_charge: number | null;
+  weight?: number | null;
+  length?: number | null;
+  shipping_length?: number | null;
+  shipping_width?: number | null;
+  shipping_height?: number | null;
+  shipping_weight?: number | null;
   pricing_mode?: "fixed" | "area" | null;
   graphic_scenario_enabled?: boolean | null;
+  hardware_template_id?: number | null;
   size_mode?: "predefined" | "custom" | null;
   base_unit?: "inch" | null;
   min_width?: number | null;
@@ -70,7 +83,8 @@ type ProductModifierAssignment = {
   key: string;
   is_required?: boolean;
   sort_order?: number;
-  mode_scope?: "all" | "graphic_only" | "graphic_frame";
+  /** Any option key or "all". Dynamic — matches purchase option keys or legacy graphic values. */
+  mode_scope?: string;
   options: Array<{ option_id?: number; value: string; price_adjustment_override?: number | null }>;
 };
 
@@ -101,6 +115,13 @@ const WORD_STYLE_LABEL_SUFFIX = " (Word-style formatting)";
 const RICH_PLACEHOLDER_HINT = "bold, italic, lists supported";
 
 const isFloatInput = (v: string) => v === "" || /^\d*\.?\d*$/.test(v);
+const toCleanDecimalInput = (v: unknown): string => {
+  if (v == null) return "";
+  const raw = String(v).trim();
+  if (!raw) return "";
+  if (!/^-?\d+(\.\d+)?$/.test(raw)) return raw;
+  return raw.replace(/(\.\d*?[1-9])0+$/,"$1").replace(/\.0+$/,"");
+};
 
 /** Seed contenteditable: existing HTML as-is; plain text escaped with line breaks as &lt;br&gt;. */
 function toEditorInitialHtml(raw: string | null | undefined): string {
@@ -359,6 +380,78 @@ function AdminRichTextField({
   );
 }
 
+type ThemedDropdownOption = {
+  value: string;
+  label: string;
+};
+
+function ThemedDropdown({
+  value,
+  placeholder,
+  options,
+  onChange,
+  className = "",
+}: {
+  value: string;
+  placeholder: string;
+  options: ThemedDropdownOption[];
+  onChange: (value: string) => void;
+  className?: string;
+}) {
+  const [open, setOpen] = useState(false);
+  const rootRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const onPointerDown = (event: MouseEvent) => {
+      if (!rootRef.current?.contains(event.target as Node)) setOpen(false);
+    };
+    document.addEventListener("mousedown", onPointerDown);
+    return () => document.removeEventListener("mousedown", onPointerDown);
+  }, []);
+
+  const selectedLabel = options.find((opt) => opt.value === value)?.label ?? placeholder;
+
+  return (
+    <div ref={rootRef} className={`relative ${className}`}>
+      <button
+        type="button"
+        onClick={() => setOpen((prev) => !prev)}
+        className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-left text-sm text-slate-900 shadow-sm outline-none transition focus:border-sky-400 focus:ring-2 focus:ring-sky-400/25"
+        aria-haspopup="listbox"
+        aria-expanded={open}
+      >
+        <span className="block truncate">{selectedLabel}</span>
+        <FiChevronDown
+          className={`pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-slate-500 transition-transform ${open ? "rotate-180" : ""}`}
+          aria-hidden
+        />
+      </button>
+      {open ? (
+        <div className="absolute z-40 mt-1 max-h-64 w-full overflow-auto rounded-lg border border-slate-200 bg-white py-1 shadow-lg">
+          {options.map((opt) => {
+            const isActive = opt.value === value;
+            return (
+              <button
+                key={opt.value}
+                type="button"
+                onClick={() => {
+                  onChange(opt.value);
+                  setOpen(false);
+                }}
+                className={`block w-full px-3 py-2 text-left text-sm transition ${
+                  isActive ? "bg-sky-50 text-sky-800" : "text-slate-700 hover:bg-slate-50"
+                }`}
+              >
+                {opt.label}
+              </button>
+            );
+          })}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
 export default function AdminProductsPage() {
   const router = useRouter();
   const [activeTab, setActiveTab] = useState<Tab>("products");
@@ -389,6 +482,12 @@ export default function AdminProductsPage() {
   const [prodPrice, setProdPrice] = useState("");
   const [prodPricePerSqft, setProdPricePerSqft] = useState("");
   const [prodMinCharge, setProdMinCharge] = useState("");
+  const [prodWeight, setProdWeight] = useState("");
+  const [prodLength, setProdLength] = useState("");
+  const [prodShippingLength, setProdShippingLength] = useState("");
+  const [prodShippingWidth, setProdShippingWidth] = useState("");
+  const [prodShippingHeight, setProdShippingHeight] = useState("");
+  const [prodShippingWeight, setProdShippingWeight] = useState("");
   const [prodPricingMode, setProdPricingMode] = useState<"" | "fixed" | "area">("");
   const [prodGraphicScenarioEnabled, setProdGraphicScenarioEnabled] = useState(false);
   const [prodBaseUnit, setProdBaseUnit] = useState<"inch">("inch");
@@ -435,8 +534,16 @@ export default function AdminProductsPage() {
   const [productsPerPage] = useState(10);
   const [productsPagination, setProductsPagination] = useState({ total: 0, pages: 0 });
   const [modifierCatalog, setModifierCatalog] = useState<ModifierGroup[]>([]);
+  const [hardwareTemplates, setHardwareTemplates] = useState<HardwareTemplate[]>([]);
+  const [selectedHardwareTemplateId, setSelectedHardwareTemplateId] = useState<string>("");
   const [prodModifierAssignments, setProdModifierAssignments] = useState<Record<string, ProductModifierAssignment>>({});
   const [selectedModifierKey, setSelectedModifierKey] = useState<string>("");
+  /** Purchase options (always 2 for hardware products; empty for plain products) */
+  const [prodPurchaseOptions, setProdPurchaseOptions] = useState<ProductPurchaseOption[]>([]);
+  /** option_key of the option whose price is shown on the listing card */
+  const [listingPriceOptionKey, setListingPriceOptionKey] = useState<string>("");
+  /** Whether to use base price or modifier-adjusted preview price for listing */
+  const [listingPriceUseComputed, setListingPriceUseComputed] = useState(false);
 
   const getProductImageSrc = (url: string | null | undefined) => {
     if (!url || typeof url !== "string") return "";
@@ -574,10 +681,98 @@ export default function AdminProductsPage() {
     }
   };
 
+  const loadHardwareTemplates = async () => {
+    try {
+      const res = await productsAPI.getHardwareTemplatesAdmin();
+      setHardwareTemplates(Array.isArray(res?.templates) ? res.templates : []);
+    } catch (e) {
+      console.error(e);
+      setHardwareTemplates([]);
+    }
+  };
+
+  const assignmentFromCatalogGroup = useCallback((group: ModifierGroup, sortOrder: number): ProductModifierAssignment => ({
+    key: group.key,
+    is_required: false,
+    sort_order: sortOrder,
+    mode_scope: "all",
+    options: (Array.isArray(group.options) ? group.options : []).map((o) => ({
+      option_id: o.id != null ? Number(o.id) : undefined,
+      value: String(o.value || ""),
+      price_adjustment_override: null,
+    })),
+  }), []);
+
+  const applyHardwareTemplate = useCallback((template: HardwareTemplate) => {
+    const templateOptions = (Array.isArray(template.options) ? template.options : []).slice(0, 2);
+    const nextOptions: ProductPurchaseOption[] = templateOptions.map((opt, idx) => ({
+      label: String(opt.label || ""),
+      option_key: String(opt.option_key || `option_${idx + 1}`),
+      pricing_mode: "fixed",
+      unit_price: opt.unit_price == null ? null : Number(opt.unit_price),
+      is_default: !!opt.is_default,
+      sort_order: idx,
+    }));
+    setProdPurchaseOptions(nextOptions);
+
+    // Auto-select the default option as the listing price option
+    const defaultOpt = nextOptions.find((o) => o.is_default) || nextOptions[0];
+    if (defaultOpt) setListingPriceOptionKey(String(defaultOpt.option_key || "").trim().toLowerCase());
+
+    const catalogByLowerKey = new Map<string, ModifierGroup>();
+    for (const group of modifierCatalog) {
+      const key = String(group.key || "").trim().toLowerCase();
+      if (key) catalogByLowerKey.set(key, group);
+    }
+
+    const attachedModifierKeys = new Set<string>();
+    for (const opt of templateOptions) {
+      const modifiers = Array.isArray(opt.modifiers) ? opt.modifiers : [];
+      for (const mod of modifiers) {
+        const key = String(mod.key || "").trim().toLowerCase();
+        if (key) attachedModifierKeys.add(key);
+      }
+    }
+
+    const nextAssignments: Record<string, ProductModifierAssignment> = {};
+    for (const lowerKey of attachedModifierKeys) {
+      const group = catalogByLowerKey.get(lowerKey);
+      if (!group) continue;
+      nextAssignments[group.key] = assignmentFromCatalogGroup(group, Object.keys(nextAssignments).length);
+    }
+
+    const modifierScopes = new Map<string, Set<string>>();
+    const modifierRequired = new Map<string, boolean>();
+
+    for (const opt of templateOptions) {
+      const scope = String(opt.option_key || "").trim().toLowerCase();
+      const modifiers = Array.isArray(opt.modifiers) ? opt.modifiers : [];
+      for (const mod of modifiers) {
+        const lowerKey = String(mod.key || "").trim().toLowerCase();
+        const group = catalogByLowerKey.get(lowerKey);
+        if (!group || !nextAssignments[group.key]) continue;
+        if (!modifierScopes.has(group.key)) modifierScopes.set(group.key, new Set<string>());
+        if (scope) modifierScopes.get(group.key)!.add(scope);
+        if (mod.is_required) modifierRequired.set(group.key, true);
+      }
+    }
+
+    for (const key of Object.keys(nextAssignments)) {
+      const scopes = modifierScopes.get(key);
+      const scopeValues = scopes ? Array.from(scopes) : [];
+      nextAssignments[key] = {
+        ...nextAssignments[key],
+        is_required: !!modifierRequired.get(key),
+        mode_scope: scopeValues.length > 1 ? "all" : (scopeValues[0] || "all"),
+      }
+    }
+    setProdModifierAssignments(nextAssignments);
+  }, [assignmentFromCatalogGroup, modifierCatalog]);
+
   useEffect(() => {
     const run = async () => {
       setLoading(true);
-      await Promise.all([loadCategories(), loadProducts(), loadModifierCatalog()]);
+      await Promise.all([loadCategories(), loadProducts(), loadModifierCatalog(), loadHardwareTemplates()]);
       setLoading(false);
     };
     run();
@@ -588,6 +783,48 @@ export default function AdminProductsPage() {
   const subCategoriesForParent = subCategories.filter(
     (c) => prodParentId !== "" && c.parent_id === parseInt(prodParentId)
   );
+  const purchaseOptionsForView = (prodPurchaseOptions.length > 0 ? prodPurchaseOptions : [
+    { label: "Option 1", option_key: "option_1", pricing_mode: "fixed" as const, unit_price: null, is_default: true },
+    { label: "Option 2", option_key: "option_2", pricing_mode: "fixed" as const, unit_price: null, is_default: false },
+  ]);
+
+  /** Format price: remove unnecessary trailing zeros (100.0000 → "100", 100.50 → "100.50") */
+  function formatOptionPrice(v: number | null | undefined): string {
+    if (v == null) return "";
+    const n = Number(v);
+    if (!Number.isFinite(n)) return "";
+    const fixed2 = parseFloat(n.toFixed(2));
+    return fixed2 % 1 === 0 ? String(fixed2) : fixed2.toFixed(2);
+  }
+
+  /** Live preview: base price + default modifier option adjustments, per purchase option key */
+  const optionPreviewPrices = useMemo(() => {
+    const result: Record<string, number> = {};
+    for (const opt of prodPurchaseOptions) {
+      const base = Number(opt.unit_price || 0);
+      const optKey = String(opt.option_key || "").trim().toLowerCase();
+      let modifierTotal = 0;
+      for (const assignment of Object.values(prodModifierAssignments)) {
+        const scope = String(assignment.mode_scope || "all").trim().toLowerCase();
+        if (scope !== "all" && scope !== optKey) continue;
+        const catalogGroup = modifierCatalog.find((g) => g.key === assignment.key);
+        if (!catalogGroup) continue;
+        const defaultCatalogOption = catalogGroup.options.find((o) => o.is_default) || catalogGroup.options[0];
+        if (!defaultCatalogOption) continue;
+        const assignmentOption = assignment.options.find(
+          (o) => String(o.value || "") === String(defaultCatalogOption.value || "")
+        );
+        const effectiveAdj =
+          assignmentOption?.price_adjustment_override != null
+            ? Number(assignmentOption.price_adjustment_override)
+            : Number(defaultCatalogOption.price_adjustment || 0);
+        const priceType = String(defaultCatalogOption.price_type || "percent").trim().toLowerCase();
+        modifierTotal += priceType === "fixed" ? effectiveAdj : base * (effectiveAdj / 100);
+      }
+      result[optKey] = base + modifierTotal;
+    }
+    return result;
+  }, [prodPurchaseOptions, prodModifierAssignments, modifierCatalog]);
 
   const showMsg = (type: "success" | "error", text: string) => {
     setMessage({ type, text });
@@ -646,6 +883,14 @@ export default function AdminProductsPage() {
       showMsg("error", "Graphic scenario products must use fixed pricing.");
       return;
     }
+    if (prodGraphicScenarioEnabled && !selectedHardwareTemplateId && prodPurchaseOptions.length === 0) {
+      showMsg("error", "Please select a hardware template.");
+      return;
+    }
+    if (prodGraphicScenarioEnabled && prodPurchaseOptions.length > 0 && !listingPriceOptionKey) {
+      showMsg("error", "Please select which option to show on the listing (Show on listing).");
+      return;
+    }
     setSaving(true);
     try {
       const payload = {
@@ -660,8 +905,20 @@ export default function AdminProductsPage() {
           .map((item) => ({ question: item.question.trim(), answer: item.answer.trim() })),
         category_id: prodCategoryId === "" ? null : parseInt(prodCategoryId),
         subcategory: prodSubcategory.trim() || undefined,
-        price:
-          prodPricingMode === "fixed" ? (prodPrice === "" ? null : parseFloat(prodPrice)) : null,
+        price: (() => {
+          if (prodGraphicScenarioEnabled && prodPurchaseOptions.length > 0) {
+            const listingOpt = prodPurchaseOptions.find(
+              (o) => String(o.option_key || "").trim().toLowerCase() === listingPriceOptionKey
+            ) || prodPurchaseOptions.find((o) => o.is_default) || prodPurchaseOptions[0];
+            if (!listingOpt) return null;
+            const optKey = String(listingOpt.option_key || "").trim().toLowerCase();
+            if (listingPriceUseComputed) {
+              return optionPreviewPrices[optKey] ?? (listingOpt.unit_price != null ? Number(listingOpt.unit_price) : null);
+            }
+            return listingOpt.unit_price != null ? Number(listingOpt.unit_price) : null;
+          }
+          return prodPricingMode === "fixed" ? (prodPrice === "" ? null : parseFloat(prodPrice)) : null;
+        })(),
         price_per_sqft:
           prodPricingMode === "area"
             ? prodPricePerSqft === ""
@@ -669,8 +926,17 @@ export default function AdminProductsPage() {
               : parseFloat(prodPricePerSqft)
             : null,
         min_charge: prodMinCharge === "" ? null : parseFloat(prodMinCharge),
+        weight: prodWeight === "" ? null : parseFloat(prodWeight),
+        length: prodLength === "" ? null : parseFloat(prodLength),
+        shipping_length: prodShippingLength === "" ? null : parseFloat(prodShippingLength),
+        shipping_width: prodShippingWidth === "" ? null : parseFloat(prodShippingWidth),
+        shipping_height: prodShippingHeight === "" ? null : parseFloat(prodShippingHeight),
+        shipping_weight: prodShippingWeight === "" ? null : parseFloat(prodShippingWeight),
         pricing_mode: prodPricingMode as "fixed" | "area",
         graphic_scenario_enabled: prodGraphicScenarioEnabled,
+        hardware_template_id: prodGraphicScenarioEnabled && selectedHardwareTemplateId
+          ? Number(selectedHardwareTemplateId)
+          : null,
         size_mode: "custom" as const,
         base_unit: prodBaseUnit,
         min_width: prodGraphicScenarioEnabled ? null : (prodMinWidth === "" ? null : parseFloat(prodMinWidth)),
@@ -686,12 +952,13 @@ export default function AdminProductsPage() {
         is_active: prodIsActive,
         properties: prodProperties.filter((pr) => pr.key.trim() || pr.value.trim()).map((pr) => ({ key: pr.key.trim(), value: pr.value.trim() })),
       };
+      const hasPurchaseOpts = prodPurchaseOptions.length > 0;
       const modifierPayload = {
         groups: Object.values(prodModifierAssignments).map((a) => ({
           key: a.key,
           is_required: !!a.is_required,
           sort_order: Number(a.sort_order || 0),
-          mode_scope: prodGraphicScenarioEnabled ? (a.mode_scope || "all") : "all",
+          mode_scope: (hasPurchaseOpts || prodGraphicScenarioEnabled) ? (a.mode_scope || "all") : "all",
           options: a.options.map((o) => ({
             option_id: o.option_id != null ? Number(o.option_id) : undefined,
             value: o.value,
@@ -700,17 +967,24 @@ export default function AdminProductsPage() {
           })),
         })),
       };
+      const purchaseOptionsPayload = {
+        purchase_options: prodPurchaseOptions
+          .filter((o) => o.label.trim() && o.option_key.trim())
+          .map((o, i) => ({ ...o, sort_order: i })),
+      };
       let savedProductId: number | null = null;
       if (editingProductId) {
         const updateRes = await productsAPI.update(String(editingProductId), payload);
         savedProductId = Number(updateRes?.product?.id || editingProductId);
         await productsAPI.updateProductModifiersAdmin(String(savedProductId), modifierPayload);
+        await productsAPI.updateProductPurchaseOptionsAdmin(String(savedProductId), purchaseOptionsPayload);
         showMsg("success", "Product updated.");
       } else {
         const createRes = await productsAPI.create(payload);
         savedProductId = Number(createRes?.product?.id);
         if (savedProductId) {
           await productsAPI.updateProductModifiersAdmin(String(savedProductId), modifierPayload);
+          await productsAPI.updateProductPurchaseOptionsAdmin(String(savedProductId), purchaseOptionsPayload);
         }
         showMsg("success", "Product added.");
       }
@@ -727,6 +1001,12 @@ export default function AdminProductsPage() {
       setProdPrice("");
       setProdPricePerSqft("");
       setProdMinCharge("");
+      setProdWeight("");
+      setProdLength("");
+      setProdShippingLength("");
+      setProdShippingWidth("");
+      setProdShippingHeight("");
+      setProdShippingWeight("");
       setProdPricingMode("");
       setProdGraphicScenarioEnabled(false);
       setProdBaseUnit("inch");
@@ -743,6 +1023,10 @@ export default function AdminProductsPage() {
       setProdProperties([]);
       setProdModifierAssignments({});
       setSelectedModifierKey("");
+      setProdPurchaseOptions([]);
+      setSelectedHardwareTemplateId("");
+      setListingPriceOptionKey("");
+      setListingPriceUseComputed(false);
       setEditingProductId(null);
       if (descEditorRef.current) descEditorRef.current.innerHTML = "";
       if (specEditorRef.current) specEditorRef.current.innerHTML = "";
@@ -827,11 +1111,20 @@ export default function AdminProductsPage() {
       setProdSubcategory(p.subcategory || "");
     }
     setProdMinCharge(p.min_charge != null ? String(p.min_charge) : "");
+    setProdWeight(toCleanDecimalInput(p.weight));
+    setProdLength(toCleanDecimalInput(p.length));
+    setProdShippingLength(toCleanDecimalInput(p.shipping_length));
+    setProdShippingWidth(toCleanDecimalInput(p.shipping_width));
+    setProdShippingHeight(toCleanDecimalInput(p.shipping_height));
+    setProdShippingWeight(toCleanDecimalInput(p.shipping_weight));
     const pm = p.pricing_mode;
     const isFixed = pm === "fixed";
     const isArea = pm === "area";
     const isGraphicScenario = !!p.graphic_scenario_enabled;
     setProdGraphicScenarioEnabled(isGraphicScenario);
+    setSelectedHardwareTemplateId(
+      p.hardware_template_id != null ? String(p.hardware_template_id) : ""
+    );
     setProdPricingMode(isGraphicScenario ? "fixed" : (isFixed || isArea ? pm : ""));
     setProdPrice(isArea ? "" : p.price != null ? String(p.price) : "");
     setProdPricePerSqft(isGraphicScenario || isFixed ? "" : p.price_per_sqft != null ? String(p.price_per_sqft) : "");
@@ -856,18 +1149,18 @@ export default function AdminProductsPage() {
     setProdIsNew(p.is_new);
     setProdIsActive(p.is_active);
     try {
-      const res = await productsAPI.getProductModifiersAdmin(String(p.id));
-      const rows = Array.isArray(res?.groups) ? res.groups : [];
+      const [modRes, poRes] = await Promise.all([
+        productsAPI.getProductModifiersAdmin(String(p.id)),
+        productsAPI.getProductPurchaseOptionsAdmin(String(p.id)),
+      ]);
+      const rows = Array.isArray(modRes?.groups) ? modRes.groups : [];
       const next: Record<string, ProductModifierAssignment> = {};
       for (const row of rows) {
         next[String(row.key)] = {
           key: String(row.key),
           is_required: !!row.is_required,
           sort_order: Number(row.sort_order || 0),
-          mode_scope:
-            row.mode_scope === "graphic_only" || row.mode_scope === "graphic_frame"
-              ? row.mode_scope
-              : "all",
+          mode_scope: String(row.mode_scope || "all"),
           options: Array.isArray(row.options)
             ? row.options.map((o: { id?: number; value: string; price_adjustment?: number }) => ({
                 option_id: o.id != null ? Number(o.id) : undefined,
@@ -878,9 +1171,29 @@ export default function AdminProductsPage() {
         };
       }
       setProdModifierAssignments(next);
+      const poRows: ProductPurchaseOption[] = Array.isArray(poRes?.purchase_options) ? poRes.purchase_options : [];
+      setProdPurchaseOptions(poRows);
+      setSelectedHardwareTemplateId("");
+      // Restore listing price option: find the option whose unit_price matches product.price,
+      // fallback to the is_default option
+      if (poRows.length > 0 && p.price != null) {
+        const pPrice = Number(p.price);
+        const matched = poRows.find((o) => o.unit_price != null && Number(o.unit_price) === pPrice);
+        const fallback = poRows.find((o) => o.is_default) || poRows[0];
+        const resolved = matched || fallback;
+        setListingPriceOptionKey(String(resolved?.option_key || "").trim().toLowerCase());
+      } else if (poRows.length > 0) {
+        const fallback = poRows.find((o) => o.is_default) || poRows[0];
+        setListingPriceOptionKey(String(fallback?.option_key || "").trim().toLowerCase());
+      } else {
+        setListingPriceOptionKey("");
+      }
     } catch (e) {
       console.error(e);
       setProdModifierAssignments({});
+      setProdPurchaseOptions([]);
+      setSelectedHardwareTemplateId("");
+      setListingPriceOptionKey("");
     }
     setTimeout(() => {
       productFormRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
@@ -912,6 +1225,12 @@ export default function AdminProductsPage() {
     setProdPrice("");
     setProdPricePerSqft("");
     setProdMinCharge("");
+    setProdWeight("");
+    setProdLength("");
+    setProdShippingLength("");
+    setProdShippingWidth("");
+    setProdShippingHeight("");
+    setProdShippingWeight("");
     setProdPricingMode("");
     setProdGraphicScenarioEnabled(false);
     setProdBaseUnit("inch");
@@ -928,6 +1247,10 @@ export default function AdminProductsPage() {
     setProdProperties([]);
     setProdModifierAssignments({});
     setSelectedModifierKey("");
+    setProdPurchaseOptions([]);
+    setSelectedHardwareTemplateId("");
+    setListingPriceOptionKey("");
+    setListingPriceUseComputed(false);
     if (descEditorRef.current) descEditorRef.current.innerHTML = "";
     if (specEditorRef.current) specEditorRef.current.innerHTML = "";
     if (fileSetupEditorRef.current) fileSetupEditorRef.current.innerHTML = "";
@@ -1134,7 +1457,7 @@ export default function AdminProductsPage() {
                       </select>
                       {prodGraphicScenarioEnabled ? (
                         <p className="text-xs text-slate-500">
-                          Graphic mode is enabled from Product Modifiers. Price type stays fixed-only.
+                          Hardware mode is enabled from Product Modifiers. Price type stays fixed-only.
                         </p>
                       ) : null}
                       <input
@@ -1186,6 +1509,32 @@ export default function AdminProductsPage() {
                         }}
                         className={inputClass}
                       />
+                      {!prodGraphicScenarioEnabled ? (
+                        <>
+                          <input
+                            type="text"
+                            inputMode="decimal"
+                            placeholder="Weight (kg)"
+                            value={prodWeight}
+                            onChange={(e) => {
+                              const v = e.target.value;
+                              if (isFloatInput(v)) setProdWeight(v);
+                            }}
+                            className={inputClass}
+                          />
+                          <input
+                            type="text"
+                            inputMode="decimal"
+                            placeholder="Length (inch)"
+                            value={prodLength}
+                            onChange={(e) => {
+                              const v = e.target.value;
+                              if (isFloatInput(v)) setProdLength(v);
+                            }}
+                            className={inputClass}
+                          />
+                        </>
+                      ) : null}
                       <input
                         type="text"
                         placeholder="Material"
@@ -1248,6 +1597,57 @@ export default function AdminProductsPage() {
                         onChange={(e) => setProdSku(e.target.value)}
                         className={inputClass}
                       />
+                      {prodGraphicScenarioEnabled ? (
+                        <div className="md:col-span-2 rounded-lg border border-slate-200 bg-slate-50 p-3">
+                          <p className="mb-3 text-sm font-medium text-slate-700">Fedex shipping data</p>
+                          <div className="grid gap-3 md:grid-cols-2">
+                            <input
+                              type="text"
+                              inputMode="decimal"
+                              placeholder="Length (inch)"
+                              value={prodShippingLength}
+                              onChange={(e) => {
+                                const v = e.target.value;
+                                if (isFloatInput(v)) setProdShippingLength(v);
+                              }}
+                              className={inputClass}
+                            />
+                            <input
+                              type="text"
+                              inputMode="decimal"
+                              placeholder="Width (inch)"
+                              value={prodShippingWidth}
+                              onChange={(e) => {
+                                const v = e.target.value;
+                                if (isFloatInput(v)) setProdShippingWidth(v);
+                              }}
+                              className={inputClass}
+                            />
+                            <input
+                              type="text"
+                              inputMode="decimal"
+                              placeholder="Height (inch)"
+                              value={prodShippingHeight}
+                              onChange={(e) => {
+                                const v = e.target.value;
+                                if (isFloatInput(v)) setProdShippingHeight(v);
+                              }}
+                              className={inputClass}
+                            />
+                            <input
+                              type="text"
+                              inputMode="decimal"
+                              placeholder="Weight (kg)"
+                              value={prodShippingWeight}
+                              onChange={(e) => {
+                                const v = e.target.value;
+                                if (isFloatInput(v)) setProdShippingWeight(v);
+                              }}
+                              className={inputClass}
+                            />
+                          </div>
+                        </div>
+                      ) : null}
                       <div className="md:col-span-2 rounded-lg border border-slate-200 bg-white p-3">
                         <div className="mb-3 flex flex-wrap items-center gap-2">
                           <p className="text-sm font-medium text-slate-700">Product Modifiers</p>
@@ -1255,12 +1655,16 @@ export default function AdminProductsPage() {
                             <button
                               type="button"
                               className={`px-3 py-1.5 text-xs font-medium ${
-                                !prodGraphicScenarioEnabled
+                                prodPurchaseOptions.length === 0 && !prodGraphicScenarioEnabled
                                   ? "bg-slate-900 text-white"
                                   : "bg-white text-slate-700 hover:bg-slate-50"
                               }`}
                               onClick={() => {
                                 setProdGraphicScenarioEnabled(false);
+                                setProdPurchaseOptions([]);
+                                setSelectedHardwareTemplateId("");
+                                setListingPriceOptionKey("");
+                                setListingPriceUseComputed(false);
                                 setProdModifierAssignments((prev) => {
                                   const next: Record<string, ProductModifierAssignment> = {};
                                   for (const [k, v] of Object.entries(prev)) {
@@ -1275,7 +1679,7 @@ export default function AdminProductsPage() {
                             <button
                               type="button"
                               className={`border-l border-slate-200 px-3 py-1.5 text-xs font-medium ${
-                                prodGraphicScenarioEnabled
+                                prodPurchaseOptions.length > 0 || prodGraphicScenarioEnabled
                                   ? "bg-slate-900 text-white"
                                   : "bg-white text-slate-700 hover:bg-slate-50"
                               }`}
@@ -1287,31 +1691,187 @@ export default function AdminProductsPage() {
                                 setProdMaxWidth("");
                                 setProdMinHeight("");
                                 setProdMaxHeight("");
+                                setProdPurchaseOptions([]);
+                                setProdModifierAssignments({});
+                                setSelectedModifierKey("");
+                                setSelectedHardwareTemplateId("");
+                                setListingPriceOptionKey("");
+                                setListingPriceUseComputed(false);
                               }}
                             >
-                              Graphic modifiers
+                              Hardware
                             </button>
                           </div>
                         </div>
+                        {prodGraphicScenarioEnabled && (
+                          <div className="mb-3 flex items-center gap-2">
+                            <ThemedDropdown
+                              value={selectedHardwareTemplateId}
+                              onChange={(nextId) => {
+                                setSelectedHardwareTemplateId(nextId);
+                                if (!nextId) {
+                                  setProdPurchaseOptions([]);
+                                  setProdModifierAssignments({});
+                                  setListingPriceOptionKey("");
+                                  setListingPriceUseComputed(false);
+                                  return;
+                                }
+                                const template = hardwareTemplates.find((t) => String(t.id) === nextId);
+                                if (!template) return;
+                                applyHardwareTemplate(template);
+                              }}
+                              placeholder="Select hardware template"
+                              options={hardwareTemplates.map((t) => ({
+                                value: String(t.id),
+                                label: t.name,
+                              }))}
+                              className="min-w-[280px] w-full sm:w-auto"
+                            />
+                          </div>
+                        )}
+                        {/* Purchase Options editor */}
+                        {prodGraphicScenarioEnabled && prodPurchaseOptions.length > 0 && (
+                          <div className="mb-3 rounded border border-slate-200 bg-slate-50 p-3">
+                            <div className="mb-2 flex items-center justify-between gap-2">
+                              <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Hardware Options</p>
+                            </div>
+                            <div className="space-y-2">
+                              {purchaseOptionsForView.map((opt, idx) => {
+                                const optKey = String(opt.option_key || `option_${idx + 1}`).trim().toLowerCase();
+                                const isListingPrice = listingPriceOptionKey === optKey;
+                                const basePrice = Number(opt.unit_price || 0);
+                                const previewPrice = optionPreviewPrices[optKey] ?? basePrice;
+                                const hasModifiers = Math.abs(previewPrice - basePrice) > 0.001;
+                                return (
+                                  <div key={idx} className="rounded border border-slate-200 bg-white/70 p-2 space-y-1.5">
+                                    <div className="flex flex-wrap items-center gap-2">
+                                      <span className="w-5 text-xs text-slate-400 shrink-0">{idx + 1}.</span>
+                                      <input
+                                        type="text"
+                                        placeholder="Label (e.g. Flag Only)"
+                                        className="flex-1 min-w-[140px] rounded border border-slate-200 bg-slate-100 px-2 py-1 text-sm text-slate-700"
+                                        value={opt.label}
+                                        readOnly
+                                      />
+                                      <div className="flex items-center gap-1 text-xs text-slate-600">
+                                        <span className="text-slate-400">Base:</span>
+                                        <span className="font-semibold text-slate-800">
+                                          ${formatOptionPrice(opt.pricing_mode === "area" ? opt.price_per_sqft : opt.unit_price)}
+                                        </span>
+                                      </div>
+                                      {hasModifiers && (
+                                        <div className="flex items-center gap-1 text-xs">
+                                          <span className="text-slate-400">With modifiers:</span>
+                                          <span className="font-semibold text-emerald-700">${formatOptionPrice(previewPrice)}</span>
+                                        </div>
+                                      )}
+                                      <label className="flex cursor-pointer items-center gap-1 text-xs text-slate-600">
+                                        <input
+                                          type="radio"
+                                          name="purchase-option-default"
+                                          checked={!!opt.is_default}
+                                          onChange={() => {
+                                            setProdPurchaseOptions((prev) =>
+                                              prev.map((o, i) => ({ ...o, is_default: i === idx }))
+                                            );
+                                          }}
+                                        />
+                                        Default
+                                      </label>
+                                      <label className="flex cursor-pointer items-center gap-1 text-xs font-medium text-sky-700">
+                                        <input
+                                          type="radio"
+                                          name="purchase-option-listing"
+                                          checked={isListingPrice}
+                                          onChange={() => setListingPriceOptionKey(optKey)}
+                                        />
+                                        Show on listing
+                                      </label>
+                                    </div>
+                                  </div>
+                                );
+                              })}
+                            </div>
+                            {/* Listing price type toggle — only shown when a listing option is selected */}
+                            {listingPriceOptionKey && (() => {
+                              const listingOpt = prodPurchaseOptions.find(
+                                (o) => String(o.option_key || "").trim().toLowerCase() === listingPriceOptionKey
+                              );
+                              const optKey = listingPriceOptionKey;
+                              const base = Number(listingOpt?.unit_price || 0);
+                              const computed = optionPreviewPrices[optKey] ?? base;
+                              const hasModifiers = Math.abs(computed - base) > 0.001;
+                              return (
+                                <div className="mt-2 rounded border border-sky-100 bg-sky-50 p-2 text-xs">
+                                  <p className="mb-1.5 font-semibold text-sky-800">Product listing card will show:</p>
+                                  <div className="flex flex-wrap gap-3">
+                                    <label className="flex cursor-pointer items-center gap-1.5 text-slate-700">
+                                      <input
+                                        type="radio"
+                                        name="listing-price-type"
+                                        checked={!listingPriceUseComputed}
+                                        onChange={() => setListingPriceUseComputed(false)}
+                                      />
+                                      <span>Base price <strong>${formatOptionPrice(base)}</strong></span>
+                                    </label>
+                                    <label className={`flex cursor-pointer items-center gap-1.5 ${hasModifiers ? "text-slate-700" : "text-slate-400"}`}>
+                                      <input
+                                        type="radio"
+                                        name="listing-price-type"
+                                        checked={listingPriceUseComputed}
+                                        onChange={() => setListingPriceUseComputed(true)}
+                                        disabled={!hasModifiers}
+                                      />
+                                      <span>
+                                        With modifiers <strong>${formatOptionPrice(computed)}</strong>
+                                        {!hasModifiers && <span className="ml-1 text-slate-400">(no modifiers yet)</span>}
+                                      </span>
+                                    </label>
+                                  </div>
+                                </div>
+                              );
+                            })()}
+                            {/* Quick visibility map so admin can distinguish option-wise modifiers */}
+                            <div className="mt-3 grid gap-2 md:grid-cols-2">
+                              {purchaseOptionsForView.map((opt, idx) => {
+                                const key = String(opt.option_key || `option_${idx + 1}`).trim().toLowerCase();
+                                const scoped = Object.values(prodModifierAssignments).filter((a) => {
+                                  const scope = String(a.mode_scope || "all").trim().toLowerCase();
+                                  return scope === "all" || scope === key;
+                                });
+                                return (
+                                  <div key={`scope-map-${key}`} className="rounded border border-slate-200 bg-white p-2">
+                                    <p className="text-xs font-semibold text-slate-700">
+                                      {opt.label || `Option ${idx + 1}`} modifiers
+                                    </p>
+                                    <p className="mt-1 text-xs text-slate-500">
+                                      {scoped.length > 0
+                                        ? scoped.map((g) => g.key).join(", ")
+                                        : "No modifiers assigned"}
+                                    </p>
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          </div>
+                        )}
                         {modifierCatalog.length === 0 ? (
                           <p className="text-xs text-slate-500">No modifiers in catalog yet. Create them in Admin &gt; Modifiers.</p>
                         ) : (
                           <div className="space-y-3">
                             <div className="flex items-center gap-2">
-                              <select
+                              <ThemedDropdown
                                 value={selectedModifierKey}
-                                onChange={(e) => setSelectedModifierKey(e.target.value)}
-                                className="min-w-[240px] rounded border border-slate-200 px-3 py-2 text-sm"
-                              >
-                                <option value="">Select modifier group</option>
-                                {modifierCatalog
+                                onChange={(nextKey) => setSelectedModifierKey(nextKey)}
+                                placeholder="Select modifier group"
+                                options={modifierCatalog
                                   .filter((g) => !prodModifierAssignments[g.key])
-                                  .map((g) => (
-                                    <option key={g.key} value={g.key}>
-                                      {g.name} ({g.key})
-                                    </option>
-                                  ))}
-                              </select>
+                                  .map((g) => ({
+                                    value: g.key,
+                                    label: `${g.name} (${g.key})`,
+                                  }))}
+                                className="min-w-[280px] w-full sm:w-auto"
+                              />
                               <button
                                 type="button"
                                 className="rounded bg-slate-900 px-3 py-2 text-xs font-medium text-white disabled:opacity-50"
@@ -1321,17 +1881,7 @@ export default function AdminProductsPage() {
                                   if (!group) return;
                                   setProdModifierAssignments((prev) => ({
                                     ...prev,
-                                    [group.key]: {
-                                      key: group.key,
-                                      is_required: false,
-                                      sort_order: Object.keys(prev).length,
-                                      mode_scope: "all",
-                                      options: (Array.isArray(group.options) ? group.options : []).map((o, oi) => ({
-                                        option_id: o.id != null ? Number(o.id) : undefined,
-                                        value: String(o.value || ""),
-                                        price_adjustment_override: null,
-                                      })),
-                                    },
+                                    [group.key]: assignmentFromCatalogGroup(group, Object.keys(prev).length),
                                   }));
                                   setSelectedModifierKey("");
                                 }}
@@ -1360,7 +1910,22 @@ export default function AdminProductsPage() {
                                       Remove
                                     </button>
                                   </label>
-                                  {prodGraphicScenarioEnabled ? (
+                                  {(prodPurchaseOptions.length > 0 || prodGraphicScenarioEnabled) ? (
+                                    <p className="mb-2 text-[11px] text-slate-500">
+                                      Current scope:{" "}
+                                      <span className="font-medium text-slate-700">
+                                        {(() => {
+                                          const scope = String(assigned.mode_scope || "all");
+                                          if (scope === "all") return "All options";
+                                          const mapped = purchaseOptionsForView.find(
+                                            (o) => String(o.option_key || "").trim().toLowerCase() === scope
+                                          );
+                                          return mapped?.label || scope;
+                                        })()}
+                                      </span>
+                                    </p>
+                                  ) : null}
+                                  {(prodPurchaseOptions.length > 0 || prodGraphicScenarioEnabled) ? (
                                     <div className="mb-2 flex flex-wrap items-center gap-3">
                                       <label className="text-xs font-medium uppercase tracking-wide text-slate-500">
                                         Show for
@@ -1369,7 +1934,7 @@ export default function AdminProductsPage() {
                                         className="rounded border border-slate-200 px-2 py-1 text-xs"
                                         value={assigned.mode_scope || "all"}
                                         onChange={(e) => {
-                                          const nextScope = e.target.value as "all" | "graphic_only" | "graphic_frame";
+                                          const nextScope = e.target.value;
                                           setProdModifierAssignments((prev) => ({
                                             ...prev,
                                             [group.key]: {
@@ -1379,9 +1944,12 @@ export default function AdminProductsPage() {
                                           }));
                                         }}
                                       >
-                                        <option value="graphic_only">Graphic</option>
-                                        <option value="all">Both</option>
-                                        <option value="graphic_frame">Graphic + frame</option>
+                                        <option value="all">All options</option>
+                                        {prodPurchaseOptions.map((o) => (
+                                          <option key={o.option_key} value={o.option_key}>
+                                            {o.label || o.option_key}
+                                          </option>
+                                        ))}
                                       </select>
                                     </div>
                                   ) : null}

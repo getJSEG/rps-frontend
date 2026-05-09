@@ -178,10 +178,54 @@ export type ModifierGroup = {
   name: string;
   input_type?: string;
   is_required?: boolean;
-  mode_scope?: "all" | "graphic_only" | "graphic_frame";
+  /** Any option key or "all". Dynamic — not limited to the legacy graphic_only/graphic_frame values. */
+  mode_scope?: string;
   is_active?: boolean;
   sort_order?: number;
   options: ModifierOption[];
+};
+
+export type ProductPurchaseOption = {
+  id?: number;
+  label: string;
+  option_key: string;
+  pricing_mode?: "fixed" | "area";
+  unit_price?: number | null;
+  base_unit_price?: number | null;
+  price_per_sqft?: number | null;
+  min_charge?: number | null;
+  sort_order?: number;
+  is_default?: boolean;
+  is_active?: boolean;
+};
+
+export type HardwareTemplateOptionModifier = {
+  id?: number;
+  key: string;
+  name?: string;
+  is_required?: boolean;
+  sort_order?: number;
+};
+
+export type HardwareTemplateOption = {
+  id?: number;
+  label: string;
+  option_key: string;
+  unit_price: number;
+  base_unit_price?: number;
+  modifier_total?: number;
+  computed_unit_price?: number;
+  is_default?: boolean;
+  sort_order?: number;
+  is_active?: boolean;
+  modifiers: HardwareTemplateOptionModifier[];
+};
+
+export type HardwareTemplate = {
+  id?: number;
+  name: string;
+  is_active?: boolean;
+  options: HardwareTemplateOption[];
 };
 
 export type ArtworkUploadPayload = {
@@ -676,6 +720,10 @@ export const productsAPI = {
       sizeOptionId?: number;
       selectedModifiers?: Record<string, string>;
       selected_modifiers?: Record<string, string>;
+      /** New: key of the selected purchase option (e.g. "flag_only", "graphic_frame") */
+      purchase_option_key?: string;
+      purchaseOptionKey?: string;
+      /** Legacy: used when graphic_scenario_enabled but no purchase_options defined */
       selection_mode?: "graphic_only" | "graphic_frame";
       selectionMode?: "graphic_only" | "graphic_frame";
     }
@@ -768,10 +816,39 @@ export const productsAPI = {
   getProductModifiersAdmin: async (id: string) => {
     return apiCall(`/products/admin/products/${id}/modifiers`);
   },
-  updateProductModifiersAdmin: async (id: string, data: { groups: Array<{ key: string; is_required?: boolean; sort_order?: number; mode_scope?: "all" | "graphic_only" | "graphic_frame"; options: Array<{ option_id?: number; value: string; is_default?: boolean; price_adjustment_override?: number | null }> }> }) => {
+  updateProductModifiersAdmin: async (id: string, data: { groups: Array<{ key: string; is_required?: boolean; sort_order?: number; mode_scope?: string; options: Array<{ option_id?: number; value: string; is_default?: boolean; price_adjustment_override?: number | null }> }> }) => {
     return apiCall(`/products/admin/products/${id}/modifiers`, {
       method: 'PUT',
       body: JSON.stringify(data),
+    });
+  },
+  getProductPurchaseOptionsAdmin: async (id: string) => {
+    return apiCall(`/products/admin/products/${id}/purchase-options`);
+  },
+  updateProductPurchaseOptionsAdmin: async (id: string, data: { purchase_options: ProductPurchaseOption[] }) => {
+    return apiCall(`/products/admin/products/${id}/purchase-options`, {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    });
+  },
+  getHardwareTemplatesAdmin: async () => {
+    return apiCall('/products/admin/hardware-templates') as Promise<{ templates: HardwareTemplate[] }>;
+  },
+  createHardwareTemplateAdmin: async (data: { name: string; options: HardwareTemplateOption[] }) => {
+    return apiCall('/products/admin/hardware-templates', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }) as Promise<{ template: HardwareTemplate | null; templates: HardwareTemplate[] }>;
+  },
+  updateHardwareTemplateAdmin: async (id: string | number, data: { name: string; options: HardwareTemplateOption[] }) => {
+    return apiCall(`/products/admin/hardware-templates/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    }) as Promise<{ template: HardwareTemplate | null; templates: HardwareTemplate[] }>;
+  },
+  deleteHardwareTemplateAdmin: async (id: string | number) => {
+    return apiCall(`/products/admin/hardware-templates/${id}`, {
+      method: 'DELETE',
     });
   },
 };

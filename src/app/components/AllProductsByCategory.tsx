@@ -25,6 +25,7 @@ interface Product {
   subcategory?: string;
   category?: string;
   category_name?: string;
+  graphic_scenario_enabled?: boolean | null;
 }
 
 type CategorySection = {
@@ -84,6 +85,7 @@ export default function AllProductsByCategory() {
                 description: p.description,
                 price: p.price,
                 price_per_sqft: p.price_per_sqft,
+                graphic_scenario_enabled: !!p.graphic_scenario_enabled,
               })
             ),
           };
