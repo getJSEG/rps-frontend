@@ -59,6 +59,10 @@ interface Product {
   shipping_width?: number | null;
   shipping_height?: number | null;
   shipping_weight?: number | null;
+  /** Whole units (e.g. business days); meaning is app-defined. */
+  production_time?: number | null;
+  /** Ordered bullet points shown under the product image on the storefront. */
+  product_highlights?: string[] | null;
   pricing_mode?: "fixed" | "area" | null;
   graphic_scenario_enabled?: boolean | null;
   hardware_template_id?: number | null;
@@ -115,6 +119,7 @@ const WORD_STYLE_LABEL_SUFFIX = " (Word-style formatting)";
 const RICH_PLACEHOLDER_HINT = "bold, italic, lists supported";
 
 const isFloatInput = (v: string) => v === "" || /^\d*\.?\d*$/.test(v);
+const isNonNegativeIntInput = (v: string) => v === "" || /^\d+$/.test(v);
 const toCleanDecimalInput = (v: unknown): string => {
   if (v == null) return "";
   const raw = String(v).trim();
@@ -488,6 +493,8 @@ export default function AdminProductsPage() {
   const [prodShippingWidth, setProdShippingWidth] = useState("");
   const [prodShippingHeight, setProdShippingHeight] = useState("");
   const [prodShippingWeight, setProdShippingWeight] = useState("");
+  const [prodProductionTime, setProdProductionTime] = useState("");
+  const [prodHighlights, setProdHighlights] = useState<string[]>([]);
   const [prodPricingMode, setProdPricingMode] = useState<"" | "fixed" | "area">("");
   const [prodGraphicScenarioEnabled, setProdGraphicScenarioEnabled] = useState(false);
   const [prodBaseUnit, setProdBaseUnit] = useState<"inch">("inch");
@@ -932,6 +939,8 @@ export default function AdminProductsPage() {
         shipping_width: prodShippingWidth === "" ? null : parseFloat(prodShippingWidth),
         shipping_height: prodShippingHeight === "" ? null : parseFloat(prodShippingHeight),
         shipping_weight: prodShippingWeight === "" ? null : parseFloat(prodShippingWeight),
+        production_time: prodProductionTime === "" ? null : parseInt(prodProductionTime, 10),
+        product_highlights: prodHighlights.map((h) => h.trim()).filter(Boolean),
         pricing_mode: prodPricingMode as "fixed" | "area",
         graphic_scenario_enabled: prodGraphicScenarioEnabled,
         hardware_template_id: prodGraphicScenarioEnabled && selectedHardwareTemplateId
@@ -1007,6 +1016,8 @@ export default function AdminProductsPage() {
       setProdShippingWidth("");
       setProdShippingHeight("");
       setProdShippingWeight("");
+      setProdProductionTime("");
+      setProdHighlights([]);
       setProdPricingMode("");
       setProdGraphicScenarioEnabled(false);
       setProdBaseUnit("inch");
@@ -1117,6 +1128,15 @@ export default function AdminProductsPage() {
     setProdShippingWidth(toCleanDecimalInput(p.shipping_width));
     setProdShippingHeight(toCleanDecimalInput(p.shipping_height));
     setProdShippingWeight(toCleanDecimalInput(p.shipping_weight));
+    setProdProductionTime(
+      p.production_time != null && Number.isFinite(Number(p.production_time))
+        ? String(Math.trunc(Number(p.production_time)))
+        : ""
+    );
+    {
+      const h = p.product_highlights;
+      setProdHighlights(Array.isArray(h) ? h.map(String) : []);
+    }
     const pm = p.pricing_mode;
     const isFixed = pm === "fixed";
     const isArea = pm === "area";
@@ -1231,6 +1251,8 @@ export default function AdminProductsPage() {
     setProdShippingWidth("");
     setProdShippingHeight("");
     setProdShippingWeight("");
+    setProdProductionTime("");
+    setProdHighlights([]);
     setProdPricingMode("");
     setProdGraphicScenarioEnabled(false);
     setProdBaseUnit("inch");
@@ -1540,6 +1562,17 @@ export default function AdminProductsPage() {
                         placeholder="Material"
                         value={prodMaterial}
                         onChange={(e) => setProdMaterial(e.target.value)}
+                        className={inputClass}
+                      />
+                      <input
+                        type="text"
+                        inputMode="numeric"
+                        placeholder="Production time (e.g. business days)"
+                        value={prodProductionTime}
+                        onChange={(e) => {
+                          const v = e.target.value;
+                          if (isNonNegativeIntInput(v)) setProdProductionTime(v);
+                        }}
                         className={inputClass}
                       />
                       {!prodGraphicScenarioEnabled ? (
@@ -2145,6 +2178,77 @@ export default function AdminProductsPage() {
                           onChange={(e) => setProdInstallationGuide(e.target.value)}
                           className={inputClass}
                         />
+                      </div>
+                      <div className="md:col-span-2">
+                        <div className="mb-2 flex flex-wrap items-center justify-between gap-3">
+                          <label className="block text-sm font-medium text-slate-700">
+                            Product Highlights
+                          </label>
+                          <button
+                            type="button"
+                            onClick={() => setProdHighlights([...prodHighlights, ""])}
+                            className="shrink-0 rounded-lg bg-slate-900 px-4 py-2.5 text-sm font-medium text-white shadow-sm transition hover:bg-slate-800"
+                          >
+                            + Add highlight
+                          </button>
+                        </div>
+                        {prodHighlights.length === 0 && (
+                          <p className="text-xs text-slate-400">No highlights yet. Each highlight appears as one bullet point under the product image.</p>
+                        )}
+                        <div className="rounded-lg border border-slate-200 bg-white p-3 space-y-2">
+                          {prodHighlights.map((h, idx) => (
+                            <div key={idx} className="flex gap-2 items-center">
+                              <button
+                                type="button"
+                                disabled={idx === 0}
+                                onClick={() => {
+                                  const next = [...prodHighlights];
+                                  [next[idx - 1], next[idx]] = [next[idx], next[idx - 1]];
+                                  setProdHighlights(next);
+                                }}
+                                title="Move up"
+                                aria-label="Move up"
+                                className="inline-flex shrink-0 items-center justify-center rounded-lg p-1.5 text-slate-500 transition-colors hover:bg-slate-100 disabled:opacity-30"
+                              >
+                                <FiChevronUp size={16} aria-hidden />
+                              </button>
+                              <button
+                                type="button"
+                                disabled={idx === prodHighlights.length - 1}
+                                onClick={() => {
+                                  const next = [...prodHighlights];
+                                  [next[idx], next[idx + 1]] = [next[idx + 1], next[idx]];
+                                  setProdHighlights(next);
+                                }}
+                                title="Move down"
+                                aria-label="Move down"
+                                className="inline-flex shrink-0 items-center justify-center rounded-lg p-1.5 text-slate-500 transition-colors hover:bg-slate-100 disabled:opacity-30"
+                              >
+                                <FiChevronDown size={16} aria-hidden />
+                              </button>
+                              <input
+                                type="text"
+                                placeholder={`Highlight ${idx + 1}`}
+                                value={h}
+                                onChange={(e) => {
+                                  const next = [...prodHighlights];
+                                  next[idx] = e.target.value;
+                                  setProdHighlights(next);
+                                }}
+                                className="min-w-0 flex-1 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm shadow-sm outline-none focus:border-sky-400 focus:ring-2 focus:ring-sky-400/25"
+                              />
+                              <button
+                                type="button"
+                                onClick={() => setProdHighlights(prodHighlights.filter((_, i) => i !== idx))}
+                                title="Remove highlight"
+                                aria-label="Remove highlight"
+                                className="inline-flex shrink-0 items-center justify-center rounded-lg p-2 text-rose-600 transition-colors hover:bg-rose-50 hover:text-rose-800"
+                              >
+                                <FiTrash2 size={18} aria-hidden />
+                              </button>
+                            </div>
+                          ))}
+                        </div>
                       </div>
                       <div className="md:col-span-2">
                         <div className="mb-2 flex flex-wrap items-start justify-between gap-3">

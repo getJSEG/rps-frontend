@@ -106,6 +106,8 @@ interface Product {
     is_default?: boolean;
   }>;
   properties?: ProductProperty[];
+  /** Ordered bullet points shown under the product image. */
+  product_highlights?: string[] | null;
 }
 
 interface PreviewPricing {
@@ -1201,6 +1203,18 @@ function ProductDetailContent() {
                   </div>
                 ) : null}
             </div>
+
+            {/* Product Highlights */}
+            {Array.isArray(product?.product_highlights) && product.product_highlights.length > 0 && (
+              <ul className="mb-6 space-y-1.5">
+                {product.product_highlights.map((h, i) => (
+                  <li key={i} className="flex items-start gap-2 text-sm text-gray-700">
+                    <span className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-gray-700" />
+                    {h}
+                  </li>
+                ))}
+              </ul>
+            )}
           </div>
 
           {/* Right Panel - Configuration and Order */}
