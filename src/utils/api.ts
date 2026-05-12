@@ -185,6 +185,22 @@ export type ModifierGroup = {
   options: ModifierOption[];
 };
 
+/** Admin-only: named bundle of existing catalog modifiers (by group id). */
+export type ModifierPresetItem = {
+  id: number;
+  modifier_group_id: number;
+  sort_order: number;
+  key: string;
+  name: string;
+};
+
+export type ModifierPreset = {
+  id: number;
+  name: string;
+  sort_order: number;
+  modifiers: ModifierPresetItem[];
+};
+
 export type ProductPurchaseOption = {
   id?: number;
   label: string;
@@ -810,6 +826,29 @@ export const productsAPI = {
   },
   deleteModifierCatalogGroupAdmin: async (key: string) => {
     return apiCall(`/products/admin/modifier-catalog/${encodeURIComponent(String(key || '').trim())}`, {
+      method: 'DELETE',
+    });
+  },
+  getModifierPresetsAdmin: async () => {
+    return apiCall('/products/admin/modifier-presets') as Promise<{ presets: ModifierPreset[] }>;
+  },
+  createModifierPresetAdmin: async (data: { name: string; modifier_group_ids: number[] }) => {
+    return apiCall('/products/admin/modifier-presets', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }) as Promise<{ preset: ModifierPreset }>;
+  },
+  updateModifierPresetAdmin: async (
+    id: number | string,
+    data: { name?: string; modifier_group_ids?: number[]; sort_order?: number }
+  ) => {
+    return apiCall(`/products/admin/modifier-presets/${encodeURIComponent(String(id))}`, {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    }) as Promise<{ preset: ModifierPreset }>;
+  },
+  deleteModifierPresetAdmin: async (id: number | string) => {
+    return apiCall(`/products/admin/modifier-presets/${encodeURIComponent(String(id))}`, {
       method: 'DELETE',
     });
   },

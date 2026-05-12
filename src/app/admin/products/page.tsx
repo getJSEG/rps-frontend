@@ -10,6 +10,7 @@ import {
   productsAPI,
   type HardwareTemplate,
   type ModifierGroup,
+  type ModifierPreset,
   type ProductPurchaseOption,
 } from "../../../utils/api";
 import { FiEdit, FiTrash2, FiChevronUp, FiChevronDown } from "react-icons/fi";
@@ -390,6 +391,16 @@ type ThemedDropdownOption = {
   label: string;
 };
 
+/** Prefix preset dropdown option values so they never collide with modifier catalog `key`. */
+const MODIFIER_PRESET_DD_PREFIX = "__preset:";
+function presetDropdownOptionValue(id: number) {
+  return `${MODIFIER_PRESET_DD_PREFIX}${id}`;
+}
+function parsePresetIdFromDropdownValue(v: string): string {
+  if (!v) return "";
+  return v.startsWith(MODIFIER_PRESET_DD_PREFIX) ? v.slice(MODIFIER_PRESET_DD_PREFIX.length) : v;
+}
+
 function ThemedDropdown({
   value,
   placeholder,
@@ -541,10 +552,13 @@ export default function AdminProductsPage() {
   const [productsPerPage] = useState(10);
   const [productsPagination, setProductsPagination] = useState({ total: 0, pages: 0 });
   const [modifierCatalog, setModifierCatalog] = useState<ModifierGroup[]>([]);
+  const [modifierPresets, setModifierPresets] = useState<ModifierPreset[]>([]);
   const [hardwareTemplates, setHardwareTemplates] = useState<HardwareTemplate[]>([]);
   const [selectedHardwareTemplateId, setSelectedHardwareTemplateId] = useState<string>("");
   const [prodModifierAssignments, setProdModifierAssignments] = useState<Record<string, ProductModifierAssignment>>({});
   const [selectedModifierKey, setSelectedModifierKey] = useState<string>("");
+  /** Value from preset dropdown (`presetDropdownOptionValue(id)`), or "" for placeholder. */
+  const [selectedPresetDropdownValue, setSelectedPresetDropdownValue] = useState<string>("");
   /** Purchase options (always 2 for hardware products; empty for plain products) */
   const [prodPurchaseOptions, setProdPurchaseOptions] = useState<ProductPurchaseOption[]>([]);
   /** option_key of the option whose price is shown on the listing card */
@@ -698,6 +712,16 @@ export default function AdminProductsPage() {
     }
   };
 
+  const loadModifierPresets = async () => {
+    try {
+      const res = await productsAPI.getModifierPresetsAdmin();
+      setModifierPresets(Array.isArray(res?.presets) ? res.presets : []);
+    } catch (e) {
+      console.error(e);
+      setModifierPresets([]);
+    }
+  };
+
   const assignmentFromCatalogGroup = useCallback((group: ModifierGroup, sortOrder: number): ProductModifierAssignment => ({
     key: group.key,
     is_required: false,
@@ -779,7 +803,13 @@ export default function AdminProductsPage() {
   useEffect(() => {
     const run = async () => {
       setLoading(true);
-      await Promise.all([loadCategories(), loadProducts(), loadModifierCatalog(), loadHardwareTemplates()]);
+      await Promise.all([
+        loadCategories(),
+        loadProducts(),
+        loadModifierCatalog(),
+        loadModifierPresets(),
+        loadHardwareTemplates(),
+      ]);
       setLoading(false);
     };
     run();
@@ -836,6 +866,37 @@ export default function AdminProductsPage() {
   const showMsg = (type: "success" | "error", text: string) => {
     setMessage({ type, text });
     setTimeout(() => setMessage(null), 4000);
+  };
+
+  /** Simple modifiers only: set product modifiers to exactly this preset (replaces previous assignments). */
+  const applyModifierPresetFromId = (presetIdStr: string) => {
+    const id = Number(presetIdStr);
+    if (!Number.isFinite(id) || id <= 0) return;
+    const preset = modifierPresets.find((p) => p.id === id);
+    if (!preset) return;
+    if (!Array.isArray(preset.modifiers) || preset.modifiers.length === 0) {
+      showMsg("error", "This preset has no modifiers.");
+      return;
+    }
+    const ordered = [...preset.modifiers].sort((a, b) => a.sort_order - b.sort_order);
+    const next: Record<string, ProductModifierAssignment> = {};
+    let sortBase = 0;
+    for (const item of ordered) {
+      const group =
+        modifierCatalog.find((g) => Number(g.id) === Number(item.modifier_group_id)) ||
+        modifierCatalog.find(
+          (g) => String(g.key).toLowerCase() === String(item.key || "").toLowerCase()
+        );
+      if (!group) continue;
+      next[group.key] = assignmentFromCatalogGroup(group, sortBase++);
+    }
+    if (Object.keys(next).length === 0) {
+      showMsg("error", "No matching modifiers from that preset in the catalog.");
+      return;
+    }
+    setProdModifierAssignments(next);
+    setSelectedModifierKey("");
+    showMsg("success", `Preset "${preset.name}" applied.`);
   };
 
   const handleCategorySubmit = async (e: React.FormEvent) => {
@@ -1034,6 +1095,7 @@ export default function AdminProductsPage() {
       setProdProperties([]);
       setProdModifierAssignments({});
       setSelectedModifierKey("");
+      setSelectedPresetDropdownValue("");
       setProdPurchaseOptions([]);
       setSelectedHardwareTemplateId("");
       setListingPriceOptionKey("");
@@ -1079,6 +1141,7 @@ export default function AdminProductsPage() {
 
   const startEditProduct = async (p: Product) => {
     setEditingProductId(p.id);
+    setSelectedPresetDropdownValue("");
     setProdName(p.name);
     setProdSlug(p.slug);
     setProdDescription(p.description || "");
@@ -1211,6 +1274,8 @@ export default function AdminProductsPage() {
     } catch (e) {
       console.error(e);
       setProdModifierAssignments({});
+      setSelectedModifierKey("");
+      setSelectedPresetDropdownValue("");
       setProdPurchaseOptions([]);
       setSelectedHardwareTemplateId("");
       setListingPriceOptionKey("");
@@ -1269,6 +1334,7 @@ export default function AdminProductsPage() {
     setProdProperties([]);
     setProdModifierAssignments({});
     setSelectedModifierKey("");
+    setSelectedPresetDropdownValue("");
     setProdPurchaseOptions([]);
     setSelectedHardwareTemplateId("");
     setListingPriceOptionKey("");
@@ -1727,6 +1793,7 @@ export default function AdminProductsPage() {
                                 setProdPurchaseOptions([]);
                                 setProdModifierAssignments({});
                                 setSelectedModifierKey("");
+                                setSelectedPresetDropdownValue("");
                                 setSelectedHardwareTemplateId("");
                                 setListingPriceOptionKey("");
                                 setListingPriceUseComputed(false);
@@ -1745,6 +1812,7 @@ export default function AdminProductsPage() {
                                 if (!nextId) {
                                   setProdPurchaseOptions([]);
                                   setProdModifierAssignments({});
+                                  setSelectedPresetDropdownValue("");
                                   setListingPriceOptionKey("");
                                   setListingPriceUseComputed(false);
                                   return;
@@ -1892,11 +1960,28 @@ export default function AdminProductsPage() {
                           <p className="text-xs text-slate-500">No modifiers in catalog yet. Create them in Admin &gt; Modifiers.</p>
                         ) : (
                           <div className="space-y-3">
-                            <div className="flex items-center gap-2">
+                            <div className="flex flex-wrap items-center gap-2">
+                              {!prodGraphicScenarioEnabled && modifierPresets.length > 0 ? (
+                                <ThemedDropdown
+                                  key="modifier-preset-apply"
+                                  value={selectedPresetDropdownValue}
+                                  onChange={(v) => {
+                                    setSelectedPresetDropdownValue(v);
+                                    applyModifierPresetFromId(parsePresetIdFromDropdownValue(v));
+                                  }}
+                                  placeholder="Apply modifier preset"
+                                  options={modifierPresets.map((p) => ({
+                                    value: presetDropdownOptionValue(p.id),
+                                    label: p.name,
+                                  }))}
+                                  className="min-w-[220px] w-full sm:min-w-[200px] sm:w-auto"
+                                />
+                              ) : null}
                               <ThemedDropdown
+                                key="modifier-group-add"
                                 value={selectedModifierKey}
                                 onChange={(nextKey) => setSelectedModifierKey(nextKey)}
-                                placeholder="Select modifier group"
+                                placeholder="Add Modifier"
                                 options={modifierCatalog
                                   .filter((g) => !prodModifierAssignments[g.key])
                                   .map((g) => ({
