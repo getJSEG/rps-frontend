@@ -1,7 +1,7 @@
 "use client";
 
-import { useState, useEffect, useCallback, Suspense, useRef } from "react";
-import { useSearchParams, useRouter } from "next/navigation";
+import { useState, useEffect, Suspense, useRef } from "react";
+import { useSearchParams, useRouter, usePathname } from "next/navigation";
 import Image from "next/image";
 import Link from "next/link";
 import Navbar from "../../components/Navbar";
@@ -10,23 +10,59 @@ import {
   productsAPI,
   getProductImageUrl,
   cartAPI,
+  taxesAPI,
+  fedexAPI,
   addressesAPI,
   shippingRatesAPI,
-  taxesAPI,
-  shippingAmountForMethod,
   effectiveOrderShipping,
-  orderQualifiesForFreeShipping,
-  type ShippingMethod,
-  type ShippingRates,
-  type FreeShippingPolicy,
+  buildFedexPackagesForProductConfigure,
   type Tax,
+  type FedexRateQuote,
+  type FreeShippingPolicy,
 } from "../../../utils/api";
 import { isAuthenticated } from "../../../utils/roles";
 import { SITE_TAB_TITLE, pageTitle } from "../../../utils/tabTitle";
-import { FiArrowLeft, FiEdit, FiTrash2, FiX } from "react-icons/fi";
+import { FiArrowLeft, FiTrash2, FiX } from "react-icons/fi";
+import { HiOutlinePencilSquare } from "react-icons/hi2";
 
 /** One artwork per job popup image in `public`. */
 const ONE_ARTWORK_PER_JOB_IMAGE = "/Oneartwokperjob.jpg";
+
+/** Logged-in only: restores ship-to when there is no default address row yet (e.g. right after checkout). */
+const PDP_SHIP_ESTIMATE_STORAGE_KEY = "rps_pdp_ship_estimate_v1";
+
+function readStoredPdpShipEstimate(): {
+  streetAddress: string;
+  addressLine2: string;
+  city: string;
+  state: string;
+  postcode: string;
+  country: string;
+} | null {
+  if (typeof window === "undefined") return null;
+  try {
+    const raw = sessionStorage.getItem(PDP_SHIP_ESTIMATE_STORAGE_KEY);
+    if (!raw) return null;
+    const p = JSON.parse(raw) as Record<string, unknown>;
+    if (!p || typeof p !== "object") return null;
+    const postcode = String(p.postcode ?? "").trim();
+    if (!postcode) return null;
+    return {
+      streetAddress: String(p.streetAddress ?? p.street_address ?? ""),
+      addressLine2: String(p.addressLine2 ?? p.address_line2 ?? ""),
+      city: String(p.city ?? ""),
+      state: String(p.state ?? ""),
+      postcode,
+      country: String(p.country ?? "United States"),
+    };
+  } catch {
+    return null;
+  }
+}
+
+const US_STATES = [
+  "AL", "AK", "AZ", "AR", "CA", "CO", "CT", "DE", "FL", "GA", "HI", "ID", "IL", "IN", "IA", "KS", "KY", "LA", "ME", "MD", "MA", "MI", "MN", "MS", "MO", "MT", "NE", "NV", "NH", "NJ", "NM", "NY", "NC", "ND", "OH", "OK", "OR", "PA", "RI", "SC", "SD", "TN", "TX", "UT", "VT", "VA", "WA", "WV", "WI", "WY",
+];
 
 interface ProductProperty {
   key: string;
@@ -194,78 +230,6 @@ function resolveModifierAdjustmentAmount(
   return baseUnitBeforeModifiers * (raw / 100);
 }
 
-interface SavedAddress {
-  id: number;
-  street_address: string;
-  address_line2: string | null;
-  city: string;
-  state: string;
-  postcode: string;
-  country: string;
-  is_default: boolean;
-  address_type: string;
-  updated_at?: string | null;
-}
-
-function parseSavedAddressBool(v: unknown): boolean {
-  if (v === true || v === 1) return true;
-  if (v === false || v === 0) return false;
-  if (typeof v === "string") {
-    const s = v.toLowerCase();
-    return s === "true" || s === "1" || s === "t";
-  }
-  return false;
-}
-
-function normalizeSavedAddress(raw: Record<string, unknown>): SavedAddress {
-  return {
-    id: Number(raw.id),
-    street_address: String(raw.street_address ?? raw.streetAddress ?? ""),
-    address_line2: raw.address_line2 != null || raw.addressLine2 != null ? String(raw.address_line2 ?? raw.addressLine2) : null,
-    city: String(raw.city ?? ""),
-    state: String(raw.state ?? ""),
-    postcode: String(raw.postcode ?? ""),
-    country: String(raw.country ?? "United States"),
-    is_default: parseSavedAddressBool(raw.is_default ?? raw.isDefault),
-    address_type: String(raw.address_type ?? raw.addressType ?? "billing"),
-    updated_at:
-      raw.updated_at != null
-        ? String(raw.updated_at)
-        : raw.updatedAt != null
-          ? String(raw.updatedAt)
-          : null,
-  };
-}
-
-/** Collapse legacy duplicate defaults to the most recently updated row */
-function ensureSingleDefaultAddress(addresses: SavedAddress[]): SavedAddress[] {
-  const d = addresses.filter((a) => a.is_default);
-  if (d.length <= 1) return addresses;
-  const ts = (a: SavedAddress) => {
-    const t = a.updated_at ? Date.parse(a.updated_at) : NaN;
-    return Number.isNaN(t) ? 0 : t;
-  };
-  const keep = d.reduce((best, a) => {
-    const bt = ts(best);
-    const at = ts(a);
-    if (at > bt) return a;
-    if (at < bt) return best;
-    return a.id > best.id ? a : best;
-  });
-  return addresses.map((a) => ({ ...a, is_default: a.id === keep.id }));
-}
-
-/** Single account default (any type), else first shipping, else first billing, else first row */
-function pickDisplayShippingAddress(addresses: SavedAddress[]): SavedAddress | null {
-  const normalized = ensureSingleDefaultAddress(addresses);
-  if (!normalized.length) return null;
-  const globalDefault = normalized.find((a) => a.is_default);
-  if (globalDefault) return globalDefault;
-  const shipping = normalized.filter((a) => a.address_type === "shipping");
-  const billing = normalized.filter((a) => a.address_type === "billing");
-  return shipping[0] || billing[0] || normalized[0];
-}
-
 function newProductJobRowId(): string {
   if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
     return crypto.randomUUID();
@@ -300,6 +264,7 @@ type GraphicSelectionMode = "graphic_only" | "graphic_frame";
 function ProductDetailContent() {
   const searchParams = useSearchParams();
   const router = useRouter();
+  const pathname = usePathname();
   const productId = searchParams.get("productId");
   
   const [product, setProduct] = useState<Product | null>(null);
@@ -324,8 +289,6 @@ function ProductDetailContent() {
   const sandbag = "No";
   const fullWall = "1 Full Wall";
   const halfWall = "1 Half Wall (Single Sided)";
-  const [shippingService, setShippingService] = useState("Ground");
-  const [shippingMethods, setShippingMethods] = useState<ShippingMethod[]>([]);
   const [activeTab, setActiveTab] = useState("description");
   const [selectedImageIndex, setSelectedImageIndex] = useState(0);
   const [selectedProductImageIndex, setSelectedProductImageIndex] = useState(0);
@@ -336,20 +299,30 @@ function ProductDetailContent() {
   const [selectedSubcategory, setSelectedSubcategory] = useState<string | null>(null);
   const [imageZoom, setImageZoom] = useState({ x: 50, y: 50, scale: 1 });
   const [message, setMessage] = useState("");
-  const [shippingUserLoggedIn, setShippingUserLoggedIn] = useState(false);
-  const [savedAddresses, setSavedAddresses] = useState<SavedAddress[]>([]);
-  const [addressesLoading, setAddressesLoading] = useState(false);
-  const [shippingRates, setShippingRates] = useState<ShippingRates | null>(null);
+  const [activeTax, setActiveTax] = useState<Tax | null>(null);
+  const [jobArtworkInfoOpen, setJobArtworkInfoOpen] = useState(false);
+  const [estimateShipForm, setEstimateShipForm] = useState({
+    streetAddress: "",
+    addressLine2: "",
+    city: "",
+    state: "",
+    postcode: "",
+    country: "United States",
+  });
+  /** False until first address-book fetch for this PDP visit finishes (avoids clearing FedEx while postcode is still empty). */
+  const [addressDefaultsLoaded, setAddressDefaultsLoaded] = useState(false);
+  const [fedexRates, setFedexRates] = useState<FedexRateQuote[]>([]);
+  const [fedexRatesLoading, setFedexRatesLoading] = useState(false);
+  const [fedexRatesError, setFedexRatesError] = useState<string | null>(null);
+  const [selectedFedexServiceType, setSelectedFedexServiceType] = useState("");
+  /** When false and postal+country are set, show compact Ship to card (image 2). When true, show full address form. */
+  const [shipToEditing, setShipToEditing] = useState(false);
   const [freeShippingPolicy, setFreeShippingPolicy] = useState<FreeShippingPolicy>({
     freeShippingEnabled: false,
     freeShippingThreshold: 0,
   });
-  const [activeTax, setActiveTax] = useState<Tax | null>(null);
-  const [jobArtworkInfoOpen, setJobArtworkInfoOpen] = useState(false);
   const fetchedProductForRef = useRef<string | null>(null);
   const fetchedRelatedForRef = useRef<string | null>(null);
-  const fetchedAddressesOnceRef = useRef(false);
-
   const addJob = () => {
     setJobs((prev) => [...prev, { id: newProductJobRowId(), jobName: "", quantity: "1" }]);
   };
@@ -481,6 +454,225 @@ function ProductDetailContent() {
   }, []);
 
   useEffect(() => {
+    let c = false;
+    void (async () => {
+      try {
+        const res = await shippingRatesAPI.get();
+        if (!c) {
+          setFreeShippingPolicy({
+            freeShippingEnabled: !!res?.freeShippingEnabled,
+            freeShippingThreshold: Math.max(0, Number(res?.freeShippingThreshold) || 0),
+          });
+        }
+      } catch {
+        /* keep defaults */
+      }
+    })();
+    return () => {
+      c = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!isAuthenticated() || !productId) return;
+    let cancelled = false;
+    setAddressDefaultsLoaded(false);
+    void (async () => {
+      try {
+        const addrRes = (await addressesAPI.getAll()) as { addresses?: unknown[] };
+        const rawList = Array.isArray(addrRes?.addresses) ? addrRes.addresses : [];
+        const list = rawList.map((item) => {
+          const r = (item as Record<string, unknown>) || {};
+          return {
+            street_address: String(r.street_address ?? r.streetAddress ?? ""),
+            address_line2:
+              r.address_line2 != null || r.addressLine2 != null
+                ? String(r.address_line2 ?? r.addressLine2 ?? "")
+                : "",
+            city: String(r.city ?? ""),
+            state: String(r.state ?? ""),
+            postcode: String(r.postcode ?? ""),
+            country: String(r.country ?? "United States"),
+            is_default: Boolean(r.is_default ?? r.isDefault),
+            address_type: String(r.address_type ?? r.addressType ?? "billing"),
+          };
+        });
+        const globalDefault = list.find((a) => a.is_default) ?? list[0] ?? null;
+        const ship =
+          globalDefault?.address_type === "shipping"
+            ? globalDefault
+            : list.find((a) => a.address_type === "shipping") ?? globalDefault;
+        if (!cancelled && ship && ship.postcode.trim()) {
+          setEstimateShipForm((prev) => ({
+            ...prev,
+            streetAddress: ship.street_address || prev.streetAddress,
+            addressLine2: ship.address_line2 || prev.addressLine2,
+            city: ship.city || prev.city,
+            state: ship.state || prev.state,
+            postcode: ship.postcode || prev.postcode,
+            country: ship.country || prev.country,
+          }));
+          setShipToEditing(false);
+        }
+      } catch {
+        /* guest or no addresses */
+      } finally {
+        if (!cancelled) {
+          setEstimateShipForm((prev) => {
+            if (String(prev.postcode || "").trim()) return prev;
+            const stored = readStoredPdpShipEstimate();
+            if (!stored) return prev;
+            return { ...prev, ...stored };
+          });
+          setAddressDefaultsLoaded(true);
+        }
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [productId, pathname]);
+
+  /** Logged-in: persist last ship-to so a return visit (e.g. after checkout) has postcode before FedEx effect runs. */
+  useEffect(() => {
+    if (!isAuthenticated()) return;
+    const pc = String(estimateShipForm.postcode || "").trim();
+    if (!pc) return;
+    try {
+      sessionStorage.setItem(
+        PDP_SHIP_ESTIMATE_STORAGE_KEY,
+        JSON.stringify({
+          streetAddress: estimateShipForm.streetAddress,
+          addressLine2: estimateShipForm.addressLine2,
+          city: estimateShipForm.city,
+          state: estimateShipForm.state,
+          postcode: estimateShipForm.postcode,
+          country: estimateShipForm.country,
+        })
+      );
+    } catch {
+      /* ignore quota / private mode */
+    }
+  }, [
+    estimateShipForm.streetAddress,
+    estimateShipForm.addressLine2,
+    estimateShipForm.city,
+    estimateShipForm.state,
+    estimateShipForm.postcode,
+    estimateShipForm.country,
+  ]);
+
+  useEffect(() => {
+    if (!isAuthenticated()) {
+      setFedexRates([]);
+      setSelectedFedexServiceType("");
+      setFedexRatesError(null);
+      setFedexRatesLoading(false);
+      return;
+    }
+    if (missingRequiredModifiers.length > 0) {
+      setFedexRates([]);
+      setSelectedFedexServiceType("");
+      setFedexRatesError(null);
+      return;
+    }
+
+    const wIn = previewPricing?.width ?? (parseFloat(width) || 0);
+    const hIn = previewPricing?.height ?? (parseFloat(height) || 0);
+    if (!skipDimensionsForPrice && (wIn <= 0 || hIn <= 0)) {
+      setFedexRates([]);
+      setSelectedFedexServiceType("");
+      setFedexRatesError(null);
+      return;
+    }
+
+    const pc = String(estimateShipForm.postcode || "").trim();
+    const countryRaw = String(estimateShipForm.country || "").trim();
+    if (!pc || !countryRaw) {
+      if (isAuthenticated() && !addressDefaultsLoaded) {
+        return;
+      }
+      setFedexRates([]);
+      setSelectedFedexServiceType("");
+      setFedexRatesError(null);
+      return;
+    }
+
+    const billableQty = jobs.reduce((s, j) => s + Math.max(1, parseInt(j.quantity, 10) || 1), 0);
+    const fedexStreetLines: string[] = [];
+    const s1 = estimateShipForm.streetAddress.trim();
+    const s2 = estimateShipForm.addressLine2.trim();
+    if (s1) fedexStreetLines.push(s1);
+    if (s2) fedexStreetLines.push(s2);
+
+    const destination = {
+      postalCode: pc,
+      countryCode:
+        countryRaw.toLowerCase() === "united states"
+          ? "US"
+          : countryRaw.trim().toUpperCase(),
+      stateOrProvinceCode: String(estimateShipForm.state || "").trim().toUpperCase() || undefined,
+      city: String(estimateShipForm.city || "").trim() || undefined,
+      ...(fedexStreetLines.length > 0 ? { streetLines: fedexStreetLines } : {}),
+    };
+
+    const packages = buildFedexPackagesForProductConfigure({
+      billableQty,
+      widthInches: wIn,
+      heightInches: hIn,
+      isGraphicScenario,
+    });
+
+    let cancelled = false;
+    void (async () => {
+      try {
+        setFedexRatesLoading(true);
+        setFedexRatesError(null);
+        const res = await fedexAPI.getRates(destination, packages);
+        if (cancelled) return;
+        const raw = Array.isArray(res?.rates) ? res.rates : [];
+        const list = [...raw].sort((a, b) => (Number(a.totalCharge) || 0) - (Number(b.totalCharge) || 0));
+        setFedexRates(list);
+        if (list.length > 0) {
+          setSelectedFedexServiceType((prev) => {
+            if (prev && list.some((r) => r.serviceType === prev)) return prev;
+            return list[0].serviceType;
+          });
+        } else {
+          setSelectedFedexServiceType("");
+        }
+      } catch (e) {
+        if (cancelled) return;
+        setFedexRates([]);
+        setSelectedFedexServiceType("");
+        setFedexRatesError(e instanceof Error ? e.message : "Could not load FedEx rates");
+      } finally {
+        if (!cancelled) setFedexRatesLoading(false);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    missingRequiredModifiers.length,
+    previewPricing?.width,
+    previewPricing?.height,
+    width,
+    height,
+    skipDimensionsForPrice,
+    isGraphicScenario,
+    jobs,
+    estimateShipForm.postcode,
+    estimateShipForm.country,
+    estimateShipForm.state,
+    estimateShipForm.city,
+    estimateShipForm.streetAddress,
+    estimateShipForm.addressLine2,
+    addressDefaultsLoaded,
+  ]);
+
+  useEffect(() => {
     setSelectedImageIndex(0);
     setSelectedProductImageIndex(0);
     setSelectedSubcategory(null);
@@ -528,39 +720,6 @@ function ProductDetailContent() {
     };
     document.addEventListener("mousedown", onDocMouseDown);
     return () => document.removeEventListener("mousedown", onDocMouseDown);
-  }, []);
-
-  useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      try {
-        const res = await shippingRatesAPI.get();
-        if (!cancelled && res?.rates) setShippingRates(res.rates);
-        if (!cancelled) {
-          setFreeShippingPolicy({
-            freeShippingEnabled: !!res?.freeShippingEnabled,
-            freeShippingThreshold: Math.max(0, Number(res?.freeShippingThreshold) || 0),
-          });
-          const methods = Array.isArray(res?.methods) ? res.methods : [];
-          setShippingMethods(methods);
-          if (methods.length > 0) {
-            setShippingService((prev) =>
-              methods.some((m) => String(m.name).trim().toLowerCase() === String(prev).trim().toLowerCase())
-                ? prev
-                : methods[0].name
-            );
-          }
-        }
-      } catch {
-        if (!cancelled) {
-          setShippingRates(null);
-          setShippingMethods([]);
-        }
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
   }, []);
 
   useEffect(() => {
@@ -718,13 +877,30 @@ function ProductDetailContent() {
     };
   });
   const subtotal = jobLines.reduce((sum, line) => sum + line.lineSubtotal, 0);
-  const rawShippingCost = shippingAmountForMethod(shippingMethods, shippingService, shippingRates);
-  const shippingCost = effectiveOrderShipping(rawShippingCost, subtotal, freeShippingPolicy, false);
-  const showFreeShippingLabel = orderQualifiesForFreeShipping(subtotal, freeShippingPolicy, false);
-  const total = subtotal + shippingCost;
   const activeTaxPercentage = Number(activeTax?.percentage || 0);
-  const taxAmount = ((subtotal + shippingCost) * activeTaxPercentage) / 100;
-  const totalWithTax = total + taxAmount;
+  const selectedFedexRatePdp =
+    fedexRates.find((r) => r.serviceType === selectedFedexServiceType) || fedexRates[0] || null;
+  const fedexRawChargePdp = isAuthenticated()
+    ? Number(selectedFedexRatePdp?.totalCharge) || 0
+    : 0;
+  const effectiveShippingPdp = effectiveOrderShipping(
+    fedexRawChargePdp,
+    subtotal,
+    freeShippingPolicy,
+    false
+  );
+  const taxAmount = ((subtotal + effectiveShippingPdp) * activeTaxPercentage) / 100;
+  const totalWithTax = subtotal + effectiveShippingPdp + taxAmount;
+
+  const handleEstimateShipFormChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
+    const { name, value } = e.target;
+    setEstimateShipForm((prev) => ({ ...prev, [name]: value }));
+  };
+
+  const shipToAddressReady = Boolean(
+    String(estimateShipForm.postcode || "").trim() && String(estimateShipForm.country || "").trim()
+  );
+  const showShipToForm = !shipToAddressReady || shipToEditing;
 
   // Handle Add to Cart (logged-in or guest via X-Guest-Session-Id from api.ts)
   const handleAddToCart = async () => {
@@ -764,6 +940,27 @@ function ProductDetailContent() {
       }
     }
 
+    const resolvedRateForCart =
+      fedexRates.find((r) => r.serviceType === selectedFedexServiceType) ??
+      (fedexRates.length > 0 ? fedexRates[0] : null);
+    if (isAuthenticated()) {
+      if (!String(estimateShipForm.postcode || "").trim() || !String(estimateShipForm.country || "").trim()) {
+        setMessage("❌ Error: Enter ship-to postal code and country for FedEx.");
+        setTimeout(() => setMessage(""), 5000);
+        return;
+      }
+      if (fedexRatesLoading) {
+        setMessage("❌ Error: Please wait for FedEx rates to finish loading.");
+        setTimeout(() => setMessage(""), 5000);
+        return;
+      }
+      if (fedexRatesError || !resolvedRateForCart || fedexRates.length === 0) {
+        setMessage("❌ Error: Choose a FedEx service (check ship-to address and try again).");
+        setTimeout(() => setMessage(""), 5000);
+        return;
+      }
+    }
+
     setAddingToCart(true);
     setMessage("");
 
@@ -784,8 +981,10 @@ function ProductDetailContent() {
       });
       const totalQty = jobsPayload.reduce((s, j) => s + j.quantity, 0);
       const subtotalNum = jobsPayload.reduce((s, j) => s + j.lineSubtotal, 0);
-      const shippingNum = shippingCost;
-      const totalNum = subtotalNum + shippingNum;
+      const fedexRawAdd = isAuthenticated() ? Number(resolvedRateForCart?.totalCharge) || 0 : 0;
+      const shipEffAdd = effectiveOrderShipping(fedexRawAdd, subtotalNum, freeShippingPolicy, false);
+      const taxNum = ((subtotalNum + shipEffAdd) * activeTaxPercentage) / 100;
+      const totalNum = subtotalNum + shipEffAdd + taxNum;
       const legacyJobName =
         jobsPayload.length === 1
           ? jobsPayload[0].jobName
@@ -815,7 +1014,17 @@ function ProductDetailContent() {
         turnaround: "free-same-day",
         shippingMode: "blind_drop_ship",
         shipping: "blind-drop",
-        shippingService: shippingService,
+        // Guest: omit FedEx quote on the line; cart shows "rate at checkout" until checkout (address + FedEx).
+        // Logged-in: persist quote on the line so cart/checkout can use cartLineFedexQuotedAmount / skipCheckoutFedexQuote.
+        ...(isAuthenticated() && resolvedRateForCart
+          ? {
+              shippingService: resolvedRateForCart.serviceType,
+              shippingRateServiceName: resolvedRateForCart.serviceName,
+              shippingRateAmount: Number(resolvedRateForCart.totalCharge) || 0,
+              shippingRateCurrency: resolvedRateForCart.currency || "USD",
+              shippingRateEstimatedDelivery: resolvedRateForCart.estimatedDelivery ?? null,
+            }
+          : {}),
         emailProof: false,
         fullWall: fullWallQty,
         halfWall: halfWallQty,
@@ -826,7 +1035,6 @@ function ProductDetailContent() {
         sandbag: sandbag,
         unitPrice: unitPrice,
         subtotal: subtotalNum,
-        shippingCost: shippingNum,
         total: totalNum,
         pricePerSqFt: pricePerSqFt,
         minCharge: minCharge,
@@ -855,64 +1063,6 @@ function ProductDetailContent() {
       setAddingToCart(false);
     }
   };
-
-  const loadSavedAddresses = useCallback(async () => {
-    if (!isAuthenticated()) {
-      setSavedAddresses([]);
-      return;
-    }
-    try {
-      setAddressesLoading(true);
-      const res = (await addressesAPI.getAll()) as { addresses?: unknown[] } | unknown[];
-      const rawList = Array.isArray((res as { addresses?: unknown[] }).addresses)
-        ? (res as { addresses: unknown[] }).addresses
-        : Array.isArray(res)
-          ? (res as unknown[])
-          : [];
-      setSavedAddresses(
-        ensureSingleDefaultAddress(
-          rawList.map((item) => normalizeSavedAddress((item as Record<string, unknown>) || {}))
-        )
-      );
-    } catch {
-      setSavedAddresses([]);
-    } finally {
-      setAddressesLoading(false);
-    }
-  }, []);
-
-  useEffect(() => {
-    setShippingUserLoggedIn(isAuthenticated());
-  }, []);
-
-  useEffect(() => {
-    if (!shippingUserLoggedIn) return;
-    if (fetchedAddressesOnceRef.current) return;
-    fetchedAddressesOnceRef.current = true;
-    loadSavedAddresses();
-  }, [shippingUserLoggedIn, loadSavedAddresses]);
-
-  useEffect(() => {
-    const onAuthChange = () => {
-      const loggedIn = isAuthenticated();
-      setShippingUserLoggedIn(loggedIn);
-      if (loggedIn) {
-        fetchedAddressesOnceRef.current = true;
-        void loadSavedAddresses();
-      } else {
-        fetchedAddressesOnceRef.current = false;
-        setSavedAddresses([]);
-      }
-    };
-    window.addEventListener("loginStatusChanged", onAuthChange);
-    window.addEventListener("storage", onAuthChange);
-    return () => {
-      window.removeEventListener("loginStatusChanged", onAuthChange);
-      window.removeEventListener("storage", onAuthChange);
-    };
-  }, [loadSavedAddresses]);
-
-  const displayShipTo = pickDisplayShippingAddress(savedAddresses);
 
   const productGalleryUrls = normalizeProductGalleryImages(product);
   const idx = Math.min(selectedProductImageIndex, Math.max(0, productGalleryUrls.length - 1));
@@ -1455,7 +1605,7 @@ function ProductDetailContent() {
                           type="text"
                           value={job.jobName}
                           onChange={(e) => updateJob(job.id, { jobName: e.target.value })}
-                          className="w-full px-3 py-2 border text-sm text-gray-500 border-gray-300 text-black rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                          className="box-border h-10 w-full rounded-lg border border-gray-300 px-3 text-sm text-gray-900 placeholder:text-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500"
                           placeholder="Job Name/PO#"
                           aria-label={`Job ${index + 1} name or PO number`}
                         />
@@ -1466,7 +1616,7 @@ function ProductDetailContent() {
                           type="number"
                           value={job.quantity}
                           onChange={(e) => updateJob(job.id, { quantity: e.target.value })}
-                          className="w-full px-3 py-2 border border-gray-300 rounded-lg text-black focus:outline-none focus:ring-2 focus:ring-blue-500"
+                          className="box-border h-10 w-full rounded-lg border border-gray-300 px-3 text-sm text-black focus:outline-none focus:ring-2 focus:ring-blue-500"
                           min={1}
                           step={1}
                           aria-label={`Job ${index + 1} quantity`}
@@ -1475,7 +1625,7 @@ function ProductDetailContent() {
                       <div className="shrink-0">
                         <label className="block text-sm font-medium text-gray-700 mb-2">Line total</label>
                         <div
-                          className="inline-flex max-w-full min-h-[42px] items-center overflow-x-auto whitespace-nowrap rounded-lg border border-gray-300 bg-gray-50 px-3 py-2 text-black tabular-nums [scrollbar-width:thin]"
+                          className="box-border inline-flex h-10 max-w-full min-w-[5.5rem] items-center overflow-x-auto whitespace-nowrap rounded-lg border border-gray-300 bg-gray-50 px-3 text-sm text-black tabular-nums [scrollbar-width:thin]"
                           aria-readonly="true"
                           title="Based on unit price × quantity"
                         >
@@ -1527,127 +1677,217 @@ function ProductDetailContent() {
               </div>
             </div>
 
-            {/* Shipping: service & charges for everyone; saved “Ship to” only when logged in */}
-            <div className="mb-6 p-4 border border-gray-200 rounded-lg min-w-0">
-              <h2 className="text-lg font-semibold text-gray-900 mb-4">Shipping</h2>
-
-              {shippingUserLoggedIn ? (
-                /* Ship to — from address book */
-                <div className="mb-4 p-3 bg-gray-50 rounded-lg relative min-w-0 max-w-full">
-                  <div className="flex justify-between items-start gap-2 mb-2">
-                    <h3 className="text-sm font-medium text-gray-700 shrink-0">Ship to</h3>
-                    {addressesLoading ? null : displayShipTo ? (
-                      <Link
-                        href={`/address-book?edit=${displayShipTo.id}`}
-                        className="inline-flex shrink-0 items-center justify-center font-medium text-sky-600 hover:text-sky-800"
-                        title="Edit"
-                        aria-label="Edit address"
-                      >
-                        <FiEdit size={18} aria-hidden />
-                      </Link>
-                    ) : (
-                      <Link
-                        href="/address-book?add=1"
-                        className="text-sm text-blue-600 hover:text-blue-800 font-medium shrink-0"
-                      >
-                        Add address
-                      </Link>
-                    )}
-                  </div>
-                  {addressesLoading ? (
-                    <p className="text-sm text-gray-500">Loading your address…</p>
-                  ) : displayShipTo ? (
-                    <div className="text-sm text-gray-900 space-y-0.5 min-w-0 break-words [overflow-wrap:anywhere]">
-                      <p className="text-xs text-gray-500 capitalize">{displayShipTo.address_type}</p>
-                      <p>{displayShipTo.street_address}</p>
-                      {displayShipTo.address_line2 ? <p>{displayShipTo.address_line2}</p> : null}
-                      <p>{displayShipTo.city}, {displayShipTo.state} {displayShipTo.postcode}</p>
-                      <p>{displayShipTo.country}</p>
+            {/* Shipping — logged-in: live FedEx + ship-to; guests: quote at checkout only */}
+            <div className="mb-6 p-4 border border-gray-200 rounded-lg bg-white">
+              <h2 className="text-lg font-semibold text-gray-900 mb-3">Shipping</h2>
+              {isAuthenticated() ? (
+              <div className="space-y-4">
+                  {showShipToForm ? (
+                    <div className="space-y-3">
+                      <p className="text-xs font-medium uppercase tracking-wide text-gray-500">Ship to</p>
+                      <input
+                        type="text"
+                        name="streetAddress"
+                        placeholder="Street address"
+                        value={estimateShipForm.streetAddress}
+                        onChange={handleEstimateShipFormChange}
+                        className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm text-gray-900"
+                      />
+                      <input
+                        type="text"
+                        name="addressLine2"
+                        placeholder="Apt, suite (optional)"
+                        value={estimateShipForm.addressLine2}
+                        onChange={handleEstimateShipFormChange}
+                        className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm text-gray-900"
+                      />
+                      <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                        <input
+                          type="text"
+                          name="city"
+                          placeholder="City"
+                          value={estimateShipForm.city}
+                          onChange={handleEstimateShipFormChange}
+                          className="rounded-md border border-gray-300 px-3 py-2 text-sm text-gray-900"
+                        />
+                        <select
+                          name="state"
+                          value={estimateShipForm.state}
+                          onChange={handleEstimateShipFormChange}
+                          className="rounded-md border border-gray-300 px-3 py-2 text-sm text-gray-900"
+                        >
+                          <option value="">State</option>
+                          {US_STATES.map((s) => (
+                            <option key={s} value={s}>
+                              {s}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                      <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                        <input
+                          type="text"
+                          name="postcode"
+                          placeholder="ZIP / Postal code *"
+                          value={estimateShipForm.postcode}
+                          onChange={handleEstimateShipFormChange}
+                          className="rounded-md border border-gray-300 px-3 py-2 text-sm text-gray-900"
+                        />
+                        <input
+                          type="text"
+                          name="country"
+                          placeholder="Country"
+                          value={estimateShipForm.country}
+                          onChange={handleEstimateShipFormChange}
+                          className="rounded-md border border-gray-300 px-3 py-2 text-sm text-gray-900"
+                        />
+                      </div>
+                      {shipToAddressReady ? (
+                        <button
+                          type="button"
+                          onClick={() => setShipToEditing(false)}
+                          className="rounded-md bg-sky-600 px-4 py-2 text-sm font-medium text-white transition hover:bg-sky-700"
+                        >
+                          Save address
+                        </button>
+                      ) : null}
                     </div>
                   ) : (
-                    <div className="text-sm text-gray-600 space-y-2">
-                      <p>No saved address yet. Add one in settings to see it here.</p>
+                    <div className="relative rounded-lg border border-gray-200 bg-gray-50 p-4 text-sm text-gray-800">
+                      <div className="mb-3 flex items-center justify-between gap-2 rounded-md border border-gray-200 bg-gray-100/90 px-3 py-2.5">
+                        <span className="text-xs font-medium uppercase tracking-wide text-gray-500">Ship to</span>
+                        <Link
+                          href="/address-book"
+                          className="rounded p-0.5 text-[#0B6BCB] transition hover:bg-white/80 hover:text-blue-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-400 focus-visible:ring-offset-1"
+                          aria-label="Update shipping address in address book"
+                          title="Address book"
+                        >
+                          <HiOutlinePencilSquare className="h-5 w-5" aria-hidden />
+                        </Link>
+                      </div>
+                      <div className="space-y-1 text-gray-900">
+                        {estimateShipForm.streetAddress.trim() ? (
+                          <p>{estimateShipForm.streetAddress.trim()}</p>
+                        ) : null}
+                        {estimateShipForm.addressLine2.trim() ? (
+                          <p>{estimateShipForm.addressLine2.trim()}</p>
+                        ) : null}
+                        <p>
+                          {[estimateShipForm.city, estimateShipForm.state].filter(Boolean).join(", ")}{" "}
+                          {estimateShipForm.postcode.trim()}
+                        </p>
+                        {estimateShipForm.country.trim() ? <p>{estimateShipForm.country.trim()}</p> : null}
+                        {!estimateShipForm.streetAddress.trim() &&
+                        !estimateShipForm.addressLine2.trim() &&
+                        !estimateShipForm.city.trim() &&
+                        !estimateShipForm.state.trim() ? (
+                          <p className="text-xs text-gray-500">
+                            Postal destination only — use edit to add street and city.
+                          </p>
+                        ) : null}
+                      </div>
                     </div>
                   )}
-                </div>
+
+                  <div className="rounded-md border border-gray-200 bg-white p-3 text-sm">
+                    <div className="flex flex-wrap items-end gap-4">
+                      <div className="min-w-0 flex-1">
+                        <label htmlFor="pdp-fedex-service" className="mb-1 block text-sm font-medium text-gray-700">
+                          Shipping service
+                        </label>
+                        {fedexRatesError ? <p className="mb-2 text-xs text-rose-600">{fedexRatesError}</p> : null}
+                        {fedexRates.length > 0 ? (
+                          <select
+                            id="pdp-fedex-service"
+                            value={selectedFedexServiceType}
+                            onChange={(e) => setSelectedFedexServiceType(e.target.value)}
+                            className="w-full rounded-md border border-gray-300 px-2 py-2 text-sm text-gray-800"
+                          >
+                            {fedexRates.map((r) => (
+                              <option key={r.serviceType} value={r.serviceType}>
+                                {r.serviceName}
+                                {r.estimatedDelivery ? ` (${r.estimatedDelivery})` : ""}
+                              </option>
+                            ))}
+                          </select>
+                        ) : (
+                          <p className="rounded-md border border-dashed border-gray-200 bg-gray-50 px-2 py-2 text-xs text-gray-500">
+                            {fedexRatesLoading
+                              ? "Fetching rates…"
+                              : !shipToAddressReady
+                                ? "Enter postal code and country for Ship to to load FedEx services."
+                                : "No FedEx services available. Check address or dimensions."}
+                          </p>
+                        )}
+                      </div>
+                      <div className="shrink-0 text-right">
+                        <p className="mb-1 text-xs font-medium uppercase tracking-wide text-gray-400">Rate</p>
+                        <p className="text-lg font-semibold tabular-nums text-gray-900">
+                          {fedexRatesLoading && fedexRates.length === 0 ? (
+                            <span className="text-gray-500">…</span>
+                          ) : selectedFedexRatePdp ? (
+                            `$${Number(selectedFedexRatePdp.totalCharge).toFixed(2)}`
+                          ) : (
+                            <span className="text-gray-400">—</span>
+                          )}
+                        </p>
+                      </div>
+                    </div>
+                    {fedexRatesLoading && fedexRates.length > 0 ? (
+                      <p className="mt-2 text-xs text-gray-500">Updating rates…</p>
+                    ) : null}
+                  </div>
+              </div>
               ) : (
-                <div className="mb-4 rounded-lg border border-dashed border-gray-200 bg-gray-50/80 px-3 py-3">
-                  <p className="text-sm text-gray-700">
-                    You’ll enter your full shipping address at checkout. Choose a service below to see the estimated
-                    shipping charge for this item.
+                <div className="rounded-md border border-dashed border-gray-300 bg-gray-50 p-4 text-sm leading-relaxed text-gray-600">
+                  <p>
+                    You&apos;ll enter your full shipping address at checkout. Shipping cost and FedEx service options
+                    are calculated when you complete checkout with your delivery address.
                   </p>
                 </div>
               )}
-
-              <div className="mb-4">
-                <label className="block text-sm font-medium text-gray-700 mb-2">Shipping Service</label>
-                <div className="flex items-center gap-2">
-                  <select
-                    value={shippingService}
-                    onChange={(e) => setShippingService(e.target.value)}
-                    className="flex-1 px-4 py-2 border border-gray-300 rounded-lg  text-black focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  >
-                    {shippingMethods.length > 0 ? (
-                      shippingMethods.map((m) => (
-                        <option key={m.id} value={m.name}>
-                          {m.name}
-                        </option>
-                      ))
-                    ) : (
-                      <>
-                        <option>Ground</option>
-                        <option>Express</option>
-                        <option>Overnight</option>
-                      </>
-                    )}
-                  </select>
-                  <span
-                    className={`font-medium ${showFreeShippingLabel ? "text-emerald-700" : "text-gray-900"}`}
-                  >
-                    {showFreeShippingLabel ? "Free Shipping" : `$${shippingCost.toFixed(2)}`}
-                  </span>
-                </div>
-                {freeShippingPolicy.freeShippingEnabled ? (
-                  <p className="mt-2 text-sm font-medium leading-snug text-rose-700">
-                    {freeShippingPolicy.freeShippingThreshold > 0 ? (
-                      <>
-                        Get free shipping on orders over{" "}
-                        <span className="font-bold tabular-nums text-black">
-                          ${freeShippingPolicy.freeShippingThreshold.toFixed(2)}
-                        </span>
-                        .
-                      </>
-                    ) : (
-                      <>Get free shipping on qualifying orders while this offer is running.</>
-                    )}
-                  </p>
-                ) : null}
-              </div>
             </div>
 
             {/* Order Summary */}
             <div className="mb-6 p-4 border border-gray-200 rounded-lg bg-gray-50">
-              <div className="flex justify-between mb-2">
+              <div className="mb-2 flex justify-between">
                 <span className="text-gray-700">Subtotal</span>
-                <span className="text-gray-900 font-medium">${subtotal.toFixed(2)}</span>
+                <span className="font-medium text-gray-900">${subtotal.toFixed(2)}</span>
               </div>
-              <div className="flex justify-between mb-2">
-                <span className="text-gray-700">Shipping ({shippingService})</span>
-                <span
-                  className={`font-medium ${showFreeShippingLabel ? "text-emerald-700" : "text-gray-900"}`}
-                >
-                  {showFreeShippingLabel ? "Free Shipping" : `$${shippingCost.toFixed(2)}`}
+              <div className="mb-2 flex justify-between">
+                <span className="text-gray-700">Shipping</span>
+                <span className="font-medium text-gray-900 tabular-nums text-right">
+                  {isAuthenticated() ? (
+                    fedexRatesLoading && fedexRates.length === 0 ? (
+                      <span className="text-gray-500">…</span>
+                    ) : (
+                      `$${effectiveShippingPdp.toFixed(2)}`
+                    )
+                  ) : (
+                    <span className="text-sm font-normal text-gray-500">Calculated at checkout</span>
+                  )}
                 </span>
               </div>
-              <div className="flex justify-between mb-2">
+              {isAuthenticated() &&
+              fedexRawChargePdp > 0 &&
+              effectiveShippingPdp === 0 &&
+              freeShippingPolicy.freeShippingEnabled ? (
+                <p className="mb-2 text-xs text-emerald-700">Free shipping applied (order meets threshold).</p>
+              ) : null}
+              {isAuthenticated() && selectedFedexRatePdp?.estimatedDelivery ? (
+                <p className="mb-2 text-xs text-gray-600">
+                  Estimated delivery: {selectedFedexRatePdp.estimatedDelivery}
+                </p>
+              ) : null}
+              <div className="mb-2 flex justify-between">
                 <span className="text-gray-700">
                   Tax ({activeTaxPercentage.toFixed(2)}%)
                 </span>
-                <span className="text-gray-900 font-medium">${taxAmount.toFixed(2)}</span>
+                <span className="font-medium text-gray-900">${taxAmount.toFixed(2)}</span>
               </div>
-              <div className="flex justify-between pt-2 border-t border-gray-300">
-                <span className="text-gray-900 font-bold">Total</span>
-                <span className="text-gray-900 font-bold text-xl">${totalWithTax.toFixed(2)}</span>
+              <div className="flex justify-between border-t border-gray-300 pt-2">
+                <span className="font-bold text-gray-900">Total</span>
+                <span className="text-xl font-bold text-gray-900">${totalWithTax.toFixed(2)}</span>
               </div>
             </div>
 

@@ -12,7 +12,6 @@ import {
 } from "../../components/artwork-review/openUploadReviewSession";
 import { ordersAPI } from "../../../utils/api";
 import {
-  canonicalOrderStatus,
   customerOrderStatusDescription,
   customerOrderStatusTitle,
 } from "../../../utils/orderStatuses";
@@ -77,6 +76,10 @@ type GuestOrder = {
   tax_name?: string | null;
   items?: OrderItem[] | null;
   order_tracking_id?: string | null;
+  carrier?: string | null;
+  shipment_status?: string | null;
+  shipment_last_event?: unknown;
+  shipment_updated_at?: string | null;
 };
 
 function money(v: unknown): string {
@@ -107,6 +110,21 @@ function lineSelectedModifiers(item: OrderItem): Array<{
       option_label: String(m?.option_label || m?.option_value || "").trim(),
     }))
     .filter((m) => m.group_name && m.option_label);
+}
+
+function fedexPublicTrackUrl(tracking: string): string {
+  return `https://www.fedex.com/fedextrack/?trknbr=${encodeURIComponent(String(tracking).trim())}`;
+}
+
+function fedexShipmentLastLine(ev: unknown): string {
+  if (ev == null) return "";
+  if (typeof ev === "string") return ev.trim();
+  if (typeof ev !== "object") return "";
+  const o = ev as Record<string, unknown>;
+  const parts = [o.eventDescription, o.exceptionDescription, o.derivedStatus, o.scanLocation]
+    .map((x) => (x != null ? String(x).trim() : ""))
+    .filter(Boolean);
+  return parts[0] || "";
 }
 
 function GuestOrderTrackInner() {
@@ -338,13 +356,38 @@ function GuestOrderTrackInner() {
                       : "—"}
                   </p>
                 </div>
-                {canonicalOrderStatus(order.status) === "shipped" &&
-                  order.order_tracking_id?.trim() && (
+                {order.order_tracking_id?.trim() && (
                     <div className="sm:col-span-3">
                       <p className="text-gray-500">Tracking number</p>
                       <p className="font-mono font-medium text-gray-900 break-all">
                         {order.order_tracking_id}
                       </p>
+                      <a
+                        href={fedexPublicTrackUrl(order.order_tracking_id)}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="mt-2 inline-block text-sm font-semibold text-[#0B6BCB] hover:underline"
+                      >
+                        Track on FedEx
+                      </a>
+                    </div>
+                  )}
+                {String(order.carrier || "").toLowerCase() === "fedex" &&
+                  order.order_tracking_id?.trim() &&
+                  !!(order.shipment_status?.trim() || order.shipment_last_event) && (
+                    <div className="sm:col-span-3 rounded-md border border-violet-100 bg-violet-50/60 px-3 py-2">
+                      <p className="text-xs font-semibold uppercase tracking-wide text-violet-800">FedEx shipment</p>
+                      {order.shipment_status?.trim() ? (
+                        <p className="mt-1 font-medium text-gray-900">{order.shipment_status}</p>
+                      ) : null}
+                      {fedexShipmentLastLine(order.shipment_last_event) ? (
+                        <p className="mt-1 text-xs text-gray-600">{fedexShipmentLastLine(order.shipment_last_event)}</p>
+                      ) : null}
+                      {order.shipment_updated_at ? (
+                        <p className="mt-1 text-[11px] text-gray-400">
+                          Updated {new Date(order.shipment_updated_at).toLocaleString()}
+                        </p>
+                      ) : null}
                     </div>
                   )}
               </div>

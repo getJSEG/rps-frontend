@@ -10,12 +10,13 @@ import {
   getProductImageUrl,
   cartAPI,
   shippingRatesAPI,
-  shippingAmountForMethod,
   effectiveOrderShipping,
   orderQualifiesForFreeShipping,
   stackedShippingFromCartItems,
   mergedShippingFromCartItems,
   perLineMergedShippingAllocations,
+  cartHasShippingQuotePending,
+  cartLineFedexQuotedAmount,
   type ShippingMethod,
   type ShippingRates,
   type FreeShippingPolicy,
@@ -111,6 +112,38 @@ function isStorePickupItem(item: CartItem): boolean {
     isStorePickupMode(item.shipping) ||
     (item.storePickupAddressId != null && String(item.storePickupAddressId) !== "")
   );
+}
+
+/** Re-attach FedEx quote fields on PUT so quantity edits never drop PDP/checkout quotes from the payload. */
+function fedexQuotePayloadFromCartLine(item: CartItem): Record<string, unknown> {
+  if (cartLineFedexQuotedAmount(item) == null) return {};
+  const svc = String(item.shippingService ?? item.shipping_service ?? "").trim();
+  const amt = Number(item.shippingRateAmount ?? item.shipping_rate_amount);
+  const cur = (String(item.shippingRateCurrency ?? item.shipping_rate_currency ?? "USD").trim() || "USD").toUpperCase();
+  const svcName = String(item.shippingRateServiceName ?? item.shipping_rate_service_name ?? "").trim() || svc;
+  const ed = item.shippingRateEstimatedDelivery ?? item.shipping_rate_estimated_delivery ?? null;
+  return {
+    shippingService: svc,
+    shipping_service: svc,
+    shippingRateAmount: amt,
+    shipping_rate_amount: amt,
+    shippingRateCurrency: cur,
+    shipping_rate_currency: cur,
+    shippingRateServiceName: svcName,
+    shipping_rate_service_name: svcName,
+    shippingRateEstimatedDelivery: ed,
+    shipping_rate_estimated_delivery: ed,
+  };
+}
+
+function cartLineShippingDisplayName(item: CartItem): string {
+  if (isStorePickupItem(item)) return "Store Pickup";
+  const fedexAmt = cartLineFedexQuotedAmount(item);
+  if (fedexAmt != null) {
+    const name = String(item.shippingRateServiceName ?? item.shipping_rate_service_name ?? "").trim();
+    return name || String(item.shippingService ?? item.shipping_service ?? "FedEx").trim();
+  }
+  return "FedEx — rate at checkout";
 }
 
 function isGraphicScenarioItem(item: CartItem): boolean {
@@ -245,7 +278,7 @@ export default function CartPage() {
       if (!item) return;
       if (Array.isArray(item.jobs) && item.jobs.length > 1) return;
 
-      let updatedItem: CartItem = { ...item, quantity: newQuantity };
+      const updatedItem: CartItem = { ...item, quantity: newQuantity };
       const unit = Number(updatedItem.unitPrice) || 0;
 
       if (Array.isArray(item.jobs) && item.jobs.length === 1) {
@@ -281,7 +314,7 @@ export default function CartPage() {
       updatedItem.total =
         (updatedItem.subtotal != null ? updatedItem.subtotal : cartItemLineSubtotal(updatedItem)) + effectiveShip;
 
-      await cartAPI.update(itemId, updatedItem);
+      await cartAPI.update(itemId, { ...updatedItem, ...fedexQuotePayloadFromCartLine(item) });
       setCartItems((prev) => prev.map((i) => (i.id === itemId ? updatedItem : i)));
       window.dispatchEvent(new Event("cartUpdated"));
     } catch (error) {
@@ -341,14 +374,18 @@ export default function CartPage() {
     shippingRates,
     storePickupOrder
   );
+  const shippingQuotePending = cartHasShippingQuotePending(cartItems, storePickupOrder);
   const shippingSum = effectiveOrderShipping(
     mergedShippingSum,
     subtotalSum,
     freeShippingPolicy,
-    storePickupOrder
+    storePickupOrder,
+    { disableFreeShipping: shippingQuotePending }
   );
   const showFreeShippingLabel =
-    !storePickupOrder && orderQualifiesForFreeShipping(subtotalSum, freeShippingPolicy, false);
+    !storePickupOrder &&
+    !shippingQuotePending &&
+    orderQualifiesForFreeShipping(subtotalSum, freeShippingPolicy, false);
   const showMergedShippingDiscount =
     !storePickupOrder &&
     !showFreeShippingLabel &&
@@ -563,32 +600,28 @@ export default function CartPage() {
                     </div>
 
                     <div className="flex shrink-0 flex-col justify-center gap-3 border-t border-gray-200 pt-4 text-sm lg:w-52 lg:border-l lg:border-t-0 lg:pl-6 lg:pt-0">
-                      {(item.shippingService || isStorePickupItem(item)) && (
-                        <div>
-                          <p className="text-xs font-medium uppercase tracking-wide text-gray-500">
-                            {isStorePickupItem(item) ? "Pickup" : "Shipping"}
-                          </p>
-                          <p className="mt-1 text-gray-800">
-                            <span className="font-medium">
-                              {isStorePickupItem(item)
-                                ? "Store Pickup"
-                                : item.shippingService}
-                            </span>
-                            <span className="ml-1 font-semibold tabular-nums">
-                              {showFreeShippingLabel && !isStorePickupItem(item) ? (
-                                <span className="text-emerald-700">Free Shipping</span>
-                              ) : showLineMerge ? (
-                                <>
-                                  <span className="text-gray-500 line-through">${shipLineRaw.toFixed(2)}</span>
-                                  <span className="ml-2 text-emerald-600">${shipLineMerged.toFixed(2)}</span>
-                                </>
-                              ) : (
-                                <span className="text-gray-900">${shipLine.toFixed(2)}</span>
-                              )}
-                            </span>
-                          </p>
-                        </div>
-                      )}
+                      <div>
+                        <p className="text-xs font-medium uppercase tracking-wide text-gray-500">
+                          {isStorePickupItem(item) ? "Pickup" : "Shipping"}
+                        </p>
+                        <p className="mt-1 text-gray-800">
+                          <span className="font-medium">{cartLineShippingDisplayName(item)}</span>
+                          <span className="ml-1 font-semibold tabular-nums">
+                            {cartLineFedexQuotedAmount(item) == null && !isStorePickupItem(item) ? (
+                              <span className="font-normal text-gray-500">—</span>
+                            ) : showFreeShippingLabel && !isStorePickupItem(item) ? (
+                              <span className="text-emerald-700">Free Shipping</span>
+                            ) : showLineMerge ? (
+                              <>
+                                <span className="text-gray-500 line-through">${shipLineRaw.toFixed(2)}</span>
+                                <span className="ml-2 text-emerald-600">${shipLineMerged.toFixed(2)}</span>
+                              </>
+                            ) : (
+                              <span className="text-gray-900">${shipLine.toFixed(2)}</span>
+                            )}
+                          </span>
+                        </p>
+                      </div>
                       <div className="border-t border-gray-200 pt-3">
                         <p className="text-xs font-medium uppercase tracking-wide text-gray-500">Line total</p>
                         <p className="mt-1 text-xl font-bold tabular-nums text-gray-900">${(item.total || 0).toFixed(2)}</p>
@@ -611,7 +644,9 @@ export default function CartPage() {
                     <div className="flex justify-between items-baseline gap-2">
                       <span>Shipping</span>
                       <span className="font-medium tabular-nums text-right">
-                        {showFreeShippingLabel ? (
+                        {shippingQuotePending ? (
+                          <span className="text-sm font-normal text-gray-500">Calculated at checkout</span>
+                        ) : showFreeShippingLabel ? (
                           <span className="text-emerald-700">Free Shipping</span>
                         ) : showMergedShippingDiscount ? (
                           <>

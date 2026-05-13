@@ -12,10 +12,12 @@ import {
   addressesAPI,
   authAPI,
   shippingRatesAPI,
+  fedexAPI,
   effectiveOrderShipping,
-  orderQualifiesForFreeShipping,
-  stackedShippingFromCartItems,
   mergedShippingFromCartItems,
+  cartShippableLinesAllFedexQuoted,
+  fedexEstimatedDeliveryFromCart,
+  type FedexRateQuote,
   type ShippingMethod,
   type ShippingRates,
   type FreeShippingPolicy,
@@ -51,7 +53,6 @@ function normalizeAddress(raw: Record<string, unknown>): Address {
 
 interface CartItem {
   id: string;
-  productId?: string;
   productName?: string;
   product_name?: string;
   quantity?: number;
@@ -61,7 +62,6 @@ interface CartItem {
   shippingService?: string;
   shippingMode?: string;
   storePickupAddressId?: number;
-  product_id?: string;
   jobName?: string;
   job_name?: string;
   width?: number;
@@ -114,6 +114,47 @@ function isGraphicScenarioCheckoutItem(item: CartItem): boolean {
   );
 }
 
+function cartLineBillableQuantity(item: CartItem): number {
+  const jobs = item.jobs;
+  if (Array.isArray(jobs) && jobs.length > 0) {
+    return jobs.reduce((sum, j) => sum + Math.max(1, Number(j.quantity) || 1), 0);
+  }
+  return Math.max(1, Number(item.quantity) || 1);
+}
+
+/** One consolidated package for FedEx rating from non–store-pickup cart lines (same rules as PDP `buildFedexPackagesForProductConfigure`). */
+function buildFedexPackagesFromCart(cartItems: CartItem[]): Array<{ weight: number; length: number; width: number; height: number }> {
+  const shippable = cartItems.filter((i) => String(i.shippingMode || "").toLowerCase() !== "store_pickup");
+  if (shippable.length === 0) {
+    return [{ weight: 1, length: 12, width: 10, height: 6 }];
+  }
+  let totalQty = 0;
+  let maxW = 0;
+  let maxH = 0;
+  for (const item of shippable) {
+    totalQty += cartLineBillableQuantity(item);
+    if (isGraphicScenarioCheckoutItem(item)) {
+      maxW = Math.max(maxW, 12);
+      maxH = Math.max(maxH, 10);
+    } else {
+      const w = Number(item.width) || 0;
+      const h = Number(item.height) || 0;
+      maxW = Math.max(maxW, w > 0 ? Math.max(1, Math.ceil(w)) : 0);
+      maxH = Math.max(maxH, h > 0 ? Math.max(1, Math.ceil(h)) : 0);
+    }
+  }
+  const lengthIn = maxW > 0 ? maxW : 12;
+  const widthIn = maxH > 0 ? maxH : 10;
+  return [
+    {
+      weight: Math.max(1, totalQty),
+      length: lengthIn,
+      width: widthIn,
+      height: 6,
+    },
+  ];
+}
+
 interface StripeElementsRef {
   elements: StripeElements;
   paymentElement: StripePaymentElement;
@@ -126,6 +167,27 @@ async function fetchCartItemsFromApi(): Promise<CartItem[]> {
   } catch {
     return [];
   }
+}
+
+/** Cart lines + optional server summary (single place for mount + refresh). */
+async function fetchCartItemsAndSummary(): Promise<{ items: CartItem[]; summary: CartSummary | null }> {
+  const items = await fetchCartItemsFromApi();
+  try {
+    const summary = await cartAPI.getSummary();
+    return { items, summary: (summary ?? null) as CartSummary | null };
+  } catch {
+    return { items, summary: null };
+  }
+}
+
+const US_STATE_CODES = [
+  "AL", "AK", "AZ", "AR", "CA", "CO", "CT", "DE", "FL", "GA", "HI", "ID", "IL", "IN", "IA", "KS", "KY", "LA", "ME", "MD", "MA", "MI", "MN", "MS", "MO", "MT", "NE", "NV", "NH", "NJ", "NM", "NY", "NC", "ND", "OH", "OK", "OR", "PA", "RI", "SC", "SD", "TN", "TX", "UT", "VT", "VA", "WA", "WV", "WI", "WY",
+];
+
+function roundMoney2(n: number): number {
+  const x = Number(n);
+  if (!Number.isFinite(x)) return 0;
+  return Math.round(x * 100) / 100;
 }
 
 export default function CheckoutPage() {
@@ -157,6 +219,9 @@ export default function CheckoutPage() {
   const [guestEmail, setGuestEmail] = useState("");
   const [guestFullName, setGuestFullName] = useState("");
   const [guestPhone, setGuestPhone] = useState("");
+  /** After guest clicks Save address, FedEx uses this snapshot and summary UI is shown. */
+  const [guestBillingSaved, setGuestBillingSaved] = useState(false);
+  const [guestSaveError, setGuestSaveError] = useState<string | null>(null);
   const [savingAddress, setSavingAddress] = useState(false);
   const [shippingRates, setShippingRates] = useState<ShippingRates | null>(null);
   const [shippingMethods, setShippingMethods] = useState<ShippingMethod[]>([]);
@@ -164,14 +229,14 @@ export default function CheckoutPage() {
     freeShippingEnabled: false,
     freeShippingThreshold: 0,
   });
+  const [fedexRates, setFedexRates] = useState<FedexRateQuote[]>([]);
+  const [fedexRatesLoading, setFedexRatesLoading] = useState(false);
+  const [fedexRatesError, setFedexRatesError] = useState<string | null>(null);
+  const [selectedFedexServiceType, setSelectedFedexServiceType] = useState("");
   const loadCartFromApi = useCallback(async () => {
-    setCartItems(await fetchCartItemsFromApi());
-    try {
-      const summary = await cartAPI.getSummary();
-      setOrderSummary(summary);
-    } catch {
-      setOrderSummary(null);
-    }
+    const { items, summary } = await fetchCartItemsAndSummary();
+    setCartItems(items);
+    setOrderSummary(summary);
   }, []);
 
   const globalDefault = addresses.find((a) => a.is_default) ?? null;
@@ -187,15 +252,10 @@ export default function CheckoutPage() {
   useEffect(() => {
     let cancelled = false;
     void (async () => {
-      const items = await fetchCartItemsFromApi();
+      const { items, summary } = await fetchCartItemsAndSummary();
       if (!cancelled) {
         setCartItems(items);
-        try {
-          const summary = await cartAPI.getSummary();
-          if (!cancelled) setOrderSummary(summary);
-        } catch {
-          if (!cancelled) setOrderSummary(null);
-        }
+        setOrderSummary(summary);
         setLoading(false);
       }
     })();
@@ -302,7 +362,25 @@ export default function CheckoutPage() {
     }
   };
 
-  const STATES = ["AL", "AK", "AZ", "AR", "CA", "CO", "CT", "DE", "FL", "GA", "HI", "ID", "IL", "IN", "IA", "KS", "KY", "LA", "ME", "MD", "MA", "MI", "MN", "MS", "MO", "MT", "NE", "NV", "NH", "NJ", "NM", "NY", "NC", "ND", "OH", "OK", "OR", "PA", "RI", "SC", "SD", "TN", "TX", "UT", "VT", "VA", "WA", "WV", "WI", "WY"];
+  const saveGuestBilling = () => {
+    setGuestSaveError(null);
+    const emailOk = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(guestEmail.trim());
+    const addrOk =
+      !!billingForm.streetAddress.trim() &&
+      !!billingForm.city.trim() &&
+      !!billingForm.state.trim() &&
+      !!billingForm.postcode.trim();
+    if (!emailOk || !addrOk) {
+      setGuestSaveError("Enter a valid email and full address (street, city, state, ZIP) before saving.");
+      return;
+    }
+    setGuestBillingSaved(true);
+  };
+
+  const editGuestBilling = () => {
+    setGuestBillingSaved(false);
+    setGuestSaveError(null);
+  };
 
   const stripePublishableKey = process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY ?? "";
 
@@ -342,31 +420,32 @@ export default function CheckoutPage() {
       ? "store_pickup"
       : "blind_drop_ship";
   const storePickupOrder = shippingMode === "store_pickup";
-  const stackedShipping = stackedShippingFromCartItems(
-    cartItems,
-    shippingMethods,
-    shippingRates,
+  const shipping = effectiveOrderShipping(
+    mergedShippingFromCartItems(cartItems, shippingMethods, shippingRates, storePickupOrder),
+    subtotal,
+    freeShippingPolicy,
     storePickupOrder
   );
-  const mergedShipping = mergedShippingFromCartItems(
-    cartItems,
-    shippingMethods,
-    shippingRates,
-    storePickupOrder
-  );
-  const shipping = effectiveOrderShipping(mergedShipping, subtotal, freeShippingPolicy, storePickupOrder);
-  const showFreeShippingLabel =
-    !storePickupOrder && orderQualifiesForFreeShipping(subtotal, freeShippingPolicy, false);
-  const showMergedShippingDiscount =
-    !storePickupOrder &&
-    !showFreeShippingLabel &&
-    stackedShipping > mergedShipping + 0.005;
-  const total = subtotal + shipping;
   const shownSubtotal = orderSummary?.subtotal ?? subtotal;
-  const shownShipping = orderSummary?.shipping ?? shipping;
-  const shownTax = orderSummary?.taxAmount ?? 0;
-  const shownTaxPercentage = orderSummary?.taxPercentage ?? 0;
-  const shownTotal = orderSummary?.total ?? total;
+  const skipCheckoutFedexQuote = cartShippableLinesAllFedexQuoted(cartItems);
+  const selectedFedexRate =
+    fedexRates.find((r) => r.serviceType === selectedFedexServiceType) || null;
+  const fedexCartNeedsQuote = shippingMode !== "store_pickup" && cartItems.length > 0;
+  const shownShipping = skipCheckoutFedexQuote
+    ? shipping
+    : selectedFedexRate
+      ? Number(selectedFedexRate.totalCharge) || 0
+      : fedexCartNeedsQuote
+        ? 0
+        : orderSummary?.shipping ?? shipping;
+  const shippingAmountPendingFedex =
+    !skipCheckoutFedexQuote && fedexCartNeedsQuote && !selectedFedexRate;
+  const shownTaxPercentage = Number(orderSummary?.taxPercentage ?? 0);
+  const shownTax = roundMoney2((shownSubtotal + shownShipping) * (shownTaxPercentage / 100));
+  const shownTotal = roundMoney2(shownSubtotal + shownShipping + shownTax);
+  const shownFedexEta = skipCheckoutFedexQuote
+    ? fedexEstimatedDeliveryFromCart(cartItems)
+    : selectedFedexRate?.estimatedDelivery || null;
 
   const loggedInCheckout = isAuthenticated();
   const guestEmailOk = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(guestEmail.trim());
@@ -376,14 +455,200 @@ export default function CheckoutPage() {
     !!billingForm.state.trim() &&
     !!billingForm.postcode.trim();
   const guestCheckoutReady = guestEmailOk && guestAddressOk;
-  const canProceedToPayment = loggedInCheckout ? !!billingAddress : guestCheckoutReady;
+  const canProceedToPayment = loggedInCheckout ? !!billingAddress : guestCheckoutReady && guestBillingSaved;
+
+  const destinationForFedex =
+    shippingMode === "store_pickup"
+      ? null
+      : isAuthenticated()
+        ? shippingAddress || billingAddress || null
+        : {
+            postcode: billingForm.postcode,
+            state: billingForm.state,
+            city: billingForm.city,
+            country: billingForm.country,
+          };
+
+  const fedexDestinationReady = Boolean(
+    destinationForFedex &&
+      String(destinationForFedex.postcode || "").trim() &&
+      String(destinationForFedex.country || "").trim()
+  );
+  const fedexDestinationReadyEffective = loggedInCheckout
+    ? fedexDestinationReady
+    : fedexDestinationReady && guestBillingSaved;
+
+  const fedexBlockingReason =
+    shippingMode !== "store_pickup" && fedexDestinationReadyEffective && cartItems.length > 0
+      ? fedexRatesLoading
+        ? "loading"
+        : fedexRatesError
+          ? "error"
+          : fedexRates.length === 0
+            ? "empty"
+            : null
+      : null;
+  const needsFedexToProceed =
+    shippingMode !== "store_pickup" &&
+    cartItems.length > 0 &&
+    !skipCheckoutFedexQuote &&
+    (!fedexDestinationReadyEffective ||
+      (fedexDestinationReadyEffective && fedexBlockingReason !== null));
+
+  const fedexDepShipStreet =
+    destinationForFedex && "street_address" in destinationForFedex
+      ? String(destinationForFedex.street_address || "")
+      : "";
+  const fedexDepShipLine2 =
+    destinationForFedex && "street_address" in destinationForFedex
+      ? String(destinationForFedex.address_line2 ?? "")
+      : "";
+
+  useEffect(() => {
+    const resetFedexQuoteState = () => {
+      setFedexRates([]);
+      setSelectedFedexServiceType("");
+      setFedexRatesError(null);
+    };
+
+    if (skipCheckoutFedexQuote) {
+      resetFedexQuoteState();
+      return;
+    }
+    if (shippingMode === "store_pickup") {
+      resetFedexQuoteState();
+      return;
+    }
+    if (!fedexDestinationReadyEffective || cartItems.length === 0) {
+      resetFedexQuoteState();
+      return;
+    }
+
+    const fedexStreetLines: string[] = [];
+    if (destinationForFedex && "street_address" in destinationForFedex) {
+      const s1 = String(destinationForFedex.street_address || "").trim();
+      const s2 = String(destinationForFedex.address_line2 || "").trim();
+      if (s1) fedexStreetLines.push(s1);
+      if (s2) fedexStreetLines.push(s2);
+    } else if (!loggedInCheckout) {
+      const s1 = billingForm.streetAddress.trim();
+      const s2 = billingForm.addressLine2.trim();
+      if (s1) fedexStreetLines.push(s1);
+      if (s2) fedexStreetLines.push(s2);
+    }
+
+    const destination = {
+      postalCode: String(destinationForFedex?.postcode || "").trim(),
+      countryCode:
+        String(destinationForFedex?.country || "US").trim().toLowerCase() === "united states"
+          ? "US"
+          : String(destinationForFedex?.country || "US").trim().toUpperCase(),
+      stateOrProvinceCode: String(destinationForFedex?.state || "").trim().toUpperCase() || undefined,
+      city: String(destinationForFedex?.city || "").trim() || undefined,
+      ...(fedexStreetLines.length > 0 ? { streetLines: fedexStreetLines } : {}),
+    };
+
+    const packages = buildFedexPackagesFromCart(cartItems);
+
+    let cancelled = false;
+    (async () => {
+      try {
+        setFedexRatesLoading(true);
+        setFedexRatesError(null);
+        const res = await fedexAPI.getRates(destination, packages);
+        if (cancelled) return;
+        const raw = Array.isArray(res?.rates) ? res.rates : [];
+        const list = [...raw].sort((a, b) => (Number(a.totalCharge) || 0) - (Number(b.totalCharge) || 0));
+        setFedexRates(list);
+        if (list.length > 0) {
+          setSelectedFedexServiceType((prev) => {
+            if (prev && list.some((r) => r.serviceType === prev)) return prev;
+            return list[0].serviceType;
+          });
+        } else {
+          setSelectedFedexServiceType("");
+        }
+      } catch (e) {
+        if (cancelled) return;
+        setFedexRates([]);
+        setSelectedFedexServiceType("");
+        setFedexRatesError(e instanceof Error ? e.message : "Could not load FedEx rates");
+      } finally {
+        if (!cancelled) setFedexRatesLoading(false);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- omit destinationForFedex object: guest branch is a new object each render; primitives + fedexDep* cover changes
+  }, [
+    shippingMode,
+    skipCheckoutFedexQuote,
+    fedexDestinationReadyEffective,
+    guestBillingSaved,
+    cartItems,
+    loggedInCheckout,
+    billingForm.streetAddress,
+    billingForm.addressLine2,
+    destinationForFedex?.postcode,
+    destinationForFedex?.country,
+    destinationForFedex?.state,
+    destinationForFedex?.city,
+    fedexDepShipStreet,
+    fedexDepShipLine2,
+  ]);
 
   const handlePlaceOrder = async () => {
     if (!canProceedToPayment) return;
+    if (needsFedexToProceed) {
+      if (!fedexDestinationReadyEffective) {
+        setError(
+          loggedInCheckout
+            ? "Enter a complete address with postal code and country so FedEx rates can load."
+            : "Save your billing address above so FedEx rates can load."
+        );
+        return;
+      }
+      if (fedexRatesLoading) {
+        setError("Please wait for FedEx shipping options to load.");
+        return;
+      }
+      if (fedexRatesError) {
+        setError("FedEx rates could not be loaded. Fix the issue or try again before placing your order.");
+        return;
+      }
+      setError("No FedEx services are available for this address. Check your postal code and country.");
+      return;
+    }
+    if (shippingMode !== "store_pickup" && !skipCheckoutFedexQuote && fedexRates.length > 0 && !selectedFedexRate) {
+      setError("Please select a FedEx shipping service.");
+      return;
+    }
     setCreating(true);
     setError(null);
     try {
-      const items = cartItems as unknown as Record<string, unknown>[];
+      if (shippingMode !== "store_pickup" && !skipCheckoutFedexQuote && selectedFedexRate) {
+        const updates = cartItems
+          .filter((item) => String(item.shippingMode || "").toLowerCase() !== "store_pickup")
+          .map((item) =>
+            cartAPI.update(String(item.id), {
+              ...item,
+              shippingService: selectedFedexRate.serviceType,
+              shippingRateServiceName: selectedFedexRate.serviceName,
+              shippingRateAmount: Number(selectedFedexRate.totalCharge) || 0,
+              shippingRateCurrency: selectedFedexRate.currency || "USD",
+              shippingRateEstimatedDelivery: selectedFedexRate.estimatedDelivery || null,
+            })
+          );
+        if (updates.length > 0) {
+          await Promise.all(updates);
+          await loadCartFromApi();
+        }
+      }
+
+      const freshItems = await fetchCartItemsFromApi();
+      const items = freshItems as unknown as Record<string, unknown>[];
       const shipAddrId = shippingAddress?.id ?? billingAddress?.id;
       const billAddrId = billingAddress?.id ?? shippingAddress?.id;
       const res = loggedInCheckout
@@ -558,7 +823,7 @@ export default function CheckoutPage() {
                 <div>
                   <div className="flex items-center justify-between mb-3">
                     <h2 className="text-lg font-bold text-gray-900">Billing Address</h2>
-                    {isAuthenticated() && billingAddress && (
+                    {isAuthenticated() && billingAddress ? (
                       <Link
                         href="/address-book"
                         className="inline-flex items-center gap-1.5 rounded-lg bg-gray-100 px-2.5 py-1.5 text-sm font-medium text-gray-700 transition-colors hover:bg-gray-200 hover:text-gray-900"
@@ -569,92 +834,129 @@ export default function CheckoutPage() {
                         </svg>
                         Change
                       </Link>
-                    )}
+                    ) : !isAuthenticated() && guestBillingSaved ? (
+                      <button
+                        type="button"
+                        onClick={editGuestBilling}
+                        className="inline-flex items-center gap-1.5 rounded-lg bg-gray-100 px-2.5 py-1.5 text-sm font-medium text-gray-700 transition-colors hover:bg-gray-200 hover:text-gray-900"
+                        aria-label="Edit billing address"
+                      >
+                        <svg className="h-4 w-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden>
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
+                        </svg>
+                        Change
+                      </button>
+                    ) : null}
                   </div>
                   {addressLoading ? (
                     <p className="text-gray-500 text-sm">Loading addresses...</p>
                   ) : !isAuthenticated() ? (
-                    <div className="p-4 bg-gray-50 rounded-lg border border-gray-200 space-y-3">
-                      <p className="text-sm text-gray-600">Checkout as guest — enter email, phone (optional), and shipping address.</p>
-                      <input
-                        type="email"
-                        placeholder="Email *"
-                        value={guestEmail}
-                        onChange={(e) => setGuestEmail(e.target.value)}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm"
-                        autoComplete="email"
-                      />
-                      <input
-                        type="text"
-                        placeholder="Full name (optional)"
-                        value={guestFullName}
-                        onChange={(e) => setGuestFullName(e.target.value)}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm"
-                        autoComplete="name"
-                      />
-                      <input
-                        type="tel"
-                        placeholder="Phone (optional)"
-                        value={guestPhone}
-                        onChange={(e) => setGuestPhone(e.target.value)}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm"
-                        autoComplete="tel"
-                      />
-                      <input
-                        type="text"
-                        placeholder="Street address *"
-                        value={billingForm.streetAddress}
-                        onChange={(e) => setBillingForm((p) => ({ ...p, streetAddress: e.target.value }))}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm"
-                        autoComplete="street-address"
-                      />
-                      <input
-                        type="text"
-                        placeholder="Apartment, suite, etc. (optional)"
-                        value={billingForm.addressLine2}
-                        onChange={(e) => setBillingForm((p) => ({ ...p, addressLine2: e.target.value }))}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm"
-                      />
-                      <div className="grid grid-cols-2 gap-2">
+                    guestBillingSaved ? (
+                      <div className="p-4 bg-gray-50 rounded-lg border border-gray-200 text-gray-800 text-sm space-y-1">
+                        <p className="font-medium">{guestEmail.trim()}</p>
+                        {guestFullName.trim() ? <p>{guestFullName.trim()}</p> : null}
+                        {guestPhone.trim() ? <p>Tel: {guestPhone.trim()}</p> : null}
+                        <p>{billingForm.streetAddress.trim()}</p>
+                        {billingForm.addressLine2.trim() ? <p>{billingForm.addressLine2.trim()}</p> : null}
+                        <p>
+                          {billingForm.city.trim()}, {billingForm.state.trim()} {billingForm.postcode.trim()}
+                        </p>
+                        <p>{billingForm.country.trim() || "United States"}</p>
+                      </div>
+                    ) : (
+                      <div className="p-4 bg-gray-50 rounded-lg border border-gray-200 space-y-3">
+                        <p className="text-sm text-gray-600">
+                          Checkout as guest — enter email, phone (optional), and billing / shipping address. Save when
+                          done so FedEx rates can load.
+                        </p>
+                        <input
+                          type="email"
+                          placeholder="Email *"
+                          value={guestEmail}
+                          onChange={(e) => setGuestEmail(e.target.value)}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm"
+                          autoComplete="email"
+                        />
                         <input
                           type="text"
-                          placeholder="City *"
-                          value={billingForm.city}
-                          onChange={(e) => setBillingForm((p) => ({ ...p, city: e.target.value }))}
+                          placeholder="Full name (optional)"
+                          value={guestFullName}
+                          onChange={(e) => setGuestFullName(e.target.value)}
                           className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm"
-                          autoComplete="address-level2"
+                          autoComplete="name"
                         />
-                        <select
-                          value={billingForm.state}
-                          onChange={(e) => setBillingForm((p) => ({ ...p, state: e.target.value }))}
+                        <input
+                          type="tel"
+                          placeholder="Phone (optional)"
+                          value={guestPhone}
+                          onChange={(e) => setGuestPhone(e.target.value)}
                           className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm"
-                          autoComplete="address-level1"
+                          autoComplete="tel"
+                        />
+                        <input
+                          type="text"
+                          placeholder="Street address *"
+                          value={billingForm.streetAddress}
+                          onChange={(e) => setBillingForm((p) => ({ ...p, streetAddress: e.target.value }))}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm"
+                          autoComplete="street-address"
+                        />
+                        <input
+                          type="text"
+                          placeholder="Apartment, suite, etc. (optional)"
+                          value={billingForm.addressLine2}
+                          onChange={(e) => setBillingForm((p) => ({ ...p, addressLine2: e.target.value }))}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm"
+                        />
+                        <div className="grid grid-cols-2 gap-2">
+                          <input
+                            type="text"
+                            placeholder="City *"
+                            value={billingForm.city}
+                            onChange={(e) => setBillingForm((p) => ({ ...p, city: e.target.value }))}
+                            className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm"
+                            autoComplete="address-level2"
+                          />
+                          <select
+                            value={billingForm.state}
+                            onChange={(e) => setBillingForm((p) => ({ ...p, state: e.target.value }))}
+                            className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm"
+                            autoComplete="address-level1"
+                          >
+                            <option value="">State *</option>
+                            {US_STATE_CODES.map((s) => (
+                              <option key={s} value={s}>
+                                {s}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                        <input
+                          type="text"
+                          placeholder="ZIP / Postcode *"
+                          value={billingForm.postcode}
+                          onChange={(e) => setBillingForm((p) => ({ ...p, postcode: e.target.value }))}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm"
+                          autoComplete="postal-code"
+                        />
+                        <input
+                          type="text"
+                          placeholder="Country"
+                          value={billingForm.country}
+                          onChange={(e) => setBillingForm((p) => ({ ...p, country: e.target.value }))}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm"
+                          autoComplete="country-name"
+                        />
+                        {guestSaveError ? <p className="text-sm text-red-600">{guestSaveError}</p> : null}
+                        <button
+                          type="button"
+                          onClick={saveGuestBilling}
+                          className="w-full rounded-md bg-blue-500 px-4 py-2.5 text-sm font-medium text-white transition hover:bg-blue-700"
                         >
-                          <option value="">State *</option>
-                          {STATES.map((s) => (
-                            <option key={s} value={s}>
-                              {s}
-                            </option>
-                          ))}
-                        </select>
+                          Save address
+                        </button>
                       </div>
-                      <input
-                        type="text"
-                        placeholder="ZIP / Postcode *"
-                        value={billingForm.postcode}
-                        onChange={(e) => setBillingForm((p) => ({ ...p, postcode: e.target.value }))}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm"
-                        autoComplete="postal-code"
-                      />
-                      <input
-                        type="text"
-                        placeholder="Country"
-                        value={billingForm.country}
-                        onChange={(e) => setBillingForm((p) => ({ ...p, country: e.target.value }))}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm"
-                        autoComplete="country-name"
-                      />
-                    </div>
+                    )
                   ) : billingAddress && !showAddBilling ? (
                     <div className="p-4 bg-gray-50 rounded-lg border border-gray-200 text-gray-800 text-sm space-y-1">
                       {profile?.fullName && <p className="font-medium">{profile.fullName}</p>}
@@ -672,7 +974,11 @@ export default function CheckoutPage() {
                         <input type="text" name="city" placeholder="City *" value={billingForm.city} onChange={handleBillingFormChange} className="w-full px-3 py-2 text-gray-500 border border-gray-400 rounded-md text-sm" required />
                         <select name="state" value={billingForm.state} onChange={handleBillingFormChange} className="w-full px-3 py-2 text-gray-500 border border-gray-400 rounded-md text-sm" required>
                           <option value="">State</option>
-                          {STATES.map((s) => <option key={s} value={s}>{s}</option>)}
+                          {US_STATE_CODES.map((s) => (
+                            <option key={s} value={s}>
+                              {s}
+                            </option>
+                          ))}
                         </select>
                       </div>
                       <input type="text" name="postcode" placeholder="Postcode *" value={billingForm.postcode} onChange={handleBillingFormChange} className="w-full px-3 py-2 text-gray-500 border border-gray-400 rounded-md text-sm" required />
@@ -695,7 +1001,30 @@ export default function CheckoutPage() {
                     {addressLoading ? (
                       <p className="text-gray-500 text-sm">Loading...</p>
                     ) : !isAuthenticated() ? (
-                      <p className="text-gray-500 text-sm">We ship to the address you entered under Billing.</p>
+                      guestBillingSaved ? (
+                        <>
+                          <div className="p-4 bg-gray-50 rounded-lg border border-gray-200 text-gray-800 text-sm space-y-1">
+                            <p className="text-gray-500 italic mb-1">Same as billing</p>
+                            <p>{billingForm.streetAddress.trim()}</p>
+                            {billingForm.addressLine2.trim() ? <p>{billingForm.addressLine2.trim()}</p> : null}
+                            <p>
+                              {billingForm.city.trim()}, {billingForm.state.trim()} {billingForm.postcode.trim()}
+                            </p>
+                            <p>{billingForm.country.trim() || "United States"}</p>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={editGuestBilling}
+                            className="mt-2 text-sm text-gray-600 hover:text-gray-700"
+                          >
+                            Change
+                          </button>
+                        </>
+                      ) : (
+                        <p className="text-gray-500 text-sm">
+                          Enter and save your billing address above. We ship to the same address.
+                        </p>
+                      )
                     ) : shippingAddress ? (
                       <div className="p-4 bg-gray-50 rounded-lg border border-gray-200 text-gray-800 text-sm space-y-1">
                         {shippingAddress.id === billingAddress?.id && <p className="text-gray-500 italic mb-1">Same as billing</p>}
@@ -752,23 +1081,53 @@ export default function CheckoutPage() {
                     <span>Subtotal:</span>
                     <span>${shownSubtotal.toFixed(2)}</span>
                   </div>
+                  {shippingMode !== "store_pickup" && !skipCheckoutFedexQuote && (
+                    <div className="rounded-md border border-gray-200 bg-gray-50 p-3 text-sm">
+                      <div className="mb-2 flex items-center justify-between gap-2">
+                        <span className="font-medium text-gray-700">Shipping Service</span>
+                        {fedexRatesLoading ? <span className="text-xs text-gray-500">Loading…</span> : null}
+                      </div>
+                      {fedexRatesError ? (
+                        <p className="mb-2 text-xs text-rose-600">{fedexRatesError}</p>
+                      ) : null}
+                      {fedexRates.length > 0 ? (
+                        <select
+                          value={selectedFedexServiceType}
+                          onChange={(e) => setSelectedFedexServiceType(e.target.value)}
+                          className="w-full rounded-md border border-gray-300 px-2 py-2 text-sm text-gray-700"
+                        >
+                          {fedexRates.map((r) => (
+                            <option key={r.serviceType} value={r.serviceType}>
+                              {r.serviceName} — ${Number(r.totalCharge).toFixed(2)}
+                              {r.estimatedDelivery ? ` — ETA: ${r.estimatedDelivery}` : ""}
+                            </option>
+                          ))}
+                        </select>
+                      ) : (
+                        <p className="text-xs text-gray-500">
+                          Enter a valid shipping address to get real-time FedEx services.
+                        </p>
+                      )}
+                    </div>
+                  )}
                   {shippingMode !== "store_pickup" && (
                     <div className="flex justify-between text-gray-700 items-baseline gap-2">
                       <span>Shipping:</span>
                       <span className="font-medium text-right">
-                        {showFreeShippingLabel ? (
-                          <span className="text-emerald-700">Free Shipping</span>
-                        ) : showMergedShippingDiscount ? (
-                          <>
-                            <span className="text-gray-500 line-through">${stackedShipping.toFixed(2)}</span>
-                            <span className="ml-2 text-emerald-600">${shownShipping.toFixed(2)}</span>
-                          </>
+                        {shippingAmountPendingFedex ? (
+                          <span className="text-gray-500">Pending FedEx quote</span>
                         ) : (
                           <span className="text-gray-900">${shownShipping.toFixed(2)}</span>
                         )}
                       </span>
                     </div>
                   )}
+                  {shippingMode !== "store_pickup" && shownFedexEta ? (
+                    <div className="flex justify-between text-gray-700">
+                      <span>Estimated delivery:</span>
+                      <span>{shownFedexEta}</span>
+                    </div>
+                  ) : null}
                   <div className="flex justify-between text-gray-700">
                     <span>Tax ({shownTaxPercentage.toFixed(2)}%):</span>
                     <span>${shownTax.toFixed(2)}</span>
@@ -807,14 +1166,16 @@ export default function CheckoutPage() {
                     )}
                     {!canProceedToPayment && !isAuthenticated() && (
                       <p className="text-amber-700 text-sm mb-3 bg-amber-50 border border-amber-200 rounded-md px-3 py-2">
-                        Enter a valid email and full shipping address to continue.
+                        {guestCheckoutReady && !guestBillingSaved
+                          ? "Click Save address above to continue and load FedEx shipping options."
+                          : "Enter a valid email and full shipping address, then save, to continue."}
                       </p>
                     )}
                     {error && <p className="text-sm text-red-600 mb-3">{error}</p>}
                     <button
                       type="button"
-                      onClick={handlePlaceOrder}
-                      disabled={creating || !canProceedToPayment}
+                      onClick={() => void handlePlaceOrder()}
+                      disabled={creating || !canProceedToPayment || needsFedexToProceed}
                       className="w-full bg-blue-500 hover:bg-blue-600 disabled:bg-blue-300 disabled:cursor-not-allowed text-white font-medium py-3 px-6 rounded-lg transition-colors"
                     >
                       {creating ? "Creating order…" : "Place Your Order"}
@@ -826,6 +1187,7 @@ export default function CheckoutPage() {
           </div>
         </div>
       </div>
+
       <Footer />
     </>
   );

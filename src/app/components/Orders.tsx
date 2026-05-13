@@ -110,6 +110,12 @@ type OrderRow = {
   tax_percentage?: number | string | null;
   tax_amount?: number | string | null;
   order_tracking_id?: string | null;
+  carrier?: string | null;
+  carrier_service_type?: string | null;
+  shipment_status?: string | null;
+  shipment_last_event?: unknown;
+  shipment_updated_at?: string | null;
+  shipping_label_url?: string | null;
 };
 
 function parseGuestCheckout(raw: OrderRow["guest_checkout"]): GuestCheckout | null {
@@ -342,6 +348,21 @@ function AddressBlock({ title, lines }: { title: string; lines: string[] }) {
   );
 }
 
+function fedexPublicTrackUrl(tracking: string): string {
+  return `https://www.fedex.com/fedextrack/?trknbr=${encodeURIComponent(String(tracking).trim())}`;
+}
+
+function fedexShipmentLastLine(ev: unknown): string {
+  if (ev == null) return "";
+  if (typeof ev === "string") return ev.trim();
+  if (typeof ev !== "object") return "";
+  const o = ev as Record<string, unknown>;
+  const parts = [o.eventDescription, o.exceptionDescription, o.derivedStatus, o.scanLocation]
+    .map((x) => (x != null ? String(x).trim() : ""))
+    .filter(Boolean);
+  return parts[0] || "";
+}
+
 function matchesFilter(order: OrderRow, filterOption: string): boolean {
   if (filterOption === "All") return true;
   const raw = (order.status || "").toLowerCase().replace(/\s+/g, "_");
@@ -414,11 +435,11 @@ export default function Orders() {
     (async () => {
       try {
         await cartAPI.clear();
-      } catch (_) {}
+      } catch {}
       try {
         localStorage.removeItem("cart");
         window.dispatchEvent(new Event("cartUpdated"));
-      } catch (_) {}
+      } catch {}
     })();
   }, [placed, placedOrderId]);
 
@@ -435,7 +456,7 @@ export default function Orders() {
       try {
         await ordersAPI.confirmStripePayment(orderIdNum, paymentIntentId);
         if (typeof window !== "undefined") sessionStorage.setItem(key, "1");
-      } catch (_) {
+      } catch {
         // Webhook may still update order shortly; keep UI usable even if fallback call fails.
       }
     })();
@@ -650,9 +671,7 @@ export default function Orders() {
             {filteredOrders.map((order) => {
               const items = normalizeItems(order.items);
               const subtotal = items.reduce((sum, it) => sum + Number(it.total_price ?? 0), 0);
-              const orderTotal = Number(order.total_amount ?? 0);
               const shippingChargeNum = Number(order.shipping_charge ?? 0);
-              const hasAdjust = Math.abs(subtotal + shippingChargeNum - orderTotal) > 0.02;
               const orderTax = Number(order.tax_amount ?? 0);
               const orderTaxPct = Number(order.tax_percentage ?? 0);
               const orderSubtotal = Number(order.subtotal_amount ?? subtotal);
@@ -696,15 +715,16 @@ export default function Orders() {
                         >
                           {formatStatus(order.status)}
                         </span>
-                        {canonicalOrderStatus(order.status) === "shipped" &&
-                          order.order_tracking_id?.trim() && (
-                            <span
-                              className="text-xs font-medium px-2.5 py-0.5 rounded-full bg-blue-100 text-blue-800"
-                              title="Tracking number"
-                            >
-                              Tracking No: {order.order_tracking_id}
-                            </span>
-                          )}
+                        {order.order_tracking_id?.trim() && (
+                          <span
+                            className="text-xs font-medium px-2.5 py-0.5 rounded-full bg-blue-100 text-blue-800"
+                            title="Tracking number"
+                          >
+                            {order.shipment_status?.trim()
+                              ? `Ship: ${order.shipment_status}`
+                              : `Tracking: ${order.order_tracking_id}`}
+                          </span>
+                        )}
                       </div>
                       <p className="text-sm text-gray-600 mt-1">
                         Placed {whenPlaced}
@@ -812,13 +832,42 @@ export default function Orders() {
                           <span className="text-gray-500">Order ID</span>
                           <p className="font-medium text-gray-900">{order.id}</p>
                         </div>
-                        {canonicalOrderStatus(order.status) === "shipped" &&
-                          order.order_tracking_id?.trim() && (
+                        {order.order_tracking_id?.trim() && (
                             <div>
                               <span className="text-gray-500">Tracking number</span>
                               <p className="font-mono font-medium text-gray-900 break-all">
                                 {order.order_tracking_id}
                               </p>
+                              <a
+                                href={fedexPublicTrackUrl(order.order_tracking_id)}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="mt-1 inline-block text-sm font-semibold text-[#0B6BCB] hover:underline"
+                              >
+                                Track on FedEx
+                              </a>
+                            </div>
+                          )}
+                        {String(order.carrier || "").toLowerCase() === "fedex" &&
+                          order.order_tracking_id?.trim() &&
+                          !!(order.shipment_status?.trim() || order.shipment_last_event) && (
+                            <div className="sm:col-span-2 rounded-lg border border-violet-100 bg-violet-50/60 px-3 py-3">
+                              <span className="text-gray-500 text-xs font-semibold uppercase tracking-wide">
+                                FedEx shipment
+                              </span>
+                              {order.shipment_status?.trim() ? (
+                                <p className="mt-1 font-medium text-gray-900">{order.shipment_status}</p>
+                              ) : null}
+                              {fedexShipmentLastLine(order.shipment_last_event) ? (
+                                <p className="mt-1 text-xs text-gray-600">
+                                  {fedexShipmentLastLine(order.shipment_last_event)}
+                                </p>
+                              ) : null}
+                              {order.shipment_updated_at ? (
+                                <p className="mt-1 text-[11px] text-gray-400">
+                                  Updated {new Date(order.shipment_updated_at).toLocaleString()}
+                                </p>
+                              ) : null}
                             </div>
                           )}
                         {whenUpdated && (

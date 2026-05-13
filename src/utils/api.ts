@@ -273,6 +273,14 @@ export type CartSummary = {
   total: number;
 };
 
+export type FedexRateQuote = {
+  serviceType: string;
+  serviceName: string;
+  totalCharge: number;
+  currency: string;
+  estimatedDelivery?: string | null;
+};
+
 export type ReportsDateRange = "all" | "today" | "last30" | "custom";
 
 export type AdminDashboardSummary = {
@@ -370,9 +378,7 @@ function roundMoney2Client(n: number): number {
 }
 
 /** Normalize shipping service name for grouping (same method = one charge). */
-export function normalizeShippingServiceKey(
-  serviceLabel: string | null | undefined
-): string {
+function normalizeShippingServiceKey(serviceLabel: string | null | undefined): string {
   return String(serviceLabel || "").trim().toLowerCase();
 }
 
@@ -385,7 +391,52 @@ export type CartLineShippingInput = {
   shipping?: string;
   storePickupAddressId?: unknown;
   store_pickup_address_id?: unknown;
+  shippingRateAmount?: unknown;
+  shipping_rate_amount?: unknown;
+  shippingRateServiceName?: string;
+  shipping_rate_service_name?: string;
+  shippingRateEstimatedDelivery?: unknown;
+  shipping_rate_estimated_delivery?: unknown;
 };
+
+/** FedEx REST service types stored on cart lines after checkout quote (e.g. FEDEX_GROUND). */
+function isFedExCartServiceType(serviceLabel: string | null | undefined): boolean {
+  const s = String(serviceLabel || "").trim().toUpperCase();
+  return s.startsWith("FEDEX_");
+}
+
+/** Non-null when this line has a persisted FedEx quote (amount + FEDEX_* service). */
+export function cartLineFedexQuotedAmount(item: CartLineShippingInput): number | null {
+  const svc = String(item.shippingService ?? item.shipping_service ?? "").trim();
+  if (!isFedExCartServiceType(svc)) return null;
+  const raw = item.shippingRateAmount ?? item.shipping_rate_amount;
+  if (raw === undefined || raw === null || raw === "") return null;
+  const n = Number(raw);
+  if (!Number.isFinite(n) || n < 0) return null;
+  return n;
+}
+
+/**
+ * Blind-drop lines without a FedEx quote share this key so catalog "Ground" prices are not applied on the cart.
+ */
+export function cartMergedShippingGroupKey(item: CartLineShippingInput): string {
+  if (isCartLineStorePickup(item)) return "";
+  if (cartLineFedexQuotedAmount(item) != null) {
+    const svc = String(item.shippingService ?? item.shipping_service ?? "").trim();
+    return `__fedex__:${normalizeShippingServiceKey(svc)}`;
+  }
+  return "__pending_checkout__";
+}
+
+export function cartHasShippingQuotePending(
+  items: CartLineShippingInput[],
+  storePickupOrder: boolean
+): boolean {
+  if (storePickupOrder || !Array.isArray(items)) return false;
+  return items.some(
+    (it) => !isCartLineStorePickup(it) && cartMergedShippingGroupKey(it) === "__pending_checkout__"
+  );
+}
 
 /** Matches cart page: line is store pickup → excluded from merged/stacked ship sums. */
 export function isCartLineStorePickup(item: CartLineShippingInput): boolean {
@@ -396,6 +447,53 @@ export function isCartLineStorePickup(item: CartLineShippingInput): boolean {
   const pid = item.storePickupAddressId ?? item.store_pickup_address_id;
   if (pid != null && String(pid) !== "") return true;
   return false;
+}
+
+/** True when every non–store-pickup line already has a FedEx quote (product page or prior checkout). */
+export function cartShippableLinesAllFedexQuoted(items: CartLineShippingInput[]): boolean {
+  if (!Array.isArray(items) || items.length === 0) return false;
+  const shippable = items.filter((i) => !isCartLineStorePickup(i));
+  if (shippable.length === 0) return true;
+  return shippable.every((i) => cartLineFedexQuotedAmount(i) != null);
+}
+
+/** First ETA string found on FedEx-quoted shippable lines (for checkout summary). */
+export function fedexEstimatedDeliveryFromCart(items: CartLineShippingInput[]): string | null {
+  for (const it of items) {
+    if (isCartLineStorePickup(it)) continue;
+    if (cartLineFedexQuotedAmount(it) == null) continue;
+    const ed = it.shippingRateEstimatedDelivery ?? it.shipping_rate_estimated_delivery;
+    if (ed != null && String(ed).trim()) return String(ed).trim();
+  }
+  return null;
+}
+
+/**
+ * One package for FedEx rating on the product page (same rules as checkout cart merge).
+ * UI width → package `length`, UI height → package `width`; fixed 6 in depth.
+ */
+export function buildFedexPackagesForProductConfigure(options: {
+  billableQty: number;
+  widthInches: number;
+  heightInches: number;
+  isGraphicScenario: boolean;
+}): Array<{ weight: number; length: number; width: number; height: number }> {
+  const { billableQty, widthInches, heightInches, isGraphicScenario } = options;
+  const totalQty = Math.max(1, billableQty);
+
+  let lengthIn: number;
+  let widthIn: number;
+  if (isGraphicScenario) {
+    lengthIn = 12;
+    widthIn = 10;
+  } else {
+    const w = widthInches || 0;
+    const h = heightInches || 0;
+    lengthIn = w > 0 ? Math.max(1, Math.ceil(w)) : 12;
+    widthIn = h > 0 ? Math.max(1, Math.ceil(h)) : 10;
+  }
+
+  return [{ weight: totalQty, length: lengthIn, width: widthIn, height: 6 }];
 }
 
 /** Sum of list shipping if each line were charged separately (non-pickup lines only). */
@@ -409,11 +507,14 @@ export function stackedShippingFromCartItems(
   let sum = 0;
   for (const it of items) {
     if (isCartLineStorePickup(it)) continue;
-    sum += shippingAmountForMethod(
-      methods,
-      it.shippingService ?? it.shipping_service,
-      rates
-    );
+    const gk = cartMergedShippingGroupKey(it);
+    if (gk === "__pending_checkout__") continue;
+    if (gk.startsWith("__fedex__:")) {
+      const amt = cartLineFedexQuotedAmount(it);
+      sum += amt != null ? amt : 0;
+      continue;
+    }
+    sum += shippingAmountForMethod(methods, it.shippingService ?? it.shipping_service, rates);
   }
   return roundMoney2Client(sum);
 }
@@ -430,10 +531,15 @@ export function mergedShippingFromCartItems(
   let sum = 0;
   for (const it of items) {
     if (isCartLineStorePickup(it)) continue;
-    const key = normalizeShippingServiceKey(it.shippingService ?? it.shipping_service);
-    if (!key) continue;
-    if (seen.has(key)) continue;
-    seen.add(key);
+    const gk = cartMergedShippingGroupKey(it);
+    if (!gk || seen.has(gk)) continue;
+    seen.add(gk);
+    if (gk === "__pending_checkout__") continue;
+    if (gk.startsWith("__fedex__:")) {
+      const amt = cartLineFedexQuotedAmount(it);
+      sum += amt != null ? amt : 0;
+      continue;
+    }
     sum += shippingAmountForMethod(methods, it.shippingService ?? it.shipping_service, rates);
   }
   return roundMoney2Client(sum);
@@ -461,21 +567,30 @@ export function perLineMergedShippingAllocations(
       byId.set(id, { rawLine: 0, mergedShare: 0 });
       continue;
     }
-    const key = normalizeShippingServiceKey(it.shippingService ?? it.shipping_service);
-    if (!key) {
+    const gk = cartMergedShippingGroupKey(it);
+    if (!gk) {
       byId.set(id, { rawLine: 0, mergedShare: 0 });
       continue;
     }
-    if (!groups.has(key)) groups.set(key, []);
-    groups.get(key)!.push(it);
+    if (!groups.has(gk)) groups.set(gk, []);
+    groups.get(gk)!.push(it);
   }
   for (const [, group] of groups) {
     const rep = group[0];
-    const linePrice = shippingAmountForMethod(
-      methods,
-      rep.shippingService ?? rep.shipping_service,
-      rates
-    );
+    const gk = cartMergedShippingGroupKey(rep);
+    let linePrice = 0;
+    if (gk === "__pending_checkout__") {
+      linePrice = 0;
+    } else if (gk.startsWith("__fedex__:")) {
+      const amt = cartLineFedexQuotedAmount(rep);
+      linePrice = amt != null ? amt : 0;
+    } else {
+      linePrice = shippingAmountForMethod(
+        methods,
+        rep.shippingService ?? rep.shipping_service,
+        rates
+      );
+    }
     const n = group.length;
     const totalCents = Math.round(linePrice * 100);
     const base = Math.floor(totalCents / n);
@@ -513,10 +628,13 @@ export function effectiveOrderShipping(
   preFreeShippingTotal: number,
   orderSubtotal: number,
   policy: FreeShippingPolicy | null | undefined,
-  storePickup: boolean
+  storePickup: boolean,
+  options?: { disableFreeShipping?: boolean }
 ): number {
   if (storePickup) return 0;
-  if (orderQualifiesForFreeShipping(orderSubtotal, policy, false)) return 0;
+  if (!options?.disableFreeShipping && orderQualifiesForFreeShipping(orderSubtotal, policy, false)) {
+    return 0;
+  }
   return roundMoney2Client(preFreeShippingTotal);
 }
 
@@ -1291,6 +1409,53 @@ export const favoritesAPI = {
     return apiCall(`/favorites/${id}`, {
       method: 'DELETE',
     });
+  },
+};
+
+export const fedexAPI = {
+  getRates: async (
+    destination: {
+      postalCode: string;
+      countryCode?: string;
+      stateOrProvinceCode?: string;
+      city?: string;
+      streetLines?: string[];
+      streetLine?: string;
+      streetAddress?: string;
+    },
+    packages: Array<{ weight: number; length?: number; width?: number; height?: number }>
+  ): Promise<{ rates: FedexRateQuote[] }> => {
+    return apiCall('/fedex/rates', {
+      method: 'POST',
+      body: JSON.stringify({ destination, packages }),
+    });
+  },
+
+  createShipment: async (
+    orderId: number | string,
+    payload?: { serviceType?: string }
+  ): Promise<{
+    trackingNumber?: string;
+    masterTrackingNumber?: string;
+    shippingLabelUrl?: string | null;
+    shipmentId?: string;
+    order?: unknown;
+  }> => {
+    return apiCall(`/fedex/shipments/${orderId}/create`, {
+      method: 'POST',
+      body: JSON.stringify(payload || {}),
+    });
+  },
+
+  getTracking: async (
+    orderId: number | string
+  ): Promise<{
+    status?: string;
+    latestEvent?: unknown;
+    deliveryDate?: string | null;
+    order?: unknown;
+  }> => {
+    return apiCall(`/fedex/shipments/${orderId}/track`);
   },
 };
 

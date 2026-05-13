@@ -5,7 +5,7 @@ import { useRouter, useParams } from "next/navigation";
 import Image from "next/image";
 import Link from "next/link";
 import { lineCustomerArtworkSource } from "../../../../utils/customerArtworkSource";
-import { ordersAPI, getProductImageUrl, downloadUrlAsFile } from "../../../../utils/api";
+import { ordersAPI, getProductImageUrl, downloadUrlAsFile, fedexAPI, getBackendBaseUrl } from "../../../../utils/api";
 import AdminNavbar from "../../../components/AdminNavbar";
 import { canAccessAdminPanel, isAuthenticated, getUserRole } from "../../../../utils/roles";
 import {
@@ -112,6 +112,14 @@ interface Order {
   tax_amount?: number;
   /** Optional carrier / shipment ID (DB: order_tracking_id). */
   order_tracking_id?: string | null;
+  carrier?: string | null;
+  carrier_service_type?: string | null;
+  shipping_estimated_delivery?: string | null;
+  fedex_shipment_id?: string | null;
+  shipping_label_url?: string | null;
+  shipment_status?: string | null;
+  shipment_last_event?: unknown;
+  shipment_updated_at?: string | null;
 }
 
 function parseGuest(raw: Order["guest_checkout"]): GuestCheckoutShape | null {
@@ -133,6 +141,31 @@ function guestPhoneDisplay(g: GuestCheckoutShape | null): string | undefined {
 
 function formatMoney(n: number) {
   return (Number.isFinite(n) ? n : 0).toFixed(2);
+}
+
+function fedexPublicTrackUrl(tracking: string): string {
+  return `https://www.fedex.com/fedextrack/?trknbr=${encodeURIComponent(String(tracking).trim())}`;
+}
+
+const FEDEX_SERVICE_OPTIONS = [
+  "FEDEX_GROUND",
+  "FEDEX_2_DAY",
+  "FEDEX_2_DAY_AM",
+  "FEDEX_EXPRESS_SAVER",
+  "STANDARD_OVERNIGHT",
+  "PRIORITY_OVERNIGHT",
+  "FIRST_OVERNIGHT",
+];
+
+function fedexShipmentLastLine(ev: unknown): string {
+  if (ev == null) return "";
+  if (typeof ev === "string") return ev.trim();
+  if (typeof ev !== "object") return "";
+  const o = ev as Record<string, unknown>;
+  const parts = [o.eventDescription, o.exceptionDescription, o.derivedStatus, o.scanLocation]
+    .map((x) => (x != null ? String(x).trim() : ""))
+    .filter(Boolean);
+  return parts[0] || "";
 }
 
 function formatStatus(status: string) {
@@ -419,11 +452,8 @@ export default function OrderDetails() {
   const [updatingStatus, setUpdatingStatus] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [showStatusDropdown, setShowStatusDropdown] = useState(false);
-  const [trackingModalOpen, setTrackingModalOpen] = useState(false);
-  const [trackingDraft, setTrackingDraft] = useState("");
-  const [savingTracking, setSavingTracking] = useState(false);
-  const [removingTracking, setRemovingTracking] = useState(false);
-  const [removeTrackingModalOpen, setRemoveTrackingModalOpen] = useState(false);
+  const [fedexActionLoading, setFedexActionLoading] = useState<"create" | null>(null);
+  const [manualFedexServiceType, setManualFedexServiceType] = useState("");
   const [deleteOrderModalOpen, setDeleteOrderModalOpen] = useState(false);
   const [refundModalOpen, setRefundModalOpen] = useState(false);
   const [processingRefund, setProcessingRefund] = useState(false);
@@ -569,8 +599,33 @@ export default function OrderDetails() {
           d.order_tracking_id != null && String(d.order_tracking_id).trim() !== ""
             ? String(d.order_tracking_id)
             : null,
+        carrier: d.carrier != null && String(d.carrier).trim() !== "" ? String(d.carrier) : null,
+        carrier_service_type:
+          d.carrier_service_type != null && String(d.carrier_service_type).trim() !== ""
+            ? String(d.carrier_service_type)
+            : null,
+        shipping_estimated_delivery:
+          d.shipping_estimated_delivery != null && String(d.shipping_estimated_delivery).trim() !== ""
+            ? String(d.shipping_estimated_delivery)
+            : null,
+        fedex_shipment_id:
+          d.fedex_shipment_id != null && String(d.fedex_shipment_id).trim() !== ""
+            ? String(d.fedex_shipment_id)
+            : null,
+        shipping_label_url:
+          d.shipping_label_url != null && String(d.shipping_label_url).trim() !== ""
+            ? String(d.shipping_label_url)
+            : null,
+        shipment_status:
+          d.shipment_status != null && String(d.shipment_status).trim() !== ""
+            ? String(d.shipment_status)
+            : null,
+        shipment_last_event: d.shipment_last_event ?? null,
+        shipment_updated_at:
+          d.shipment_updated_at != null ? String(d.shipment_updated_at) : null,
       };
       setOrder(processedOrder);
+      setManualFedexServiceType(processedOrder.carrier_service_type?.trim() || "");
     } catch (err: unknown) {
       const errorMessage = err instanceof Error ? err.message : "Failed to load order details";
 
@@ -692,50 +747,25 @@ export default function OrderDetails() {
     }
   };
 
-  const openTrackingModal = () => {
+  const handleCreateFedexShipment = async () => {
     if (!order) return;
-    setTrackingDraft(order.order_tracking_id?.trim() ? order.order_tracking_id : "");
-    setTrackingModalOpen(true);
-  };
-
-  const handleSaveTrackingId = async () => {
-    if (!order) return;
-    try {
-      setSavingTracking(true);
-      const trimmed = trackingDraft.trim();
-      const response = await ordersAPI.updateOrderTrackingId(order.id, trimmed === "" ? null : trimmed);
-      const row = response?.order as Record<string, unknown> | undefined;
-      const next =
-        row?.order_tracking_id != null && String(row.order_tracking_id).trim() !== ""
-          ? String(row.order_tracking_id)
-          : null;
-      setOrder((prev) => (prev ? { ...prev, order_tracking_id: next } : null));
-      setTrackingModalOpen(false);
-    } catch (e) {
-      const msg = e instanceof Error ? e.message : "Failed to save tracking ID";
-      alert(msg);
-    } finally {
-      setSavingTracking(false);
+    const selectedService = String(order.carrier_service_type || manualFedexServiceType || "")
+      .trim()
+      .toUpperCase();
+    if (!selectedService) {
+      setError("Select a FedEx service type before creating shipment.");
+      return;
     }
-  };
-
-  const confirmRemoveTrackingId = async () => {
-    if (!order?.order_tracking_id?.trim()) return;
+    setFedexActionLoading("create");
+    setError(null);
     try {
-      setRemovingTracking(true);
-      const response = await ordersAPI.updateOrderTrackingId(order.id, null);
-      const row = response?.order as Record<string, unknown> | undefined;
-      const next =
-        row?.order_tracking_id != null && String(row.order_tracking_id).trim() !== ""
-          ? String(row.order_tracking_id)
-          : null;
-      setOrder((prev) => (prev ? { ...prev, order_tracking_id: next } : null));
-      setRemoveTrackingModalOpen(false);
+      await fedexAPI.createShipment(order.id, { serviceType: selectedService });
+      await fetchOrder();
     } catch (e) {
-      const msg = e instanceof Error ? e.message : "Failed to remove tracking ID";
-      alert(msg);
+      const msg = e instanceof Error ? e.message : "Failed to create FedEx shipment";
+      setError(msg);
     } finally {
-      setRemovingTracking(false);
+      setFedexActionLoading(null);
     }
   };
 
@@ -843,6 +873,17 @@ export default function OrderDetails() {
     .trim()
     .replace(/\s+/g, "_");
   const canRefundFromAdmin = normalizedStatus === "awaiting_refund";
+  const isPaid = String(order.payment_status || "").toLowerCase() === "paid";
+  const canCreateFedex =
+    isPaid &&
+    !isStorePickup &&
+    !!String(order.carrier_service_type || manualFedexServiceType || "").trim() &&
+    !(order.fedex_shipment_id || "").trim();
+  const fedexServiceMissing = !String(order.carrier_service_type || "").trim();
+  const fedexLabelAbs =
+    order.shipping_label_url && String(order.shipping_label_url).startsWith("/")
+      ? `${getBackendBaseUrl()}${order.shipping_label_url}`
+      : order.shipping_label_url || "";
 
   return (
     <AdminNavbar title="Order details" subtitle={order.order_number}>
@@ -908,14 +949,16 @@ export default function OrderDetails() {
                 </>
               )}
             </div>
-            <button
-              type="button"
-              onClick={() => setDeleteOrderModalOpen(true)}
-              disabled={deleting}
-              className="rounded-xl border border-rose-200 bg-white px-4 py-2.5 text-sm font-semibold text-rose-700 hover:bg-rose-50 disabled:opacity-50"
-            >
-              Delete order
-            </button>
+            {normalizedStatus !== "shipped" ? (
+              <button
+                type="button"
+                onClick={() => setDeleteOrderModalOpen(true)}
+                disabled={deleting}
+                className="rounded-xl border border-rose-200 bg-white px-4 py-2.5 text-sm font-semibold text-rose-700 hover:bg-rose-50 disabled:opacity-50"
+              >
+                Delete order
+              </button>
+            ) : null}
             {canRefundFromAdmin && (
               <button
                 type="button"
@@ -929,93 +972,120 @@ export default function OrderDetails() {
           </div>
         </div>
 
-        {/* Order tracking ID — optional; admins may add or edit */}
-        <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-          <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-            <div className="min-w-0 flex-1">
-              <p className="text-[10px] font-bold uppercase tracking-widest text-slate-500">Order tracking ID</p>
-              <p className="mt-1 break-all font-mono text-sm text-slate-900">
-                {order.order_tracking_id?.trim() ? order.order_tracking_id : "—"}
-              </p>
-            </div>
-            <div className="flex shrink-0 flex-wrap items-center gap-2">
-              <button
-                type="button"
-                onClick={openTrackingModal}
-                className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm font-semibold text-slate-800 shadow-sm hover:bg-slate-100"
-              >
-                Order Tracking ID
-              </button>
-              {order.order_tracking_id?.trim() ? (
-                <button
-                  type="button"
-                  onClick={() => setRemoveTrackingModalOpen(true)}
-                  disabled={removingTracking}
-                  className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-rose-200 bg-white text-rose-600 hover:bg-rose-50 disabled:opacity-50"
-                  aria-label="Remove order tracking ID"
-                  title="Remove tracking ID"
-                >
-                  <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden>
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth={2}
-                      d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
-                    />
-                  </svg>
-                </button>
-              ) : null}
-            </div>
+        <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+          <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-200 bg-slate-50/90 px-5 py-3">
+            <h2 className="text-sm font-bold text-slate-800">FedEx shipment</h2>
+          </div>
+          <div className="space-y-3 px-5 py-4 text-sm text-slate-800">
+            {isStorePickup ? (
+              <p className="text-slate-600">Store pickup — no carrier shipment.</p>
+            ) : (
+              <>
+                <div className="flex flex-wrap items-end justify-between gap-x-6 gap-y-2">
+                  <div className="flex min-w-0 flex-1 flex-wrap gap-x-6 gap-y-1">
+                    <div>
+                      <span className="text-xs text-slate-500">Service</span>
+                      {fedexServiceMissing && !(order.fedex_shipment_id || "").trim() ? (
+                        <div className="mt-1">
+                          <select
+                            value={manualFedexServiceType}
+                            onChange={(e) => setManualFedexServiceType(e.target.value)}
+                            className="rounded-md border border-slate-300 px-2 py-1 text-sm font-mono text-slate-900"
+                          >
+                            <option value="">Select FedEx service</option>
+                            {FEDEX_SERVICE_OPTIONS.map((svc) => (
+                              <option key={svc} value={svc}>
+                                {svc}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                      ) : (
+                        <p className="font-mono text-sm">{order.carrier_service_type?.trim() || "—"}</p>
+                      )}
+                    </div>
+                    {order.shipping_estimated_delivery?.trim() ? (
+                      <div>
+                        <span className="text-xs text-slate-500">Est. delivery (at checkout)</span>
+                        <p className="text-sm">{order.shipping_estimated_delivery}</p>
+                      </div>
+                    ) : null}
+                  </div>
+                  {order.order_tracking_id?.trim() ? (
+                    <a
+                      href={fedexPublicTrackUrl(order.order_tracking_id)}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="shrink-0 text-sm font-semibold text-sky-700 hover:underline"
+                    >
+                      Open FedEx tracking
+                    </a>
+                  ) : null}
+                </div>
+                {order.shipment_status?.trim() ? (
+                  <div>
+                    <span className="text-xs text-slate-500">Carrier status</span>
+                    <p className="font-medium">{order.shipment_status}</p>
+                    {fedexShipmentLastLine(order.shipment_last_event) ? (
+                      <p className="mt-1 text-xs text-slate-600">{fedexShipmentLastLine(order.shipment_last_event)}</p>
+                    ) : null}
+                    {order.shipment_updated_at ? (
+                      <p className="mt-1 text-[11px] text-slate-400">
+                        Updated {new Date(order.shipment_updated_at).toLocaleString()}
+                      </p>
+                    ) : null}
+                  </div>
+                ) : null}
+                {order.order_tracking_id?.trim() ? (
+                  <div className="flex flex-wrap items-center justify-between gap-4">
+                    <div className="min-w-0 flex-1">
+                      <span className="text-xs text-slate-500">Tracking</span>
+                      <p className="mt-0.5 break-all font-mono text-sm">{order.order_tracking_id}</p>
+                    </div>
+                    {fedexLabelAbs ? (
+                      <a
+                        href={fedexLabelAbs}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="shrink-0 text-sm font-semibold text-sky-700 hover:underline"
+                      >
+                        Download label (PDF)
+                      </a>
+                    ) : null}
+                  </div>
+                ) : fedexLabelAbs ? (
+                  <div className="flex justify-end">
+                    <a
+                      href={fedexLabelAbs}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-sm font-semibold text-sky-700 hover:underline"
+                    >
+                      Download label (PDF)
+                    </a>
+                  </div>
+                ) : null}
+                <div className="flex flex-wrap gap-2 pt-1">
+                  {fedexServiceMissing && !(order.fedex_shipment_id || "").trim() ? (
+                    <p className="w-full text-xs text-amber-700">
+                      This order has no saved FedEx service yet. Select one above, then create shipment.
+                    </p>
+                  ) : null}
+                  {canCreateFedex ? (
+                    <button
+                      type="button"
+                      onClick={() => void handleCreateFedexShipment()}
+                      disabled={fedexActionLoading !== null}
+                      className="rounded-xl border border-sky-200 bg-sky-50 px-4 py-2.5 text-sm font-semibold text-sky-900 hover:bg-sky-100 disabled:opacity-50"
+                    >
+                      {fedexActionLoading === "create" ? "Creating…" : "Create FedEx shipment"}
+                    </button>
+                  ) : null}
+                </div>
+              </>
+            )}
           </div>
         </div>
-
-        {trackingModalOpen && (
-          <div
-            className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="tracking-modal-title"
-            onClick={() => {
-              if (!savingTracking) setTrackingModalOpen(false);
-            }}
-          >
-            <div
-              className="w-full max-w-md rounded-2xl border border-slate-200 bg-white p-6 shadow-xl"
-              onClick={(e) => e.stopPropagation()}
-            >
-              <h2 id="tracking-modal-title" className="text-lg font-bold text-slate-900">
-                Order tracking ID
-              </h2>
-              <input
-                type="text"
-                value={trackingDraft}
-                onChange={(e) => setTrackingDraft(e.target.value)}
-                placeholder="Order tracking number"
-                className="mt-4 w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm text-slate-900 outline-none ring-slate-200 focus:ring-2"
-                maxLength={255}
-                autoFocus
-              />
-              <div className="mt-6 flex flex-wrap justify-end gap-2">
-                <button
-                  type="button"
-                  onClick={() => setTrackingModalOpen(false)}
-                  disabled={savingTracking}
-                  className="rounded-xl px-4 py-2.5 text-sm font-semibold text-slate-600 hover:bg-slate-100 disabled:opacity-50"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="button"
-                  onClick={handleSaveTrackingId}
-                  disabled={savingTracking}
-                  className="rounded-xl bg-slate-900 px-4 py-2.5 text-sm font-semibold text-white hover:bg-slate-800 disabled:opacity-50"
-                >
-                  {savingTracking ? "Saving…" : "Save"}
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
 
         {deleteOrderModalOpen && (
           <div
@@ -1095,46 +1165,6 @@ export default function OrderDetails() {
                   className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-2.5 text-sm font-semibold text-emerald-800 hover:bg-emerald-100 disabled:opacity-50"
                 >
                   {processingRefund ? "Processing…" : "Yes, refund"}
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {removeTrackingModalOpen && (
-          <div
-            className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="remove-tracking-modal-title"
-            onClick={() => {
-              if (!removingTracking) setRemoveTrackingModalOpen(false);
-            }}
-          >
-            <div
-              className="w-full max-w-md rounded-2xl border border-slate-200 bg-white p-6 shadow-xl"
-              onClick={(e) => e.stopPropagation()}
-            >
-              <h2 id="remove-tracking-modal-title" className="text-lg font-bold text-slate-900">
-                Remove tracking ID?
-              </h2>
-              <p className="mt-2 text-sm text-slate-600">Are you sure you want to remove the order tracking ID?</p>
-              <div className="mt-6 flex flex-wrap justify-end gap-2">
-                <button
-                  type="button"
-                  onClick={() => setRemoveTrackingModalOpen(false)}
-                  disabled={removingTracking}
-                  className="rounded-xl px-4 py-2.5 text-sm font-semibold text-slate-600 hover:bg-slate-100 disabled:opacity-50"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="button"
-                  onClick={confirmRemoveTrackingId}
-                  disabled={removingTracking}
-                  className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-2.5 text-sm font-semibold text-rose-800 hover:bg-rose-100 disabled:opacity-50"
-                >
-                  {removingTracking ? "Removing…" : "Remove"}
                 </button>
               </div>
             </div>
@@ -1227,6 +1257,12 @@ export default function OrderDetails() {
               <DetailCell label="Order number" value={order.order_number} />
               <DetailCell label="Order ID" value={order.id} />
               <DetailCell label="Order tracking ID" value={order.order_tracking_id?.trim() ? order.order_tracking_id : "—"} />
+              {order.shipment_status?.trim() ? (
+                <DetailCell label="Shipment status (FedEx)" value={order.shipment_status} />
+              ) : null}
+              {order.carrier_service_type?.trim() ? (
+                <DetailCell label="Carrier service" value={order.carrier_service_type} />
+              ) : null}
               {order.user_id != null && <DetailCell label="User ID" value={order.user_id} />}
               <DetailCell label="Customer name" value={dash(order.user_name)} />
               <DetailCell
