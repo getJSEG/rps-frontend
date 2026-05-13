@@ -940,6 +940,7 @@ function ProductDetailContent() {
       }
     }
 
+    let fedExValidatedQuoteAmount: number | undefined;
     const resolvedRateForCart =
       fedexRates.find((r) => r.serviceType === selectedFedexServiceType) ??
       (fedexRates.length > 0 ? fedexRates[0] : null);
@@ -959,6 +960,13 @@ function ProductDetailContent() {
         setTimeout(() => setMessage(""), 5000);
         return;
       }
+      const chargeNum = Number(resolvedRateForCart.totalCharge);
+      if (!Number.isFinite(chargeNum) || chargeNum < 0) {
+        setMessage("❌ Error: FedEx rate is invalid. Refresh rates and try again.");
+        setTimeout(() => setMessage(""), 5000);
+        return;
+      }
+      fedExValidatedQuoteAmount = chargeNum;
     }
 
     setAddingToCart(true);
@@ -981,7 +989,7 @@ function ProductDetailContent() {
       });
       const totalQty = jobsPayload.reduce((s, j) => s + j.quantity, 0);
       const subtotalNum = jobsPayload.reduce((s, j) => s + j.lineSubtotal, 0);
-      const fedexRawAdd = isAuthenticated() ? Number(resolvedRateForCart?.totalCharge) || 0 : 0;
+      const fedexRawAdd = fedExValidatedQuoteAmount ?? 0;
       const shipEffAdd = effectiveOrderShipping(fedexRawAdd, subtotalNum, freeShippingPolicy, false);
       const taxNum = ((subtotalNum + shipEffAdd) * activeTaxPercentage) / 100;
       const totalNum = subtotalNum + shipEffAdd + taxNum;
@@ -999,6 +1007,26 @@ function ProductDetailContent() {
       const productImageForCart =
         getProductImageUrl(firstListingRaw ? String(firstListingRaw).trim() : "") || "";
 
+      let loggedInFedexPayload: Record<string, unknown> = {};
+      if (fedExValidatedQuoteAmount !== undefined && resolvedRateForCart) {
+        const svc = String(resolvedRateForCart.serviceType ?? "").trim();
+        const cur = (String(resolvedRateForCart.currency ?? "USD").trim() || "USD").toUpperCase();
+        const name = (String(resolvedRateForCart.serviceName ?? "").trim() || svc).trim() || svc;
+        const ed = resolvedRateForCart.estimatedDelivery ?? null;
+        loggedInFedexPayload = {
+          shippingService: svc,
+          shipping_service: svc,
+          shippingRateServiceName: name,
+          shipping_rate_service_name: name,
+          shippingRateAmount: fedExValidatedQuoteAmount,
+          shipping_rate_amount: fedExValidatedQuoteAmount,
+          shippingRateCurrency: cur,
+          shipping_rate_currency: cur,
+          shippingRateEstimatedDelivery: ed,
+          shipping_rate_estimated_delivery: ed,
+        };
+      }
+
       const cartItem = {
         productId: productId,
         productName: productName,
@@ -1015,16 +1043,8 @@ function ProductDetailContent() {
         shippingMode: "blind_drop_ship",
         shipping: "blind-drop",
         // Guest: omit FedEx quote on the line; cart shows "rate at checkout" until checkout (address + FedEx).
-        // Logged-in: persist quote on the line so cart/checkout can use cartLineFedexQuotedAmount / skipCheckoutFedexQuote.
-        ...(isAuthenticated() && resolvedRateForCart
-          ? {
-              shippingService: resolvedRateForCart.serviceType,
-              shippingRateServiceName: resolvedRateForCart.serviceName,
-              shippingRateAmount: Number(resolvedRateForCart.totalCharge) || 0,
-              shippingRateCurrency: resolvedRateForCart.currency || "USD",
-              shippingRateEstimatedDelivery: resolvedRateForCart.estimatedDelivery ?? null,
-            }
-          : {}),
+        // Logged-in: camelCase + snake_case so backend/cart always persist cartLineFedexQuotedAmount fields.
+        ...loggedInFedexPayload,
         emailProof: false,
         fullWall: fullWallQty,
         halfWall: halfWallQty,

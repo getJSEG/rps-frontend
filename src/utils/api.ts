@@ -399,13 +399,28 @@ export type CartLineShippingInput = {
   shipping_rate_estimated_delivery?: unknown;
 };
 
-/** FedEx REST service types stored on cart lines after checkout quote (e.g. FEDEX_GROUND). */
+/** FedEx Rate API may return FEDEX_* or legacy names without that prefix (e.g. GROUND_HOME_DELIVERY). */
+const FEDEX_RATE_TYPES_WITHOUT_FEDEX_PREFIX = new Set([
+  "GROUND_HOME_DELIVERY",
+  "SMART_POST",
+  "FIRST_OVERNIGHT",
+  "PRIORITY_OVERNIGHT",
+  "STANDARD_OVERNIGHT",
+  "INTERNATIONAL_PRIORITY",
+  "INTERNATIONAL_ECONOMY",
+  "INTERNATIONAL_FIRST",
+  "REGIONAL_ECONOMY",
+  "EUROPE_FIRST_INTERNATIONAL_PRIORITY",
+]);
+
 function isFedExCartServiceType(serviceLabel: string | null | undefined): boolean {
   const s = String(serviceLabel || "").trim().toUpperCase();
-  return s.startsWith("FEDEX_");
+  if (!s) return false;
+  if (s.startsWith("FEDEX_")) return true;
+  return FEDEX_RATE_TYPES_WITHOUT_FEDEX_PREFIX.has(s);
 }
 
-/** Non-null when this line has a persisted FedEx quote (amount + FEDEX_* service). */
+/** Non-null when this line has a persisted FedEx quote (amount + FedEx REST service type). */
 export function cartLineFedexQuotedAmount(item: CartLineShippingInput): number | null {
   const svc = String(item.shippingService ?? item.shipping_service ?? "").trim();
   if (!isFedExCartServiceType(svc)) return null;
