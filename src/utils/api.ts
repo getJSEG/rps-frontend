@@ -244,6 +244,28 @@ export type HardwareTemplate = {
   options: HardwareTemplateOption[];
 };
 
+export type ProductConditionalModifierRule = {
+  id?: number;
+  product_id?: number;
+  hardware_option_id?: number | null;
+  hardware_option_key?: string | null;
+  hardware_option_label?: string | null;
+  source_modifier_id: number;
+  source_modifier_key?: string;
+  source_modifier_name?: string;
+  source_option_id?: number | null;
+  source_option_value?: string | null;
+  source_option_label?: string | null;
+  action_type: "auto_select" | "disable";
+  target_modifier_id: number;
+  target_modifier_key?: string;
+  target_modifier_name?: string;
+  target_option_id?: number | null;
+  target_option_value?: string | null;
+  target_option_label?: string | null;
+  sort_order?: number;
+};
+
 export type ArtworkUploadPayload = {
   widthPx: number | null;
   heightPx: number | null;
@@ -988,7 +1010,7 @@ export const productsAPI = {
   getProductModifiersAdmin: async (id: string) => {
     return apiCall(`/products/admin/products/${id}/modifiers`);
   },
-  updateProductModifiersAdmin: async (id: string, data: { groups: Array<{ key: string; is_required?: boolean; sort_order?: number; mode_scope?: string; options: Array<{ option_id?: number; value: string; is_default?: boolean; price_adjustment_override?: number | null }> }> }) => {
+  updateProductModifiersAdmin: async (id: string, data: { groups: Array<{ key: string; is_required?: boolean; sort_order?: number; mode_scope?: string; options: Array<{ option_id?: number; value: string; is_default?: boolean; price_adjustment_override?: number | null }> }>; conditional_rules?: ProductConditionalModifierRule[] }) => {
     return apiCall(`/products/admin/products/${id}/modifiers`, {
       method: 'PUT',
       body: JSON.stringify(data),

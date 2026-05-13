@@ -116,6 +116,7 @@ interface Product {
     is_default?: boolean;
   }>;
   modifier_groups?: Array<{
+    modifier_group_id?: number;
     key: string;
     name: string;
     /** Any option key or "all" — not limited to the legacy graphic_only/graphic_frame values. */
@@ -123,6 +124,7 @@ interface Product {
     input_type?: string;
     is_required?: boolean;
     options: Array<{
+      id?: number;
       value: string;
       label: string;
       price_adjustment?: number;
@@ -140,6 +142,20 @@ interface Product {
     min_charge?: number | null;
     sort_order?: number;
     is_default?: boolean;
+  }>;
+  conditional_modifier_rules?: Array<{
+    id?: number;
+    hardware_option_id?: number | null;
+    hardware_option_key?: string | null;
+    source_modifier_id: number;
+    source_modifier_key?: string;
+    source_option_id?: number | null;
+    source_option_value?: string | null;
+    action_type: "auto_select" | "disable";
+    target_modifier_id: number;
+    target_modifier_key?: string;
+    target_option_id?: number | null;
+    target_option_value?: string | null;
   }>;
   properties?: ProductProperty[];
   /** Ordered bullet points shown under the product image. */
@@ -374,6 +390,100 @@ function ProductDetailContent() {
       return scope === effectiveScopeKey;
     }
   );
+  const activeGroupsById = new Map(
+    activeModifierGroups
+      .map((group) => [Number(group.modifier_group_id || 0), group] as const)
+      .filter(([id]) => Number.isFinite(id) && id > 0)
+  );
+  const activeGroupsByKey = new Map(activeModifierGroups.map((group) => [String(group.key), group] as const));
+  const conditionalRules = Array.isArray(product?.conditional_modifier_rules) ? product.conditional_modifier_rules : [];
+  const evaluateConditionalModifierRules = (selection: Record<string, string>) => {
+    const nextSelected = { ...selection };
+    const disabledOptionIds = new Set<number>();
+    const disabledGroupKeys = new Set<string>();
+    const autoSelectedOptionIdsByGroup = new Map<string, number>();
+    const activePurchaseId = activePurchaseOption?.id != null ? Number(activePurchaseOption.id) : null;
+    const activeScopeKey = String(effectiveScopeKey || "").trim().toLowerCase();
+
+    const ruleAppliesToCurrentHardware = (rule: NonNullable<Product["conditional_modifier_rules"]>[number]) => {
+      const ruleHardwareId = rule.hardware_option_id == null ? null : Number(rule.hardware_option_id);
+      const ruleHardwareKey = String(rule.hardware_option_key || "").trim().toLowerCase();
+      if (ruleHardwareId != null && activePurchaseId != null && ruleHardwareId !== activePurchaseId) return false;
+      if (ruleHardwareId != null && activePurchaseId == null) return false;
+      if (ruleHardwareKey && activeScopeKey && ruleHardwareKey !== activeScopeKey) return false;
+      if (ruleHardwareKey && !activeScopeKey) return false;
+      return true;
+    };
+
+    for (let pass = 0; pass < 5; pass++) {
+      let changed = false;
+      disabledOptionIds.clear();
+      for (const rule of conditionalRules) {
+        if (!ruleAppliesToCurrentHardware(rule)) continue;
+        const sourceGroup =
+          activeGroupsById.get(Number(rule.source_modifier_id)) ||
+          activeGroupsByKey.get(String(rule.source_modifier_key || ""));
+        const targetGroup =
+          activeGroupsById.get(Number(rule.target_modifier_id)) ||
+          activeGroupsByKey.get(String(rule.target_modifier_key || ""));
+        if (!sourceGroup || !targetGroup) continue;
+        const sourceOption =
+          rule.source_option_id == null && !rule.source_option_value
+            ? null
+            : sourceGroup.options.find(
+                (opt) => Number(opt.id) === Number(rule.source_option_id) || modifierOptionValue(opt) === String(rule.source_option_value || "")
+              );
+        const targetOption =
+          rule.target_option_id == null && rule.action_type === "disable"
+            ? null
+            : targetGroup.options.find(
+                (opt) => Number(opt.id) === Number(rule.target_option_id) || modifierOptionValue(opt) === String(rule.target_option_value || "")
+              );
+        if (rule.source_option_id != null && !sourceOption) continue;
+        if (rule.action_type !== "disable" && !targetOption) continue;
+        const selectedSourceValue = String(nextSelected[sourceGroup.key] || "").trim();
+        if (!selectedSourceValue) continue;
+        if (sourceOption) {
+          const sourceValue = modifierOptionValue(sourceOption);
+          if (!sourceValue || selectedSourceValue !== sourceValue) continue;
+        }
+        if (rule.action_type === "disable") {
+          if (!targetOption) {
+            disabledGroupKeys.add(targetGroup.key);
+          } else {
+            disabledOptionIds.add(Number(targetOption.id || rule.target_option_id));
+          }
+        } else {
+          const targetValue = modifierOptionValue(targetOption);
+          if (targetValue && nextSelected[targetGroup.key] !== targetValue) {
+            nextSelected[targetGroup.key] = targetValue;
+            changed = true;
+          }
+          if (targetOption?.id != null) {
+            autoSelectedOptionIdsByGroup.set(targetGroup.key, Number(targetOption.id));
+          }
+        }
+      }
+      for (const group of activeModifierGroups) {
+        const selectedValue = nextSelected[group.key];
+        if (!selectedValue) continue;
+        const selectedOption = group.options.find((opt) => modifierOptionValue(opt) === selectedValue);
+        if (
+          disabledGroupKeys.has(group.key) ||
+          (selectedOption?.id != null && disabledOptionIds.has(Number(selectedOption.id)))
+        ) {
+          delete nextSelected[group.key];
+          changed = true;
+        }
+      }
+      if (!changed) break;
+    }
+    return { nextSelected, disabledOptionIds, disabledGroupKeys, autoSelectedOptionIdsByGroup };
+  };
+  const conditionalRuleEvaluation = evaluateConditionalModifierRules(selectedModifiers);
+  const disabledModifierOptionIds = conditionalRuleEvaluation.disabledOptionIds;
+  const disabledModifierGroupKeys = conditionalRuleEvaluation.disabledGroupKeys;
+  const autoSelectedModifierOptionIdsByGroup = conditionalRuleEvaluation.autoSelectedOptionIdsByGroup;
 
   const missingRequiredModifiers = activeModifierGroups
     .filter((group) => group.is_required)
@@ -383,6 +493,13 @@ function ProductDetailContent() {
       const options = Array.isArray(group.options) ? group.options : [];
       return !options.some((o) => modifierOptionValue(o) === selectedValue);
     });
+
+  useEffect(() => {
+    const normalized = conditionalRuleEvaluation.nextSelected;
+    if (JSON.stringify(normalized) !== JSON.stringify(selectedModifiers)) {
+      setSelectedModifiers(normalized);
+    }
+  }, [conditionalRuleEvaluation.nextSelected, selectedModifiers]);
 
   // Fetch product data - Reset and fetch when productId changes
   useEffect(() => {
@@ -1509,6 +1626,8 @@ function ProductDetailContent() {
                   {activeModifierGroups.map((group) => {
                     const options = Array.isArray(group.options) ? group.options : [];
                     const selectedValue = String(selectedModifiers[group.key] || "");
+                    const isGroupDisabledByRule = disabledModifierGroupKeys.has(group.key);
+                    const autoSelectedOptionId = autoSelectedModifierOptionIdsByGroup.get(group.key) ?? null;
                     const selectedOption = options.find((o) => modifierOptionValue(o) === selectedValue);
                     const selectedLabel = selectedOption
                       ? (() => {
@@ -1529,7 +1648,12 @@ function ProductDetailContent() {
                         >
                           <button
                             type="button"
-                            className="flex w-full items-center justify-between rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-sm text-left text-black shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                            className={`flex w-full items-center justify-between rounded-lg border border-gray-300 px-3 py-1.5 text-sm text-left shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 ${
+                              isGroupDisabledByRule
+                                ? "cursor-not-allowed bg-gray-50 text-gray-400"
+                                : "bg-white text-black"
+                            }`}
+                            disabled={isGroupDisabledByRule}
                             onClick={() =>
                               setOpenModifierKey((prev) => (prev === group.key ? null : group.key))
                             }
@@ -1543,11 +1667,15 @@ function ProductDetailContent() {
                                 <button
                                   type="button"
                                   className={`block w-full px-3 py-2 text-left text-sm ${
-                                    !selectedValue
+                                    autoSelectedOptionId != null
+                                      ? "cursor-not-allowed bg-gray-50 text-gray-400"
+                                      : !selectedValue
                                       ? "bg-blue-50 text-blue-700"
                                       : "text-gray-700 hover:bg-gray-50"
                                   }`}
+                                  disabled={autoSelectedOptionId != null}
                                   onClick={() => {
+                                    if (autoSelectedOptionId != null) return;
                                     setSelectedModifiers((prev) => {
                                       const next = { ...prev };
                                       delete next[group.key];
@@ -1561,6 +1689,12 @@ function ProductDetailContent() {
                               ) : null}
                               {options.map((opt, idx) => {
                                 const optValue = modifierOptionValue(opt);
+                                const isLockedOutByAutoSelect =
+                                  autoSelectedOptionId != null && Number(opt.id || 0) !== autoSelectedOptionId;
+                                const isDisabledByRule =
+                                  isGroupDisabledByRule ||
+                                  isLockedOutByAutoSelect ||
+                                  (opt.id != null && disabledModifierOptionIds.has(Number(opt.id)));
                                 const displayLeft =
                                   optValue && optValue !== String(opt.label || "")
                                     ? `${opt.label} - ${optValue}`
@@ -1573,9 +1707,13 @@ function ProductDetailContent() {
                                     className={`block w-full px-3 py-2 text-left text-sm ${
                                       isActive
                                         ? "bg-blue-50 text-blue-700"
+                                        : isDisabledByRule
+                                          ? "cursor-not-allowed bg-gray-50 text-gray-400"
                                         : "text-gray-700 hover:bg-gray-50"
                                     }`}
+                                    disabled={isDisabledByRule}
                                     onClick={() => {
+                                      if (isDisabledByRule) return;
                                       setSelectedModifiers((prev) => {
                                         const isUnselecting = !group.is_required && prev[group.key] === optValue;
                                         if (isUnselecting) {
