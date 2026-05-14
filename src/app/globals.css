@@ -121,3 +121,29 @@ body {
   border-color: rgb(226 232 240) !important;
   box-shadow: inset 0 0 0 1px rgba(226, 232, 240, 0.95) !important;
 }
+
+/* PDP FedEx shipping: indeterminate progress line while rates load */
+@keyframes pdp-fedex-rates-indeterminate {
+  0% {
+    transform: translateX(-100%);
+  }
+  100% {
+    transform: translateX(380%);
+  }
+}
+
+.pdp-fedex-rates-indeterminate-track {
+  height: 3px;
+  width: 100%;
+  border-radius: 9999px;
+  background-color: rgb(229 231 235);
+  overflow: hidden;
+}
+
+.pdp-fedex-rates-indeterminate-bar {
+  height: 100%;
+  width: 38%;
+  border-radius: 9999px;
+  background: linear-gradient(90deg, #0b6bcb, #38bdf8, #0b6bcb);
+  animation: pdp-fedex-rates-indeterminate 1.15s ease-in-out infinite alternate;
+}

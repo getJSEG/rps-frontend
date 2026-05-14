@@ -143,7 +143,7 @@ function cartLineShippingDisplayName(item: CartItem): string {
     const name = String(item.shippingRateServiceName ?? item.shipping_rate_service_name ?? "").trim();
     return name || String(item.shippingService ?? item.shipping_service ?? "FedEx").trim();
   }
-  return "FedEx — rate at checkout";
+  return "Calculated at checkout";
 }
 
 function isGraphicScenarioItem(item: CartItem): boolean {

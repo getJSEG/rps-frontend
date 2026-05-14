@@ -404,6 +404,199 @@ function normalizeShippingServiceKey(serviceLabel: string | null | undefined): s
   return String(serviceLabel || "").trim().toLowerCase();
 }
 
+/** FedEx box from product admin `shipping_*` (inches, lb per sellable unit) when hardware template is set. */
+export type HardwareFedexShipping = {
+  length: number;
+  width: number;
+  height: number;
+  weightPerUnit: number;
+};
+
+function parsePositiveProductNumber(value: unknown): number | null {
+  if (value == null || value === "") return null;
+  const n = typeof value === "number" ? value : parseFloat(String(value).trim());
+  if (!Number.isFinite(n) || n <= 0) return null;
+  return n;
+}
+
+/**
+ * Returns shipping dimensions/weight for FedEx when the product has `hardware_template_id`
+ * and all `shipping_length`, `shipping_width`, `shipping_height`, `shipping_weight` are positive.
+ */
+export function hardwareFedexShippingFromProduct(product: {
+  hardware_template_id?: number | null;
+  hardwareTemplateId?: number | null;
+  shipping_length?: unknown;
+  shipping_width?: unknown;
+  shipping_height?: unknown;
+  shipping_weight?: unknown;
+} | null | undefined): HardwareFedexShipping | null {
+  if (!product) return null;
+  const htRaw = product.hardware_template_id ?? product.hardwareTemplateId;
+  if (htRaw == null || String(htRaw).trim() === "") return null;
+  if (!Number.isFinite(Number(htRaw))) return null;
+  const length = parsePositiveProductNumber(product.shipping_length);
+  const width = parsePositiveProductNumber(product.shipping_width);
+  const height = parsePositiveProductNumber(product.shipping_height);
+  const weightPerUnit = parsePositiveProductNumber(product.shipping_weight);
+  if (length == null || width == null || height == null || weightPerUnit == null) return null;
+  return { length, width, height, weightPerUnit };
+}
+
+function isShippableFedexCartLine(item: Record<string, unknown>): boolean {
+  const mode = String(item.shippingMode ?? item.shipping_mode ?? "").trim().toLowerCase();
+  if (mode === "store_pickup" || mode === "store-pickup" || mode === "store pickup") return false;
+  const ship = String(item.shipping ?? "").trim().toLowerCase();
+  if (ship === "store-pickup" || ship === "store_pickup") return false;
+  const pid = item.storePickupAddressId ?? item.store_pickup_address_id;
+  if (pid != null && String(pid) !== "") return false;
+  return true;
+}
+
+function billableQtyFromCartLikeItem(item: {
+  jobs?: Array<{ quantity?: number | string }>;
+  quantity?: number | string;
+}): number {
+  const jobs = Array.isArray(item?.jobs) ? item.jobs : [];
+  if (jobs.length > 0) {
+    return jobs.reduce((sum, j) => sum + Math.max(1, Number(j.quantity) || 1), 0);
+  }
+  return Math.max(1, Number(item?.quantity) || 1);
+}
+
+function isGraphicScenarioCartLikeItem(item: {
+  selection_mode?: string;
+  selectionMode?: string;
+  graphic_scenario_enabled?: boolean;
+  graphicScenarioEnabled?: boolean;
+  pricing_snapshot?: {
+    selection_mode?: string;
+    selectionMode?: string;
+    graphic_scenario_enabled?: boolean;
+    graphicScenarioEnabled?: boolean;
+  };
+}): boolean {
+  const selectionMode = String(
+    item.selection_mode ??
+      item.selectionMode ??
+      item.pricing_snapshot?.selection_mode ??
+      item.pricing_snapshot?.selectionMode ??
+      ""
+  ).trim();
+  if (selectionMode === "graphic_only" || selectionMode === "graphic_frame") {
+    return true;
+  }
+  return (
+    item.graphic_scenario_enabled === true ||
+    item.graphicScenarioEnabled === true ||
+    item.pricing_snapshot?.graphic_scenario_enabled === true ||
+    item.pricing_snapshot?.graphicScenarioEnabled === true
+  );
+}
+
+function hardwareFedexShippingFromCartLikeItem(item: {
+  hardware_template_id?: number | null;
+  hardwareTemplateId?: number | null;
+  shipping_length?: unknown;
+  shipping_width?: unknown;
+  shipping_height?: unknown;
+  shipping_weight?: unknown;
+  shippingLength?: unknown;
+  shippingWidth?: unknown;
+  shippingHeight?: unknown;
+  shippingWeight?: unknown;
+  pricing_snapshot?: Record<string, unknown>;
+}): HardwareFedexShipping | null {
+  const snap = item.pricing_snapshot && typeof item.pricing_snapshot === "object" ? item.pricing_snapshot : {};
+  const htRaw = item.hardware_template_id ?? item.hardwareTemplateId ?? snap.hardware_template_id ?? snap.hardwareTemplateId;
+  if (htRaw == null || String(htRaw).trim() === "") return null;
+  if (!Number.isFinite(Number(htRaw))) return null;
+
+  const pick = (snake: string, camel: string) =>
+    (item as Record<string, unknown>)[snake] ??
+    (item as Record<string, unknown>)[camel] ??
+    snap[snake] ??
+    snap[camel];
+
+  const length = parsePositiveProductNumber(pick("shipping_length", "shippingLength"));
+  const width = parsePositiveProductNumber(pick("shipping_width", "shippingWidth"));
+  const height = parsePositiveProductNumber(pick("shipping_height", "shippingHeight"));
+  const weightPerUnit = parsePositiveProductNumber(pick("shipping_weight", "shippingWeight"));
+  if (length == null || width == null || height == null || weightPerUnit == null) return null;
+  return { length, width, height, weightPerUnit };
+}
+
+/**
+ * One consolidated package for FedEx (checkout / cart merge). Same rules as backend `fedexCartPackage.js`.
+ */
+export function buildFedexPackagesFromShippableCartItems(
+  cartItems: Array<Record<string, unknown>> | null | undefined
+): Array<{ weight: number; length: number; width: number; height: number }> {
+  const shippable = (Array.isArray(cartItems) ? cartItems : []).filter((i) => isShippableFedexCartLine(i));
+  if (shippable.length === 0) {
+    return [{ weight: 1, length: 12, width: 10, height: 6 }];
+  }
+
+  let maxLen = 0;
+  let maxWid = 0;
+  let maxHt = 0;
+  let sumWeight = 0;
+
+  for (const raw of shippable) {
+    const item = raw as {
+      jobs?: Array<{ quantity?: number | string }>;
+      quantity?: number | string;
+      width?: number;
+      height?: number;
+      width_inches?: number;
+      height_inches?: number;
+      selection_mode?: string;
+      selectionMode?: string;
+      graphic_scenario_enabled?: boolean;
+      graphicScenarioEnabled?: boolean;
+      hardware_template_id?: number | null;
+      hardwareTemplateId?: number | null;
+      shipping_length?: unknown;
+      shipping_width?: unknown;
+      shipping_height?: unknown;
+      shipping_weight?: unknown;
+      shippingLength?: unknown;
+      shippingWidth?: unknown;
+      shippingHeight?: unknown;
+      shippingWeight?: unknown;
+      pricing_snapshot?: Record<string, unknown>;
+    };
+    const qty = billableQtyFromCartLikeItem(item);
+    const hw = hardwareFedexShippingFromCartLikeItem(item);
+    if (hw) {
+      maxLen = Math.max(maxLen, Math.ceil(hw.length));
+      maxWid = Math.max(maxWid, Math.ceil(hw.width));
+      maxHt = Math.max(maxHt, Math.ceil(hw.height));
+      sumWeight += hw.weightPerUnit * qty;
+    } else if (isGraphicScenarioCartLikeItem(item)) {
+      maxLen = Math.max(maxLen, 12);
+      maxWid = Math.max(maxWid, 10);
+      maxHt = Math.max(maxHt, 6);
+      sumWeight += qty;
+    } else {
+      const w = Number(item.width ?? item.width_inches) || 0;
+      const h = Number(item.height ?? item.height_inches) || 0;
+      maxLen = Math.max(maxLen, w > 0 ? Math.max(1, Math.ceil(w)) : 0);
+      maxWid = Math.max(maxWid, h > 0 ? Math.max(1, Math.ceil(h)) : 0);
+      maxHt = Math.max(maxHt, 6);
+      sumWeight += qty;
+    }
+  }
+
+  const length = maxLen > 0 ? maxLen : 12;
+  const width = maxWid > 0 ? maxWid : 10;
+  const height = maxHt > 0 ? maxHt : 6;
+  const roundedWt = Math.round(sumWeight * 100) / 100;
+  const weight = Math.max(1, roundedWt);
+
+  return [{ weight, length, width, height }];
+}
+
 export type CartLineShippingInput = {
   id?: string | number;
   shippingService?: string;
@@ -507,16 +700,29 @@ export function fedexEstimatedDeliveryFromCart(items: CartLineShippingInput[]): 
 
 /**
  * One package for FedEx rating on the product page (same rules as checkout cart merge).
- * UI width → package `length`, UI height → package `width`; fixed 6 in depth.
+ * Hardware: `shipping_*` from product DB. Otherwise UI width → package `length`, UI height → package `width`; depth 6 unless hardware height is used.
  */
 export function buildFedexPackagesForProductConfigure(options: {
   billableQty: number;
   widthInches: number;
   heightInches: number;
   isGraphicScenario: boolean;
+  hardwareShipping?: HardwareFedexShipping | null;
 }): Array<{ weight: number; length: number; width: number; height: number }> {
-  const { billableQty, widthInches, heightInches, isGraphicScenario } = options;
+  const { billableQty, widthInches, heightInches, isGraphicScenario, hardwareShipping } = options;
   const totalQty = Math.max(1, billableQty);
+
+  if (hardwareShipping) {
+    const wt = Math.round(hardwareShipping.weightPerUnit * totalQty * 100) / 100;
+    return [
+      {
+        weight: Math.max(1, wt),
+        length: Math.max(1, Math.ceil(hardwareShipping.length)),
+        width: Math.max(1, Math.ceil(hardwareShipping.width)),
+        height: Math.max(1, Math.ceil(hardwareShipping.height)),
+      },
+    ];
+  }
 
   let lengthIn: number;
   let widthIn: number;

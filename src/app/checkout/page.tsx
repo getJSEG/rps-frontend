@@ -17,6 +17,7 @@ import {
   mergedShippingFromCartItems,
   cartShippableLinesAllFedexQuoted,
   fedexEstimatedDeliveryFromCart,
+  buildFedexPackagesFromShippableCartItems,
   type FedexRateQuote,
   type ShippingMethod,
   type ShippingRates,
@@ -112,47 +113,6 @@ function isGraphicScenarioCheckoutItem(item: CartItem): boolean {
     item.pricing_snapshot?.graphic_scenario_enabled === true ||
     item.pricing_snapshot?.graphicScenarioEnabled === true
   );
-}
-
-function cartLineBillableQuantity(item: CartItem): number {
-  const jobs = item.jobs;
-  if (Array.isArray(jobs) && jobs.length > 0) {
-    return jobs.reduce((sum, j) => sum + Math.max(1, Number(j.quantity) || 1), 0);
-  }
-  return Math.max(1, Number(item.quantity) || 1);
-}
-
-/** One consolidated package for FedEx rating from non–store-pickup cart lines (same rules as PDP `buildFedexPackagesForProductConfigure`). */
-function buildFedexPackagesFromCart(cartItems: CartItem[]): Array<{ weight: number; length: number; width: number; height: number }> {
-  const shippable = cartItems.filter((i) => String(i.shippingMode || "").toLowerCase() !== "store_pickup");
-  if (shippable.length === 0) {
-    return [{ weight: 1, length: 12, width: 10, height: 6 }];
-  }
-  let totalQty = 0;
-  let maxW = 0;
-  let maxH = 0;
-  for (const item of shippable) {
-    totalQty += cartLineBillableQuantity(item);
-    if (isGraphicScenarioCheckoutItem(item)) {
-      maxW = Math.max(maxW, 12);
-      maxH = Math.max(maxH, 10);
-    } else {
-      const w = Number(item.width) || 0;
-      const h = Number(item.height) || 0;
-      maxW = Math.max(maxW, w > 0 ? Math.max(1, Math.ceil(w)) : 0);
-      maxH = Math.max(maxH, h > 0 ? Math.max(1, Math.ceil(h)) : 0);
-    }
-  }
-  const lengthIn = maxW > 0 ? maxW : 12;
-  const widthIn = maxH > 0 ? maxH : 10;
-  return [
-    {
-      weight: Math.max(1, totalQty),
-      length: lengthIn,
-      width: widthIn,
-      height: 6,
-    },
-  ];
 }
 
 interface StripeElementsRef {
@@ -426,28 +386,30 @@ export default function CheckoutPage() {
     freeShippingPolicy,
     storePickupOrder
   );
+  const loggedInCheckout = isAuthenticated();
   const shownSubtotal = orderSummary?.subtotal ?? subtotal;
-  const skipCheckoutFedexQuote = cartShippableLinesAllFedexQuoted(cartItems);
+  const checkoutRequiresFedexQuote = !loggedInCheckout && shippingMode !== "store_pickup" && cartItems.length > 0;
+  const loggedInMissingFedexQuote =
+    loggedInCheckout &&
+    shippingMode !== "store_pickup" &&
+    cartItems.length > 0 &&
+    !cartShippableLinesAllFedexQuoted(cartItems);
   const selectedFedexRate =
     fedexRates.find((r) => r.serviceType === selectedFedexServiceType) || null;
-  const fedexCartNeedsQuote = shippingMode !== "store_pickup" && cartItems.length > 0;
-  const shownShipping = skipCheckoutFedexQuote
-    ? shipping
-    : selectedFedexRate
-      ? Number(selectedFedexRate.totalCharge) || 0
-      : fedexCartNeedsQuote
-        ? 0
-        : orderSummary?.shipping ?? shipping;
+  const shownShipping = (() => {
+    if (clientSecret && orderSummary) return orderSummary.shipping;
+    if (!checkoutRequiresFedexQuote) return orderSummary?.shipping ?? shipping;
+    return selectedFedexRate ? Number(selectedFedexRate.totalCharge) || 0 : 0;
+  })();
   const shippingAmountPendingFedex =
-    !skipCheckoutFedexQuote && fedexCartNeedsQuote && !selectedFedexRate;
+    checkoutRequiresFedexQuote && !selectedFedexRate;
   const shownTaxPercentage = Number(orderSummary?.taxPercentage ?? 0);
   const shownTax = roundMoney2((shownSubtotal + shownShipping) * (shownTaxPercentage / 100));
   const shownTotal = roundMoney2(shownSubtotal + shownShipping + shownTax);
-  const shownFedexEta = skipCheckoutFedexQuote
-    ? fedexEstimatedDeliveryFromCart(cartItems)
-    : selectedFedexRate?.estimatedDelivery || null;
+  const shownFedexEta = checkoutRequiresFedexQuote
+    ? selectedFedexRate?.estimatedDelivery || null
+    : fedexEstimatedDeliveryFromCart(cartItems);
 
-  const loggedInCheckout = isAuthenticated();
   const guestEmailOk = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(guestEmail.trim());
   const guestAddressOk =
     !!billingForm.streetAddress.trim() &&
@@ -479,7 +441,7 @@ export default function CheckoutPage() {
     : fedexDestinationReady && guestBillingSaved;
 
   const fedexBlockingReason =
-    shippingMode !== "store_pickup" && fedexDestinationReadyEffective && cartItems.length > 0
+    checkoutRequiresFedexQuote && fedexDestinationReadyEffective
       ? fedexRatesLoading
         ? "loading"
         : fedexRatesError
@@ -489,11 +451,10 @@ export default function CheckoutPage() {
             : null
       : null;
   const needsFedexToProceed =
-    shippingMode !== "store_pickup" &&
-    cartItems.length > 0 &&
-    !skipCheckoutFedexQuote &&
-    (!fedexDestinationReadyEffective ||
-      (fedexDestinationReadyEffective && fedexBlockingReason !== null));
+    loggedInMissingFedexQuote ||
+    (checkoutRequiresFedexQuote &&
+      (!fedexDestinationReadyEffective ||
+        (fedexDestinationReadyEffective && fedexBlockingReason !== null)));
 
   const fedexDepShipStreet =
     destinationForFedex && "street_address" in destinationForFedex
@@ -511,11 +472,11 @@ export default function CheckoutPage() {
       setFedexRatesError(null);
     };
 
-    if (skipCheckoutFedexQuote) {
+    if (shippingMode === "store_pickup") {
       resetFedexQuoteState();
       return;
     }
-    if (shippingMode === "store_pickup") {
+    if (loggedInCheckout) {
       resetFedexQuoteState();
       return;
     }
@@ -548,7 +509,9 @@ export default function CheckoutPage() {
       ...(fedexStreetLines.length > 0 ? { streetLines: fedexStreetLines } : {}),
     };
 
-    const packages = buildFedexPackagesFromCart(cartItems);
+        const packages = buildFedexPackagesFromShippableCartItems(
+          cartItems as unknown as Array<Record<string, unknown>>
+        );
 
     let cancelled = false;
     (async () => {
@@ -584,11 +547,10 @@ export default function CheckoutPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps -- omit destinationForFedex object: guest branch is a new object each render; primitives + fedexDep* cover changes
   }, [
     shippingMode,
-    skipCheckoutFedexQuote,
+    loggedInCheckout,
     fedexDestinationReadyEffective,
     guestBillingSaved,
     cartItems,
-    loggedInCheckout,
     billingForm.streetAddress,
     billingForm.addressLine2,
     destinationForFedex?.postcode,
@@ -601,12 +563,16 @@ export default function CheckoutPage() {
 
   const handlePlaceOrder = async () => {
     if (!canProceedToPayment) return;
+    if (loggedInMissingFedexQuote) {
+      setError("Shipping was not calculated for one or more cart items. Please remove and add the product again from the product detail page.");
+      return;
+    }
     if (needsFedexToProceed) {
       if (!fedexDestinationReadyEffective) {
         setError(
           loggedInCheckout
             ? "Enter a complete address with postal code and country so FedEx rates can load."
-            : "Save your billing address above so FedEx rates can load."
+            : "Save your shipping address so FedEx rates can load."
         );
         return;
       }
@@ -621,14 +587,14 @@ export default function CheckoutPage() {
       setError("No FedEx services are available for this address. Check your postal code and country.");
       return;
     }
-    if (shippingMode !== "store_pickup" && !skipCheckoutFedexQuote && fedexRates.length > 0 && !selectedFedexRate) {
+    if (checkoutRequiresFedexQuote && fedexRates.length > 0 && !selectedFedexRate) {
       setError("Please select a FedEx shipping service.");
       return;
     }
     setCreating(true);
     setError(null);
     try {
-      if (shippingMode !== "store_pickup" && !skipCheckoutFedexQuote && selectedFedexRate) {
+      if (checkoutRequiresFedexQuote && selectedFedexRate) {
         const updates = cartItems
           .filter((item) => String(item.shippingMode || "").toLowerCase() !== "store_pickup")
           .map((item) =>
@@ -677,7 +643,29 @@ export default function CheckoutPage() {
             clientSecret: string | null;
             stripePaymentSkipped?: boolean;
             guestTrackingToken?: string;
+            subtotal?: number;
+            shipping?: number;
+            taxAmount?: number;
+            taxName?: string | null;
+            taxPercentage?: number;
+            total?: number;
           };
+      if (
+        Number.isFinite(Number(res.subtotal)) &&
+        Number.isFinite(Number(res.shipping)) &&
+        Number.isFinite(Number(res.taxAmount)) &&
+        Number.isFinite(Number(res.taxPercentage)) &&
+        Number.isFinite(Number(res.total))
+      ) {
+        setOrderSummary({
+          subtotal: Number(res.subtotal),
+          shipping: Number(res.shipping),
+          taxAmount: Number(res.taxAmount),
+          taxName: res.taxName ?? null,
+          taxPercentage: Number(res.taxPercentage),
+          total: Number(res.total),
+        });
+      }
       const guestToken = !loggedInCheckout ? String(res.guestTrackingToken || "").trim() : "";
       if (!loggedInCheckout && guestToken) setGuestTrackingToken(guestToken);
       if (res.stripePaymentSkipped) {
@@ -822,7 +810,9 @@ export default function CheckoutPage() {
               <div className="space-y-6">
                 <div>
                   <div className="flex items-center justify-between mb-3">
-                    <h2 className="text-lg font-bold text-gray-900">Billing Address</h2>
+                    <h2 className="text-lg font-bold text-gray-900">
+                      {isAuthenticated() ? "Billing Address" : "Shipping Address"}
+                    </h2>
                     {isAuthenticated() && billingAddress ? (
                       <Link
                         href="/address-book"
@@ -839,7 +829,7 @@ export default function CheckoutPage() {
                         type="button"
                         onClick={editGuestBilling}
                         className="inline-flex items-center gap-1.5 rounded-lg bg-gray-100 px-2.5 py-1.5 text-sm font-medium text-gray-700 transition-colors hover:bg-gray-200 hover:text-gray-900"
-                        aria-label="Edit billing address"
+                        aria-label="Edit shipping address"
                       >
                         <svg className="h-4 w-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden>
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
@@ -852,22 +842,25 @@ export default function CheckoutPage() {
                     <p className="text-gray-500 text-sm">Loading addresses...</p>
                   ) : !isAuthenticated() ? (
                     guestBillingSaved ? (
-                      <div className="p-4 bg-gray-50 rounded-lg border border-gray-200 text-gray-800 text-sm space-y-1">
-                        <p className="font-medium">{guestEmail.trim()}</p>
-                        {guestFullName.trim() ? <p>{guestFullName.trim()}</p> : null}
-                        {guestPhone.trim() ? <p>Tel: {guestPhone.trim()}</p> : null}
-                        <p>{billingForm.streetAddress.trim()}</p>
-                        {billingForm.addressLine2.trim() ? <p>{billingForm.addressLine2.trim()}</p> : null}
-                        <p>
-                          {billingForm.city.trim()}, {billingForm.state.trim()} {billingForm.postcode.trim()}
-                        </p>
-                        <p>{billingForm.country.trim() || "United States"}</p>
+                      <div className="p-4 bg-gray-50 rounded-lg border border-gray-200 text-gray-800 text-sm">
+                        <div className="space-y-1 border-b border-gray-200 pb-3">
+                          {guestFullName.trim() ? <p className="font-medium">{guestFullName.trim()}</p> : null}
+                          {guestPhone.trim() ? <p>Tel: {guestPhone.trim()}</p> : null}
+                          <p>{guestEmail.trim()}</p>
+                        </div>
+                        <div className="space-y-1 pt-3">
+                          <p>{billingForm.streetAddress.trim()}</p>
+                          {billingForm.addressLine2.trim() ? <p>{billingForm.addressLine2.trim()}</p> : null}
+                          <p>
+                            {billingForm.city.trim()}, {billingForm.state.trim()} {billingForm.postcode.trim()}
+                          </p>
+                          <p>{billingForm.country.trim() || "United States"}</p>
+                        </div>
                       </div>
                     ) : (
                       <div className="p-4 bg-gray-50 rounded-lg border border-gray-200 space-y-3">
                         <p className="text-sm text-gray-600">
-                          Checkout as guest — enter email, phone (optional), and billing / shipping address. Save when
-                          done so FedEx rates can load.
+                        Continue as guest: Enter contact and address details to view available shipping services.
                         </p>
                         <input
                           type="email"
@@ -995,7 +988,7 @@ export default function CheckoutPage() {
                     </div>
                   )}
                 </div>
-                {shippingMode !== "store_pickup" && (
+                {shippingMode !== "store_pickup" && isAuthenticated() && (
                   <div>
                     <h2 className="text-lg font-bold text-gray-700 mb-3">Shipping Address</h2>
                     {addressLoading ? (
@@ -1081,7 +1074,7 @@ export default function CheckoutPage() {
                     <span>Subtotal:</span>
                     <span>${shownSubtotal.toFixed(2)}</span>
                   </div>
-                  {shippingMode !== "store_pickup" && !skipCheckoutFedexQuote && (
+                  {checkoutRequiresFedexQuote && (
                     <div className="rounded-md border border-gray-200 bg-gray-50 p-3 text-sm">
                       <div className="mb-2 flex items-center justify-between gap-2">
                         <span className="font-medium text-gray-700">Shipping Service</span>
@@ -1105,7 +1098,7 @@ export default function CheckoutPage() {
                         </select>
                       ) : (
                         <p className="text-xs text-gray-500">
-                          Enter a valid shipping address to get real-time FedEx services.
+                          Enter a valid shipping address to view available services.
                         </p>
                       )}
                     </div>
@@ -1115,7 +1108,7 @@ export default function CheckoutPage() {
                       <span>Shipping:</span>
                       <span className="font-medium text-right">
                         {shippingAmountPendingFedex ? (
-                          <span className="text-gray-500">Pending FedEx quote</span>
+                          <span className="text-xs font-normal text-amber-700">Pending</span>
                         ) : (
                           <span className="text-gray-900">${shownShipping.toFixed(2)}</span>
                         )}
@@ -1175,7 +1168,7 @@ export default function CheckoutPage() {
                     <button
                       type="button"
                       onClick={() => void handlePlaceOrder()}
-                      disabled={creating || !canProceedToPayment || needsFedexToProceed}
+                      disabled={creating || !canProceedToPayment || (checkoutRequiresFedexQuote && needsFedexToProceed)}
                       className="w-full bg-blue-500 hover:bg-blue-600 disabled:bg-blue-300 disabled:cursor-not-allowed text-white font-medium py-3 px-6 rounded-lg transition-colors"
                     >
                       {creating ? "Creating order…" : "Place Your Order"}

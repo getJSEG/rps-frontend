@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, Suspense, useRef } from "react";
+import { useState, useEffect, Suspense, useRef, useMemo } from "react";
 import { useSearchParams, useRouter, usePathname } from "next/navigation";
 import Image from "next/image";
 import Link from "next/link";
@@ -16,6 +16,7 @@ import {
   shippingRatesAPI,
   effectiveOrderShipping,
   buildFedexPackagesForProductConfigure,
+  hardwareFedexShippingFromProduct,
   type Tax,
   type FedexRateQuote,
   type FreeShippingPolicy,
@@ -30,6 +31,14 @@ const ONE_ARTWORK_PER_JOB_IMAGE = "/Oneartwokperjob.jpg";
 
 /** Logged-in only: restores ship-to when there is no default address row yet (e.g. right after checkout). */
 const PDP_SHIP_ESTIMATE_STORAGE_KEY = "rps_pdp_ship_estimate_v1";
+
+/** After dimensions/qty/address stop changing, fetch FedEx once (avoids many pending /fedex/rates). */
+const PDP_FEDEX_RATES_DEBOUNCE_MS = 350;
+
+function billableQtyFromFedexJobQtyKey(key: string): number {
+  if (!key.length) return 1;
+  return key.split("|").reduce((s, q) => s + Math.max(1, parseInt(q, 10) || 1), 0);
+}
 
 function readStoredPdpShipEstimate(): {
   streetAddress: string;
@@ -132,6 +141,11 @@ interface Product {
       is_default?: boolean;
     }>;
   }>;
+  hardware_template_id?: number | null;
+  shipping_length?: number | string | null;
+  shipping_width?: number | string | null;
+  shipping_height?: number | string | null;
+  shipping_weight?: number | string | null;
   purchase_options?: Array<{
     id: number;
     label: string;
@@ -339,6 +353,8 @@ function ProductDetailContent() {
   });
   const fetchedProductForRef = useRef<string | null>(null);
   const fetchedRelatedForRef = useRef<string | null>(null);
+  /** Bumped on FedEx effect cleanup so debounced/in-flight requests ignore stale results. */
+  const fedexRatesRunRef = useRef(0);
   const addJob = () => {
     setJobs((prev) => [...prev, { id: newProductJobRowId(), jobName: "", quantity: "1" }]);
   };
@@ -350,6 +366,9 @@ function ProductDetailContent() {
   const updateJob = (id: string, patch: Partial<Pick<ProductJobRow, "jobName" | "quantity">>) => {
     setJobs((prev) => prev.map((j) => (j.id === id ? { ...j, ...patch } : j)));
   };
+
+  /** Quantity signature only — jobName edits must not retrigger FedEx rates. */
+  const fedexJobQtyKey = jobs.map((j) => j.quantity).join("|");
 
   // Default pricing values (can be overridden by product data); DECIMAL often arrives as string.
   const pricePerSqFtNum = Number(product?.price_per_sqft);
@@ -381,6 +400,9 @@ function ProductDetailContent() {
     : false;
   /** True when no width/height input is needed (graphic scenario OR fixed-price purchase option) */
   const skipDimensionsForPrice = isGraphicScenario || (hasPurchaseOptions && activePurchaseOptionIsFixed);
+
+  /** FedEx physical box from admin `shipping_*` when product has a hardware template and all dims are set. */
+  const hardwareFedexShipping = useMemo(() => hardwareFedexShippingFromProduct(product), [product]);
 
   const activeModifierGroups = (Array.isArray(product?.modifier_groups) ? product.modifier_groups : []).filter(
     (group) => {
@@ -680,42 +702,53 @@ function ProductDetailContent() {
   ]);
 
   useEffect(() => {
+    const myRun = ++fedexRatesRunRef.current;
+    const debounceHolder: { timer?: ReturnType<typeof setTimeout> } = {};
+
+    const cleanup = () => {
+      fedexRatesRunRef.current += 1;
+      if (debounceHolder.timer !== undefined) clearTimeout(debounceHolder.timer);
+    };
+
     if (!isAuthenticated()) {
       setFedexRates([]);
       setSelectedFedexServiceType("");
       setFedexRatesError(null);
       setFedexRatesLoading(false);
-      return;
+      return cleanup;
     }
     if (missingRequiredModifiers.length > 0) {
       setFedexRates([]);
       setSelectedFedexServiceType("");
       setFedexRatesError(null);
-      return;
+      return cleanup;
     }
 
-    const wIn = previewPricing?.width ?? (parseFloat(width) || 0);
-    const hIn = previewPricing?.height ?? (parseFloat(height) || 0);
-    if (!skipDimensionsForPrice && (wIn <= 0 || hIn <= 0)) {
+    // Form dimensions only (same as price-preview). Do not depend on previewPricing
+    // or the effect reruns when preview returns and duplicates POST /fedex/rates.
+    const wIn = parseFloat(width) || 0;
+    const hIn = parseFloat(height) || 0;
+    const useHardwareFedexBox = hardwareFedexShipping != null;
+    if (!useHardwareFedexBox && !skipDimensionsForPrice && (wIn <= 0 || hIn <= 0)) {
       setFedexRates([]);
       setSelectedFedexServiceType("");
       setFedexRatesError(null);
-      return;
+      return cleanup;
     }
 
     const pc = String(estimateShipForm.postcode || "").trim();
     const countryRaw = String(estimateShipForm.country || "").trim();
     if (!pc || !countryRaw) {
       if (isAuthenticated() && !addressDefaultsLoaded) {
-        return;
+        return cleanup;
       }
       setFedexRates([]);
       setSelectedFedexServiceType("");
       setFedexRatesError(null);
-      return;
+      return cleanup;
     }
 
-    const billableQty = jobs.reduce((s, j) => s + Math.max(1, parseInt(j.quantity, 10) || 1), 0);
+    const billableQty = billableQtyFromFedexJobQtyKey(fedexJobQtyKey);
     const fedexStreetLines: string[] = [];
     const s1 = estimateShipForm.streetAddress.trim();
     const s2 = estimateShipForm.addressLine2.trim();
@@ -738,48 +771,48 @@ function ProductDetailContent() {
       widthInches: wIn,
       heightInches: hIn,
       isGraphicScenario,
+      hardwareShipping: hardwareFedexShipping,
     });
 
-    let cancelled = false;
-    void (async () => {
-      try {
-        setFedexRatesLoading(true);
-        setFedexRatesError(null);
-        const res = await fedexAPI.getRates(destination, packages);
-        if (cancelled) return;
-        const raw = Array.isArray(res?.rates) ? res.rates : [];
-        const list = [...raw].sort((a, b) => (Number(a.totalCharge) || 0) - (Number(b.totalCharge) || 0));
-        setFedexRates(list);
-        if (list.length > 0) {
-          setSelectedFedexServiceType((prev) => {
-            if (prev && list.some((r) => r.serviceType === prev)) return prev;
-            return list[0].serviceType;
-          });
-        } else {
+    debounceHolder.timer = setTimeout(() => {
+      if (fedexRatesRunRef.current !== myRun) return;
+      void (async () => {
+        try {
+          setFedexRatesLoading(true);
+          setFedexRatesError(null);
+          const res = await fedexAPI.getRates(destination, packages);
+          if (fedexRatesRunRef.current !== myRun) return;
+          const raw = Array.isArray(res?.rates) ? res.rates : [];
+          const list = [...raw].sort((a, b) => (Number(a.totalCharge) || 0) - (Number(b.totalCharge) || 0));
+          setFedexRates(list);
+          if (list.length > 0) {
+            setSelectedFedexServiceType((prev) => {
+              if (prev && list.some((r) => r.serviceType === prev)) return prev;
+              return list[0].serviceType;
+            });
+          } else {
+            setSelectedFedexServiceType("");
+          }
+        } catch (e) {
+          if (fedexRatesRunRef.current !== myRun) return;
+          setFedexRates([]);
           setSelectedFedexServiceType("");
+          setFedexRatesError(e instanceof Error ? e.message : "Could not load FedEx rates");
+        } finally {
+          setFedexRatesLoading(false);
         }
-      } catch (e) {
-        if (cancelled) return;
-        setFedexRates([]);
-        setSelectedFedexServiceType("");
-        setFedexRatesError(e instanceof Error ? e.message : "Could not load FedEx rates");
-      } finally {
-        if (!cancelled) setFedexRatesLoading(false);
-      }
-    })();
+      })();
+    }, PDP_FEDEX_RATES_DEBOUNCE_MS);
 
-    return () => {
-      cancelled = true;
-    };
+    return cleanup;
   }, [
     missingRequiredModifiers.length,
-    previewPricing?.width,
-    previewPricing?.height,
     width,
     height,
     skipDimensionsForPrice,
     isGraphicScenario,
-    jobs,
+    hardwareFedexShipping,
+    fedexJobQtyKey,
     estimateShipForm.postcode,
     estimateShipForm.country,
     estimateShipForm.state,
@@ -1124,6 +1157,19 @@ function ProductDetailContent() {
       const productImageForCart =
         getProductImageUrl(firstListingRaw ? String(firstListingRaw).trim() : "") || "";
 
+      const hardwareCartFields: Record<string, string | number> = {};
+      if (hardwareFedexShipping && product?.hardware_template_id != null) {
+        const hid = Number(product.hardware_template_id);
+        if (Number.isFinite(hid)) {
+          hardwareCartFields.hardware_template_id = hid;
+          hardwareCartFields.hardwareTemplateId = hid;
+          hardwareCartFields.shipping_length = hardwareFedexShipping.length;
+          hardwareCartFields.shipping_width = hardwareFedexShipping.width;
+          hardwareCartFields.shipping_height = hardwareFedexShipping.height;
+          hardwareCartFields.shipping_weight = hardwareFedexShipping.weightPerUnit;
+        }
+      }
+
       let loggedInFedexPayload: Record<string, unknown> = {};
       if (fedExValidatedQuoteAmount !== undefined && resolvedRateForCart) {
         const svc = String(resolvedRateForCart.serviceType ?? "").trim();
@@ -1151,6 +1197,7 @@ function ProductDetailContent() {
         width: widthInches,
         height: heightInches,
         areaSqFt: areaSqFt,
+        ...hardwareCartFields,
         purchase_option_key: hasPurchaseOptions ? (effectiveScopeKey ?? undefined) : undefined,
         selection_mode: (!hasPurchaseOptions && isGraphicScenario) ? selectedGraphicMode : undefined,
         jobs: jobsPayload,
@@ -1971,10 +2018,10 @@ function ProductDetailContent() {
                         ) : (
                           <p className="rounded-md border border-dashed border-gray-200 bg-gray-50 px-2 py-2 text-xs text-gray-500">
                             {fedexRatesLoading
-                              ? "Fetching rates…"
+                              ? "Fetching shipping services…"
                               : !shipToAddressReady
                                 ? "Enter postal code and country for Ship to to load FedEx services."
-                                : "No FedEx services available. Check address or dimensions."}
+                                : "Enter height and width to get shipping service."}
                           </p>
                         )}
                       </div>
@@ -1982,7 +2029,12 @@ function ProductDetailContent() {
                         <p className="mb-1 text-xs font-medium uppercase tracking-wide text-gray-400">Rate</p>
                         <p className="text-lg font-semibold tabular-nums text-gray-900">
                           {fedexRatesLoading && fedexRates.length === 0 ? (
-                            <span className="text-gray-500">…</span>
+                            <span className="ml-auto block w-20 pt-1" aria-hidden>
+                              <span className="sr-only">Fetching shipping services</span>
+                              <div className="pdp-fedex-rates-indeterminate-track">
+                                <div className="pdp-fedex-rates-indeterminate-bar" />
+                              </div>
+                            </span>
                           ) : selectedFedexRatePdp ? (
                             `$${Number(selectedFedexRatePdp.totalCharge).toFixed(2)}`
                           ) : (
@@ -1991,16 +2043,23 @@ function ProductDetailContent() {
                         </p>
                       </div>
                     </div>
-                    {fedexRatesLoading && fedexRates.length > 0 ? (
-                      <p className="mt-2 text-xs text-gray-500">Updating rates…</p>
+                    {fedexRatesLoading ? (
+                      <div
+                        className="pdp-fedex-rates-indeterminate-track mt-2"
+                        role="progressbar"
+                        aria-valuetext="Fetching shipping services"
+                        aria-busy="true"
+                      >
+                        <div className="pdp-fedex-rates-indeterminate-bar" />
+                      </div>
                     ) : null}
                   </div>
               </div>
               ) : (
                 <div className="rounded-md border border-dashed border-gray-300 bg-gray-50 p-4 text-sm leading-relaxed text-gray-600">
                   <p>
-                    You&apos;ll enter your full shipping address at checkout. Shipping cost and FedEx service options
-                    are calculated when you complete checkout with your delivery address.
+                    Please provide your full shipping address at checkout. Available shipping services will be
+                    calculated once your address is confirmed.
                   </p>
                 </div>
               )}
@@ -2017,7 +2076,12 @@ function ProductDetailContent() {
                 <span className="font-medium text-gray-900 tabular-nums text-right">
                   {isAuthenticated() ? (
                     fedexRatesLoading && fedexRates.length === 0 ? (
-                      <span className="text-gray-500">…</span>
+                      <span className="inline-block w-20 align-middle" aria-hidden>
+                        <span className="sr-only">Fetching shipping services</span>
+                        <div className="pdp-fedex-rates-indeterminate-track">
+                          <div className="pdp-fedex-rates-indeterminate-bar" />
+                        </div>
+                      </span>
                     ) : (
                       `$${effectiveShippingPdp.toFixed(2)}`
                     )
