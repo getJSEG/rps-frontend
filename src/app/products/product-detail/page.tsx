@@ -2090,16 +2090,6 @@ function ProductDetailContent() {
                         </p>
                       </div>
                     </div>
-                    {fedexRatesLoading ? (
-                      <div
-                        className="pdp-fedex-rates-indeterminate-track mt-2"
-                        role="progressbar"
-                        aria-valuetext="Fetching shipping services"
-                        aria-busy="true"
-                      >
-                        <div className="pdp-fedex-rates-indeterminate-bar" />
-                      </div>
-                    ) : null}
                   </div>
               </div>
               ) : (

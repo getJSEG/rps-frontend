@@ -1143,7 +1143,14 @@ export default function CheckoutPage() {
                     <div className="rounded-md border border-gray-200 bg-gray-50 p-3 text-sm">
                       <div className="mb-2 flex items-center justify-between gap-2">
                         <span className="font-medium text-gray-700">Shipping Service</span>
-                        {fedexRatesLoading ? <span className="text-xs text-gray-500">Loading…</span> : null}
+                        {fedexRatesLoading ? (
+                          <span className="w-20 shrink-0" aria-hidden>
+                            <span className="sr-only">Loading shipping services</span>
+                            <div className="pdp-fedex-rates-indeterminate-track">
+                              <div className="pdp-fedex-rates-indeterminate-bar" />
+                            </div>
+                          </span>
+                        ) : null}
                       </div>
                       {fedexRatesError ? (
                         <p className="mb-2 text-xs text-rose-600">{fedexRatesError}</p>
