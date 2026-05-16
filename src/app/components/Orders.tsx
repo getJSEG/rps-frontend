@@ -104,6 +104,7 @@ type OrderRow = {
   billing_country?: string | null;
   shipping_method?: string | null;
   shipping_charge?: number | string | null;
+  shipping_estimated_delivery?: string | null;
   shipping_mode?: string | null;
   subtotal_amount?: number | string | null;
   tax_name?: string | null;
@@ -828,6 +829,12 @@ export default function Orders() {
                             </p>
                           </div>
                         )}
+                        {order.shipping_estimated_delivery?.trim() ? (
+                          <div>
+                            <span className="text-gray-500">Estimated delivery</span>
+                            <p className="font-medium text-gray-900">{order.shipping_estimated_delivery}</p>
+                          </div>
+                        ) : null}
                         <div>
                           <span className="text-gray-500">Order ID</span>
                           <p className="font-medium text-gray-900">{order.id}</p>

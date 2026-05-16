@@ -71,6 +71,7 @@ type GuestOrder = {
   total_amount?: number | string | null;
   subtotal_amount?: number | string | null;
   shipping_charge?: number | string | null;
+  shipping_estimated_delivery?: string | null;
   tax_amount?: number | string | null;
   tax_percentage?: number | string | null;
   tax_name?: string | null;
@@ -372,6 +373,12 @@ function GuestOrderTrackInner() {
                       </a>
                     </div>
                   )}
+                {order.shipping_estimated_delivery?.trim() ? (
+                  <div>
+                    <p className="text-gray-500">Estimated delivery</p>
+                    <p className="font-medium text-gray-900">{order.shipping_estimated_delivery}</p>
+                  </div>
+                ) : null}
                 {String(order.carrier || "").toLowerCase() === "fedex" &&
                   order.order_tracking_id?.trim() &&
                   !!(order.shipment_status?.trim() || order.shipment_last_event) && (

@@ -1004,12 +1004,6 @@ export default function OrderDetails() {
                         <p className="font-mono text-sm">{order.carrier_service_type?.trim() || "—"}</p>
                       )}
                     </div>
-                    {order.shipping_estimated_delivery?.trim() ? (
-                      <div>
-                        <span className="text-xs text-slate-500">Est. delivery (at checkout)</span>
-                        <p className="text-sm">{order.shipping_estimated_delivery}</p>
-                      </div>
-                    ) : null}
                   </div>
                   {order.order_tracking_id?.trim() ? (
                     <a
@@ -1022,6 +1016,28 @@ export default function OrderDetails() {
                     </a>
                   ) : null}
                 </div>
+                {order.shipping_estimated_delivery?.trim() || fedexLabelAbs ? (
+                  <div className="flex flex-wrap items-end justify-between gap-x-6 gap-y-2">
+                    {order.shipping_estimated_delivery?.trim() ? (
+                      <div>
+                        <p className="text-xs text-slate-500">Est. delivery (at checkout)</p>
+                        <p className="font-mono text-sm text-slate-900">{order.shipping_estimated_delivery}</p>
+                      </div>
+                    ) : (
+                      <span />
+                    )}
+                    {fedexLabelAbs ? (
+                      <a
+                        href={fedexLabelAbs}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="shrink-0 text-sm font-semibold text-sky-700 hover:underline"
+                      >
+                        Download label (PDF)
+                      </a>
+                    ) : null}
+                  </div>
+                ) : null}
                 {order.shipment_status?.trim() ? (
                   <div>
                     <span className="text-xs text-slate-500">Carrier status</span>
@@ -1037,33 +1053,14 @@ export default function OrderDetails() {
                   </div>
                 ) : null}
                 {order.order_tracking_id?.trim() ? (
-                  <div className="flex flex-wrap items-center justify-between gap-4">
+                  <div>
                     <div className="min-w-0 flex-1">
                       <span className="text-xs text-slate-500">Tracking</span>
                       <p className="mt-0.5 break-all font-mono text-sm">{order.order_tracking_id}</p>
                     </div>
-                    {fedexLabelAbs ? (
-                      <a
-                        href={fedexLabelAbs}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="shrink-0 text-sm font-semibold text-sky-700 hover:underline"
-                      >
-                        Download label (PDF)
-                      </a>
-                    ) : null}
                   </div>
                 ) : fedexLabelAbs ? (
-                  <div className="flex justify-end">
-                    <a
-                      href={fedexLabelAbs}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="text-sm font-semibold text-sky-700 hover:underline"
-                    >
-                      Download label (PDF)
-                    </a>
-                  </div>
+                  null
                 ) : null}
                 <div className="flex flex-wrap gap-2 pt-1">
                   {fedexServiceMissing && !(order.fedex_shipment_id || "").trim() ? (
@@ -1295,6 +1292,7 @@ export default function OrderDetails() {
               <DetailCell label="Total amount" value={`$${formatMoney(order.total_amount)}`} />
               <DetailCell label="Subtotal" value={`$${formatMoney(order.subtotal_amount ?? linesSubtotal)}`} />
               <DetailCell label="Shipping service" value={dash(order.shipping_method)} />
+              <DetailCell label="Estimated delivery" value={dash(order.shipping_estimated_delivery)} />
               <DetailCell label="Shipping charge" value={`$${formatMoney(shipStored)}`} />
               <DetailCell
                 label="Tax"
