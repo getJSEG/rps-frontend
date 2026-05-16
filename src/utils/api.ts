@@ -425,6 +425,11 @@ export type HardwareFedexShipping = {
   weightPerUnit: number;
 };
 
+export type ProductFedexShipping = {
+  length: number | null;
+  weightPerUnit: number | null;
+};
+
 function parsePositiveProductNumber(value: unknown): number | null {
   if (value == null || value === "") return null;
   const n = typeof value === "number" ? value : parseFloat(String(value).trim());
@@ -456,6 +461,19 @@ export function hardwareFedexShippingFromProduct(product: {
   return { length, width, height, weightPerUnit };
 }
 
+export function productFedexShippingFromProduct(product: {
+  length?: unknown;
+  weight?: unknown;
+  shipping_length?: unknown;
+  shipping_weight?: unknown;
+} | null | undefined): ProductFedexShipping {
+  if (!product) return { length: null, weightPerUnit: null };
+  return {
+    length: parsePositiveProductNumber(product.length ?? product.shipping_length),
+    weightPerUnit: parsePositiveProductNumber(product.weight ?? product.shipping_weight),
+  };
+}
+
 function isShippableFedexCartLine(item: Record<string, unknown>): boolean {
   const mode = String(item.shippingMode ?? item.shipping_mode ?? "").trim().toLowerCase();
   if (mode === "store_pickup" || mode === "store-pickup" || mode === "store pickup") return false;
@@ -475,36 +493,6 @@ function billableQtyFromCartLikeItem(item: {
     return jobs.reduce((sum, j) => sum + Math.max(1, Number(j.quantity) || 1), 0);
   }
   return Math.max(1, Number(item?.quantity) || 1);
-}
-
-function isGraphicScenarioCartLikeItem(item: {
-  selection_mode?: string;
-  selectionMode?: string;
-  graphic_scenario_enabled?: boolean;
-  graphicScenarioEnabled?: boolean;
-  pricing_snapshot?: {
-    selection_mode?: string;
-    selectionMode?: string;
-    graphic_scenario_enabled?: boolean;
-    graphicScenarioEnabled?: boolean;
-  };
-}): boolean {
-  const selectionMode = String(
-    item.selection_mode ??
-      item.selectionMode ??
-      item.pricing_snapshot?.selection_mode ??
-      item.pricing_snapshot?.selectionMode ??
-      ""
-  ).trim();
-  if (selectionMode === "graphic_only" || selectionMode === "graphic_frame") {
-    return true;
-  }
-  return (
-    item.graphic_scenario_enabled === true ||
-    item.graphicScenarioEnabled === true ||
-    item.pricing_snapshot?.graphic_scenario_enabled === true ||
-    item.pricing_snapshot?.graphicScenarioEnabled === true
-  );
 }
 
 function hardwareFedexShippingFromCartLikeItem(item: {
@@ -586,18 +574,15 @@ export function buildFedexPackagesFromShippableCartItems(
       maxWid = Math.max(maxWid, Math.ceil(hw.width));
       maxHt = Math.max(maxHt, Math.ceil(hw.height));
       sumWeight += hw.weightPerUnit * qty;
-    } else if (isGraphicScenarioCartLikeItem(item)) {
-      maxLen = Math.max(maxLen, 12);
-      maxWid = Math.max(maxWid, 10);
-      maxHt = Math.max(maxHt, 6);
-      sumWeight += qty;
     } else {
       const w = Number(item.width ?? item.width_inches) || 0;
       const h = Number(item.height ?? item.height_inches) || 0;
-      maxLen = Math.max(maxLen, w > 0 ? Math.max(1, Math.ceil(w)) : 0);
-      maxWid = Math.max(maxWid, h > 0 ? Math.max(1, Math.ceil(h)) : 0);
-      maxHt = Math.max(maxHt, 6);
-      sumWeight += qty;
+      const storedLength = parsePositiveProductNumber(item.shipping_length ?? item.shippingLength);
+      const storedWeight = parsePositiveProductNumber(item.shipping_weight ?? item.shippingWeight);
+      maxLen = Math.max(maxLen, storedLength != null ? Math.ceil(storedLength) : 12);
+      maxWid = Math.max(maxWid, w > 0 ? Math.max(1, Math.ceil(w)) : 10);
+      maxHt = Math.max(maxHt, h > 0 ? Math.max(1, Math.ceil(h)) : 6);
+      sumWeight += (storedWeight != null ? storedWeight : 1) * qty;
     }
   }
 
@@ -713,7 +698,8 @@ export function fedexEstimatedDeliveryFromCart(items: CartLineShippingInput[]): 
 
 /**
  * One package for FedEx rating on the product page (same rules as checkout cart merge).
- * Hardware: `shipping_*` from product DB. Otherwise UI width → package `length`, UI height → package `width`; depth 6 unless hardware height is used.
+ * Hardware: all `shipping_*` from product DB.
+ * Standard products: product length/weight + customer-entered width/height.
  */
 export function buildFedexPackagesForProductConfigure(options: {
   billableQty: number;
@@ -721,8 +707,9 @@ export function buildFedexPackagesForProductConfigure(options: {
   heightInches: number;
   isGraphicScenario: boolean;
   hardwareShipping?: HardwareFedexShipping | null;
+  productShipping?: ProductFedexShipping | null;
 }): Array<{ weight: number; length: number; width: number; height: number }> {
-  const { billableQty, widthInches, heightInches, isGraphicScenario, hardwareShipping } = options;
+  const { billableQty, widthInches, heightInches, hardwareShipping, productShipping } = options;
   const totalQty = Math.max(1, billableQty);
 
   if (hardwareShipping) {
@@ -737,19 +724,16 @@ export function buildFedexPackagesForProductConfigure(options: {
     ];
   }
 
-  let lengthIn: number;
-  let widthIn: number;
-  if (isGraphicScenario) {
-    lengthIn = 12;
-    widthIn = 10;
-  } else {
-    const w = widthInches || 0;
-    const h = heightInches || 0;
-    lengthIn = w > 0 ? Math.max(1, Math.ceil(w)) : 12;
-    widthIn = h > 0 ? Math.max(1, Math.ceil(h)) : 10;
-  }
+  const w = widthInches || 0;
+  const h = heightInches || 0;
+  const productLength = productShipping?.length ?? null;
+  const productWeight = productShipping?.weightPerUnit ?? null;
+  const lengthIn = productLength != null ? Math.max(1, Math.ceil(productLength)) : 12;
+  const widthIn = w > 0 ? Math.max(1, Math.ceil(w)) : 10;
+  const heightIn = h > 0 ? Math.max(1, Math.ceil(h)) : 6;
+  const weight = productWeight != null ? Math.round(productWeight * totalQty * 100) / 100 : totalQty;
 
-  return [{ weight: totalQty, length: lengthIn, width: widthIn, height: 6 }];
+  return [{ weight: Math.max(1, weight), length: lengthIn, width: widthIn, height: heightIn }];
 }
 
 /** Sum of list shipping if each line were charged separately (non-pickup lines only). */
@@ -990,6 +974,7 @@ async function apiCall(endpoint: string, options: RequestInit = {}) {
       
       return data;
     } catch (error: any) {
+      if (error?.name === 'AbortError') throw error;
       const isNetworkError =
         error?.message?.includes('Failed to fetch') ||
         error?.name === 'TypeError' ||
@@ -1669,10 +1654,12 @@ export const fedexAPI = {
       streetLine?: string;
       streetAddress?: string;
     },
-    packages: Array<{ weight: number; length?: number; width?: number; height?: number }>
+    packages: Array<{ weight: number; length?: number; width?: number; height?: number }>,
+    options?: { signal?: AbortSignal }
   ): Promise<{ rates: FedexRateQuote[] }> => {
     return apiCall('/fedex/rates', {
       method: 'POST',
+      signal: options?.signal,
       body: JSON.stringify({ destination, packages }),
     });
   },
@@ -1706,4 +1693,3 @@ export const fedexAPI = {
 };
 
 export default apiCall;
-

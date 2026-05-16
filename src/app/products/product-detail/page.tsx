@@ -17,6 +17,7 @@ import {
   effectiveOrderShipping,
   buildFedexPackagesForProductConfigure,
   hardwareFedexShippingFromProduct,
+  productFedexShippingFromProduct,
   type FedexRateQuote,
   type FreeShippingPolicy,
   type TaxEstimateResponse,
@@ -32,8 +33,8 @@ const ONE_ARTWORK_PER_JOB_IMAGE = "/Oneartwokperjob.jpg";
 /** Logged-in only: restores ship-to when there is no default address row yet (e.g. right after checkout). */
 const PDP_SHIP_ESTIMATE_STORAGE_KEY = "rps_pdp_ship_estimate_v1";
 
-/** After dimensions/qty/address stop changing, fetch FedEx once (avoids many pending /fedex/rates). */
-const PDP_FEDEX_RATES_DEBOUNCE_MS = 350;
+/** Wait until dimensions/qty/address settle before fetching FedEx rates. */
+const PDP_FEDEX_RATES_DEBOUNCE_MS = 900;
 const PDP_TAX_ESTIMATE_DEBOUNCE_MS = 350;
 
 function billableQtyFromFedexJobQtyKey(key: string): number {
@@ -143,6 +144,8 @@ interface Product {
     }>;
   }>;
   hardware_template_id?: number | null;
+  weight?: number | string | null;
+  length?: number | string | null;
   shipping_length?: number | string | null;
   shipping_width?: number | string | null;
   shipping_height?: number | string | null;
@@ -406,6 +409,8 @@ function ProductDetailContent() {
 
   /** FedEx physical box from admin `shipping_*` when product has a hardware template and all dims are set. */
   const hardwareFedexShipping = useMemo(() => hardwareFedexShippingFromProduct(product), [product]);
+  /** Standard product FedEx length/weight from product admin; width/height still come from customer input. */
+  const productFedexShipping = useMemo(() => productFedexShippingFromProduct(product), [product]);
 
   const activeModifierGroups = (Array.isArray(product?.modifier_groups) ? product.modifier_groups : []).filter(
     (group) => {
@@ -693,9 +698,11 @@ function ProductDetailContent() {
     const myRun = ++fedexRatesRunRef.current;
     const debounceHolder: { timer?: ReturnType<typeof setTimeout> } = {};
 
+    let abortController: AbortController | null = null;
     const cleanup = () => {
       fedexRatesRunRef.current += 1;
       if (debounceHolder.timer !== undefined) clearTimeout(debounceHolder.timer);
+      abortController?.abort();
     };
 
     if (!isAuthenticated()) {
@@ -760,15 +767,17 @@ function ProductDetailContent() {
       heightInches: hIn,
       isGraphicScenario,
       hardwareShipping: hardwareFedexShipping,
+      productShipping: productFedexShipping,
     });
 
     debounceHolder.timer = setTimeout(() => {
       if (fedexRatesRunRef.current !== myRun) return;
+      abortController = new AbortController();
       void (async () => {
         try {
           setFedexRatesLoading(true);
           setFedexRatesError(null);
-          const res = await fedexAPI.getRates(destination, packages);
+          const res = await fedexAPI.getRates(destination, packages, { signal: abortController.signal });
           if (fedexRatesRunRef.current !== myRun) return;
           const raw = Array.isArray(res?.rates) ? res.rates : [];
           const list = [...raw].sort((a, b) => (Number(a.totalCharge) || 0) - (Number(b.totalCharge) || 0));
@@ -782,12 +791,15 @@ function ProductDetailContent() {
             setSelectedFedexServiceType("");
           }
         } catch (e) {
+          if (e instanceof DOMException && e.name === "AbortError") return;
           if (fedexRatesRunRef.current !== myRun) return;
           setFedexRates([]);
           setSelectedFedexServiceType("");
           setFedexRatesError(e instanceof Error ? e.message : "Could not load FedEx rates");
         } finally {
-          setFedexRatesLoading(false);
+          if (fedexRatesRunRef.current === myRun && !abortController?.signal.aborted) {
+            setFedexRatesLoading(false);
+          }
         }
       })();
     }, PDP_FEDEX_RATES_DEBOUNCE_MS);
@@ -800,6 +812,7 @@ function ProductDetailContent() {
     skipDimensionsForPrice,
     isGraphicScenario,
     hardwareFedexShipping,
+    productFedexShipping,
     fedexJobQtyKey,
     estimateShipForm.postcode,
     estimateShipForm.country,
@@ -1205,6 +1218,15 @@ function ProductDetailContent() {
           hardwareCartFields.shipping_width = hardwareFedexShipping.width;
           hardwareCartFields.shipping_height = hardwareFedexShipping.height;
           hardwareCartFields.shipping_weight = hardwareFedexShipping.weightPerUnit;
+        }
+      } else {
+        if (productFedexShipping.length != null) {
+          hardwareCartFields.shipping_length = productFedexShipping.length;
+          hardwareCartFields.shippingLength = productFedexShipping.length;
+        }
+        if (productFedexShipping.weightPerUnit != null) {
+          hardwareCartFields.shipping_weight = productFedexShipping.weightPerUnit;
+          hardwareCartFields.shippingWeight = productFedexShipping.weightPerUnit;
         }
       }
 
