@@ -55,6 +55,10 @@ function mapEmployeeApiError(message: string): { fields?: FieldErrors; form?: st
   return { form: m };
 }
 
+function errorMessage(error: unknown, fallback: string): string {
+  return error instanceof Error ? error.message : fallback;
+}
+
 const getImageSrc = (path: string | null | undefined): string => {
   if (!path || typeof path !== "string") return "";
   const p = path.trim();
@@ -95,6 +99,11 @@ export default function EmployeesPage() {
   const [addFormError, setAddFormError] = useState<string | null>(null);
   const [editFieldErrors, setEditFieldErrors] = useState<FieldErrors>({});
   const [editFormError, setEditFormError] = useState<string | null>(null);
+  const [page, setPage] = useState(1);
+  const pageSize = 10;
+  const totalPages = Math.max(1, Math.ceil(employees.length / pageSize));
+  const currentPage = Math.min(page, totalPages);
+  const pagedEmployees = employees.slice((currentPage - 1) * pageSize, currentPage * pageSize);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -113,9 +122,11 @@ export default function EmployeesPage() {
       setLoading(true);
       setError(null);
       const res = await employeesAPI.getAll();
-      setEmployees(res.employees || []);
-    } catch (e: any) {
-      setError(e?.message || "Failed to load employees");
+      const nextEmployees = res.employees || [];
+      setEmployees(nextEmployees);
+      setPage((current) => Math.min(current, Math.max(1, Math.ceil(nextEmployees.length / pageSize))));
+    } catch (e: unknown) {
+      setError(errorMessage(e, "Failed to load employees"));
       setEmployees([]);
     } finally {
       setLoading(false);
@@ -196,8 +207,8 @@ export default function EmployeesPage() {
       setMessage({ type: "success", text: "Employee added successfully." });
       closeAddModal();
       fetchEmployees();
-    } catch (err: any) {
-      const raw = err?.message || "Failed to add employee.";
+    } catch (err: unknown) {
+      const raw = errorMessage(err, "Failed to add employee.");
       const mapped = mapEmployeeApiError(typeof raw === "string" ? raw : String(raw));
       setAddFieldErrors(mapped.fields || {});
       setAddFormError(mapped.form ?? null);
@@ -228,7 +239,7 @@ export default function EmployeesPage() {
     setSubmitting(true);
     setMessage(null);
     try {
-      const payload: any = {
+      const payload: Record<string, unknown> = {
         full_name: editForm.full_name.trim(),
         email: editForm.email.trim(),
         telephone: editForm.telephone.trim() || undefined,
@@ -246,8 +257,8 @@ export default function EmployeesPage() {
       setEditFieldErrors({});
       setEditFormError(null);
       fetchEmployees();
-    } catch (err: any) {
-      const raw = err?.message || "Failed to update employee.";
+    } catch (err: unknown) {
+      const raw = errorMessage(err, "Failed to update employee.");
       const mapped = mapEmployeeApiError(typeof raw === "string" ? raw : String(raw));
       setEditFieldErrors(mapped.fields || {});
       setEditFormError(mapped.form ?? null);
@@ -266,8 +277,8 @@ export default function EmployeesPage() {
       setShowDeleteConfirm(false);
       setSelectedEmployee(null);
       fetchEmployees();
-    } catch (err: any) {
-      setMessage({ type: "error", text: err?.message || "Failed to delete employee." });
+    } catch (err: unknown) {
+      setMessage({ type: "error", text: errorMessage(err, "Failed to delete employee.") });
     } finally {
       setSubmitting(false);
     }
@@ -337,7 +348,7 @@ export default function EmployeesPage() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 text-sm">
-                {employees.map((emp) => (
+                {pagedEmployees.map((emp) => (
                   <tr
                     key={emp.id}
                     className="cursor-pointer transition-colors hover:bg-slate-50/90"
@@ -434,6 +445,35 @@ export default function EmployeesPage() {
               </table>
             )}
         </div>
+        {!loading && !error && employees.length > 0 ? (
+          <div className="flex flex-wrap items-center justify-between gap-3 border-t border-slate-100 px-5 py-4 sm:px-6">
+            <p className="text-xs text-slate-500">
+              Showing {(currentPage - 1) * pageSize + 1}-{Math.min(currentPage * pageSize, employees.length)} of{" "}
+              {employees.length}
+            </p>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                disabled={currentPage === 1}
+                onClick={() => setPage((p) => Math.max(1, p - 1))}
+                className="rounded-md border border-slate-300 px-3 py-1.5 text-xs font-medium text-slate-700 disabled:cursor-not-allowed disabled:opacity-40"
+              >
+                Previous
+              </button>
+              <span className="text-xs font-medium text-slate-600">
+                Page {currentPage} of {totalPages}
+              </span>
+              <button
+                type="button"
+                disabled={currentPage === totalPages}
+                onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+                className="rounded-md border border-slate-300 px-3 py-1.5 text-xs font-medium text-slate-700 disabled:cursor-not-allowed disabled:opacity-40"
+              >
+                Next
+              </button>
+            </div>
+          </div>
+        ) : null}
       </div>
 
       {/* Add Modal */}
@@ -567,8 +607,8 @@ export default function EmployeesPage() {
                     try {
                       const { url } = await employeesAPI.uploadImage(file);
                       setAddForm((f) => ({ ...f, profile_image: url }));
-                    } catch (err: any) {
-                      setAddFormError(err?.message || "Image upload failed");
+                    } catch (err: unknown) {
+                      setAddFormError(errorMessage(err, "Image upload failed"));
                     } finally {
                       setUploadingImage(false);
                       e.target.value = "";
@@ -714,8 +754,8 @@ export default function EmployeesPage() {
                     try {
                       const { url } = await employeesAPI.uploadImage(file);
                       setEditForm((f) => ({ ...f, profile_image: url }));
-                    } catch (err: any) {
-                      setEditFormError(err?.message || "Image upload failed");
+                    } catch (err: unknown) {
+                      setEditFormError(errorMessage(err, "Image upload failed"));
                     } finally {
                       setUploadingImage(false);
                       e.target.value = "";

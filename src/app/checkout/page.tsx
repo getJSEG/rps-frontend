@@ -18,6 +18,8 @@ import {
   mergedShippingFromCartItems,
   cartShippableLinesAllFedexQuoted,
   fedexEstimatedDeliveryFromCart,
+  fedexDeliveryEstimateWithProduction,
+  maxProductionTimeBusinessDays,
   buildFedexPackagesFromShippableCartItems,
   type FedexRateQuote,
   type ShippingMethod,
@@ -74,11 +76,15 @@ interface CartItem {
   selectionMode?: string;
   graphic_scenario_enabled?: boolean;
   graphicScenarioEnabled?: boolean;
+  productionTime?: unknown;
+  production_time?: unknown;
   pricing_snapshot?: {
     selection_mode?: string;
     selectionMode?: string;
     graphic_scenario_enabled?: boolean;
     graphicScenarioEnabled?: boolean;
+    productionTime?: unknown;
+    production_time?: unknown;
   };
   jobs?: Array<{ jobName?: string; quantity?: number; unitPrice?: number; lineSubtotal?: number }>;
   [key: string]: unknown;
@@ -198,6 +204,7 @@ export default function CheckoutPage() {
   const [guestTaxEstimate, setGuestTaxEstimate] = useState<TaxEstimateResponse | null>(null);
   const [guestTaxLoading, setGuestTaxLoading] = useState(false);
   const [guestTaxError, setGuestTaxError] = useState<string | null>(null);
+  const lastFedexQuoteKeyRef = useRef("");
   const loadCartFromApi = useCallback(async () => {
     const { items, summary } = await fetchCartItemsAndSummary();
     setCartItems(items);
@@ -433,8 +440,14 @@ export default function CheckoutPage() {
     ? Number(guestTaxEstimate?.tax ?? 0)
     : roundMoney2((shownSubtotal + shownShipping) * (shownTaxPercentage / 100));
   const shownTotal = roundMoney2(shownSubtotal + shownShipping + shownTax);
+  const checkoutProductionTimeDays = maxProductionTimeBusinessDays(
+    cartItems as unknown as Array<Record<string, unknown>>
+  );
   const shownFedexEta = checkoutRequiresFedexQuote
-    ? selectedFedexRate?.estimatedDelivery || null
+    ? fedexDeliveryEstimateWithProduction(
+        selectedFedexRate,
+        checkoutProductionTimeDays
+      )
     : fedexEstimatedDeliveryFromCart(cartItems);
 
   const canProceedToPayment = loggedInCheckout ? !!billingAddress : guestCheckoutReady && guestBillingSaved;
@@ -487,6 +500,7 @@ export default function CheckoutPage() {
 
   useEffect(() => {
     const resetFedexQuoteState = () => {
+      lastFedexQuoteKeyRef.current = "";
       setFedexRates([]);
       setSelectedFedexServiceType("");
       setFedexRatesError(null);
@@ -529,9 +543,14 @@ export default function CheckoutPage() {
       ...(fedexStreetLines.length > 0 ? { streetLines: fedexStreetLines } : {}),
     };
 
-        const packages = buildFedexPackagesFromShippableCartItems(
-          cartItems as unknown as Array<Record<string, unknown>>
-        );
+    const packages = buildFedexPackagesFromShippableCartItems(
+      cartItems as unknown as Array<Record<string, unknown>>
+    );
+    const quoteKey = JSON.stringify({ destination, packages });
+    if (lastFedexQuoteKeyRef.current === quoteKey && fedexRates.length > 0) {
+      return;
+    }
+    lastFedexQuoteKeyRef.current = quoteKey;
 
     let cancelled = false;
     (async () => {
@@ -553,6 +572,7 @@ export default function CheckoutPage() {
         }
       } catch (e) {
         if (cancelled) return;
+        lastFedexQuoteKeyRef.current = "";
         setFedexRates([]);
         setSelectedFedexServiceType("");
         setFedexRatesError(e instanceof Error ? e.message : "Could not load FedEx rates");
@@ -579,6 +599,7 @@ export default function CheckoutPage() {
     destinationForFedex?.city,
     fedexDepShipStreet,
     fedexDepShipLine2,
+    fedexRates.length,
   ]);
 
   useEffect(() => {
@@ -660,6 +681,10 @@ export default function CheckoutPage() {
     setError(null);
     try {
       if (checkoutRequiresFedexQuote && selectedFedexRate) {
+        const selectedFedexDeliveryEstimate = fedexDeliveryEstimateWithProduction(
+          selectedFedexRate,
+          checkoutProductionTimeDays
+        );
         const updates = cartItems
           .filter((item) => String(item.shippingMode || "").toLowerCase() !== "store_pickup")
           .map((item) =>
@@ -669,12 +694,11 @@ export default function CheckoutPage() {
               shippingRateServiceName: selectedFedexRate.serviceName,
               shippingRateAmount: Number(selectedFedexRate.totalCharge) || 0,
               shippingRateCurrency: selectedFedexRate.currency || "USD",
-              shippingRateEstimatedDelivery: selectedFedexRate.estimatedDelivery || null,
+              shippingRateEstimatedDelivery: selectedFedexDeliveryEstimate,
             })
-          );
+        );
         if (updates.length > 0) {
           await Promise.all(updates);
-          await loadCartFromApi();
         }
       }
 
@@ -1163,8 +1187,7 @@ export default function CheckoutPage() {
                         >
                           {fedexRates.map((r) => (
                             <option key={r.serviceType} value={r.serviceType}>
-                              {r.serviceName} — ${Number(r.totalCharge).toFixed(2)}
-                              {r.estimatedDelivery ? ` — ETA: ${r.estimatedDelivery}` : ""}
+                              {r.serviceName}
                             </option>
                           ))}
                         </select>
@@ -1175,6 +1198,12 @@ export default function CheckoutPage() {
                             : "Enter a valid shipping address to view available services."}
                         </p>
                       )}
+                      {shownFedexEta ? (
+                        <div className="mt-4 border-t border-gray-200 pt-3 text-sm text-gray-800">
+                          <span className="font-medium text-gray-700">Estimate Delivery:</span>{" "}
+                          <span className="font-semibold text-gray-900">{shownFedexEta}</span>
+                        </div>
+                      ) : null}
                     </div>
                   )}
                   {shippingMode !== "store_pickup" && (
@@ -1189,12 +1218,6 @@ export default function CheckoutPage() {
                       </span>
                     </div>
                   )}
-                  {shippingMode !== "store_pickup" && shownFedexEta ? (
-                    <div className="flex justify-between text-gray-700">
-                      <span>Estimated delivery:</span>
-                      <span>{shownFedexEta}</span>
-                    </div>
-                  ) : null}
                   <div className="flex justify-between text-gray-700">
                     <span>Tax ({shownTaxPercentage.toFixed(2)}%):</span>
                     <span>

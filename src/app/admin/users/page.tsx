@@ -23,6 +23,8 @@ export default function UsersPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
+  const [page, setPage] = useState(1);
+  const pageSize = 10;
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -43,8 +45,8 @@ export default function UsersPage() {
         setError(null);
         const res = await usersAPI.getAllAdmin();
         setUsers(Array.isArray(res?.users) ? res.users : []);
-      } catch (e: any) {
-        setError(e?.message || "Failed to load users");
+      } catch (e: unknown) {
+        setError(e instanceof Error ? e.message : "Failed to load users");
         setUsers([]);
       } finally {
         setLoading(false);
@@ -66,6 +68,14 @@ export default function UsersPage() {
       );
     });
   }, [users, searchQuery]);
+
+  useEffect(() => {
+    setPage(1);
+  }, [searchQuery]);
+
+  const totalPages = Math.max(1, Math.ceil(filteredUsers.length / pageSize));
+  const currentPage = Math.min(page, totalPages);
+  const pagedUsers = filteredUsers.slice((currentPage - 1) * pageSize, currentPage * pageSize);
 
   const formatDate = (date: string) => {
     if (!date) return "—";
@@ -114,9 +124,11 @@ export default function UsersPage() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 text-sm">
-                {filteredUsers.map((user, index) => (
+                {pagedUsers.map((user, index) => (
                   <tr key={user.id} className="transition-colors hover:bg-slate-50/90">
-                    <td className="whitespace-nowrap px-4 py-4 text-slate-500 sm:px-6">{index + 1}</td>
+                    <td className="whitespace-nowrap px-4 py-4 text-slate-500 sm:px-6">
+                      {(currentPage - 1) * pageSize + index + 1}
+                    </td>
                     <td className="whitespace-nowrap px-4 py-4 font-medium text-slate-900 sm:px-6">
                       {user.full_name || "—"}
                     </td>
@@ -147,8 +159,36 @@ export default function UsersPage() {
             </table>
           )}
         </div>
+        {!loading && !error && filteredUsers.length > 0 ? (
+          <div className="flex flex-wrap items-center justify-between gap-3 border-t border-slate-100 px-5 py-4 sm:px-6">
+            <p className="text-xs text-slate-500">
+              Showing {(currentPage - 1) * pageSize + 1}-{Math.min(currentPage * pageSize, filteredUsers.length)} of{" "}
+              {filteredUsers.length}
+            </p>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                disabled={currentPage === 1}
+                onClick={() => setPage((p) => Math.max(1, p - 1))}
+                className="rounded-md border border-slate-300 px-3 py-1.5 text-xs font-medium text-slate-700 disabled:cursor-not-allowed disabled:opacity-40"
+              >
+                Previous
+              </button>
+              <span className="text-xs font-medium text-slate-600">
+                Page {currentPage} of {totalPages}
+              </span>
+              <button
+                type="button"
+                disabled={currentPage === totalPages}
+                onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+                className="rounded-md border border-slate-300 px-3 py-1.5 text-xs font-medium text-slate-700 disabled:cursor-not-allowed disabled:opacity-40"
+              >
+                Next
+              </button>
+            </div>
+          </div>
+        ) : null}
       </div>
     </AdminNavbar>
   );
 }
-

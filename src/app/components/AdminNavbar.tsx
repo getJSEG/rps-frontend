@@ -56,6 +56,11 @@ const navItems = [
     match: (p: string) => p === "/admin/shipping-rates" || p.startsWith("/admin/shipping-rates"),
   },
   {
+    href: "/admin/store-addresses",
+    label: "Store Addresses",
+    match: (p: string) => p === "/admin/store-addresses" || p.startsWith("/admin/store-addresses"),
+  },
+  {
     href: "/admin/employees",
     label: "Employees",
     match: (p: string) => p === "/admin/employees" || p.startsWith("/admin/employees"),
@@ -166,6 +171,11 @@ export default function AdminNavbar({
                   {label === "Rates" && (
                     <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                  )}
+                  {label === "Store Addresses" && (
+                    <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 21h18M5 21V8l7-4 7 4v13M9 21v-6h6v6M9 10h.01M12 10h.01M15 10h.01" />
                     </svg>
                   )}
                   {label === "Settings" && (
