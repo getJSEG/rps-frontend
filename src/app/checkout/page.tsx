@@ -13,6 +13,7 @@ import {
   authAPI,
   shippingRatesAPI,
   fedexAPI,
+  taxesAPI,
   effectiveOrderShipping,
   mergedShippingFromCartItems,
   cartShippableLinesAllFedexQuoted,
@@ -23,6 +24,7 @@ import {
   type ShippingRates,
   type FreeShippingPolicy,
   type CartSummary,
+  type TaxEstimateResponse,
 } from "../../utils/api";
 import { isAuthenticated } from "../../utils/roles";
 
@@ -193,6 +195,9 @@ export default function CheckoutPage() {
   const [fedexRatesLoading, setFedexRatesLoading] = useState(false);
   const [fedexRatesError, setFedexRatesError] = useState<string | null>(null);
   const [selectedFedexServiceType, setSelectedFedexServiceType] = useState("");
+  const [guestTaxEstimate, setGuestTaxEstimate] = useState<TaxEstimateResponse | null>(null);
+  const [guestTaxLoading, setGuestTaxLoading] = useState(false);
+  const [guestTaxError, setGuestTaxError] = useState<string | null>(null);
   const loadCartFromApi = useCallback(async () => {
     const { items, summary } = await fetchCartItemsAndSummary();
     setCartItems(items);
@@ -340,6 +345,9 @@ export default function CheckoutPage() {
   const editGuestBilling = () => {
     setGuestBillingSaved(false);
     setGuestSaveError(null);
+    setGuestTaxEstimate(null);
+    setGuestTaxError(null);
+    setGuestTaxLoading(false);
   };
 
   const stripePublishableKey = process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY ?? "";
@@ -396,20 +404,6 @@ export default function CheckoutPage() {
     !cartShippableLinesAllFedexQuoted(cartItems);
   const selectedFedexRate =
     fedexRates.find((r) => r.serviceType === selectedFedexServiceType) || null;
-  const shownShipping = (() => {
-    if (clientSecret && orderSummary) return orderSummary.shipping;
-    if (!checkoutRequiresFedexQuote) return orderSummary?.shipping ?? shipping;
-    return selectedFedexRate ? Number(selectedFedexRate.totalCharge) || 0 : 0;
-  })();
-  const shippingAmountPendingFedex =
-    checkoutRequiresFedexQuote && !selectedFedexRate;
-  const shownTaxPercentage = Number(orderSummary?.taxPercentage ?? 0);
-  const shownTax = roundMoney2((shownSubtotal + shownShipping) * (shownTaxPercentage / 100));
-  const shownTotal = roundMoney2(shownSubtotal + shownShipping + shownTax);
-  const shownFedexEta = checkoutRequiresFedexQuote
-    ? selectedFedexRate?.estimatedDelivery || null
-    : fedexEstimatedDeliveryFromCart(cartItems);
-
   const guestEmailOk = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(guestEmail.trim());
   const guestAddressOk =
     !!billingForm.streetAddress.trim() &&
@@ -417,6 +411,32 @@ export default function CheckoutPage() {
     !!billingForm.state.trim() &&
     !!billingForm.postcode.trim();
   const guestCheckoutReady = guestEmailOk && guestAddressOk;
+  const shownShipping = (() => {
+    if (clientSecret && orderSummary) return orderSummary.shipping;
+    if (!checkoutRequiresFedexQuote) return orderSummary?.shipping ?? shipping;
+    return selectedFedexRate ? Number(selectedFedexRate.totalCharge) || 0 : 0;
+  })();
+  const shippingAmountPendingFedex =
+    checkoutRequiresFedexQuote && !selectedFedexRate;
+  const guestTaxExpected = checkoutRequiresFedexQuote && !clientSecret;
+  const guestTaxActive = guestTaxExpected && guestBillingSaved;
+  const guestTaxPending =
+    guestTaxExpected &&
+    (!guestBillingSaved ||
+      shippingAmountPendingFedex ||
+      guestTaxLoading ||
+      (!guestTaxEstimate && !guestTaxError));
+  const shownTaxPercentage = guestTaxActive
+    ? Number(guestTaxEstimate?.taxPercentage ?? 0)
+    : Number(orderSummary?.taxPercentage ?? 0);
+  const shownTax = guestTaxActive
+    ? Number(guestTaxEstimate?.tax ?? 0)
+    : roundMoney2((shownSubtotal + shownShipping) * (shownTaxPercentage / 100));
+  const shownTotal = roundMoney2(shownSubtotal + shownShipping + shownTax);
+  const shownFedexEta = checkoutRequiresFedexQuote
+    ? selectedFedexRate?.estimatedDelivery || null
+    : fedexEstimatedDeliveryFromCart(cartItems);
+
   const canProceedToPayment = loggedInCheckout ? !!billingAddress : guestCheckoutReady && guestBillingSaved;
 
   const destinationForFedex =
@@ -559,6 +579,51 @@ export default function CheckoutPage() {
     destinationForFedex?.city,
     fedexDepShipStreet,
     fedexDepShipLine2,
+  ]);
+
+  useEffect(() => {
+    if (!guestTaxActive) {
+      setGuestTaxEstimate(null);
+      setGuestTaxError(null);
+      setGuestTaxLoading(false);
+      return;
+    }
+    if (!selectedFedexRate) {
+      setGuestTaxEstimate(null);
+      setGuestTaxError(null);
+      setGuestTaxLoading(false);
+      return;
+    }
+
+    let cancelled = false;
+    void (async () => {
+      try {
+        setGuestTaxLoading(true);
+        setGuestTaxError(null);
+        const res = await taxesAPI.estimate({
+          subtotal: shownSubtotal,
+          shipping: shownShipping,
+          postalCode: billingForm.postcode.trim(),
+        });
+        if (!cancelled) setGuestTaxEstimate(res);
+      } catch (e) {
+        if (cancelled) return;
+        setGuestTaxEstimate(null);
+        setGuestTaxError(e instanceof Error ? e.message : "Could not calculate tax");
+      } finally {
+        if (!cancelled) setGuestTaxLoading(false);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    guestTaxActive,
+    selectedFedexRate,
+    shownSubtotal,
+    shownShipping,
+    billingForm.postcode,
   ]);
 
   const handlePlaceOrder = async () => {
@@ -1098,7 +1163,9 @@ export default function CheckoutPage() {
                         </select>
                       ) : (
                         <p className="text-xs text-gray-500">
-                          Enter a valid shipping address to view available services.
+                          {fedexRatesLoading && fedexDestinationReadyEffective
+                            ? "Loading shipping services..."
+                            : "Enter a valid shipping address to view available services."}
                         </p>
                       )}
                     </div>
@@ -1123,8 +1190,15 @@ export default function CheckoutPage() {
                   ) : null}
                   <div className="flex justify-between text-gray-700">
                     <span>Tax ({shownTaxPercentage.toFixed(2)}%):</span>
-                    <span>${shownTax.toFixed(2)}</span>
+                    <span>
+                      {guestTaxPending ? (
+                        <span className="text-xs font-normal text-amber-700">Pending</span>
+                      ) : (
+                        `$${shownTax.toFixed(2)}`
+                      )}
+                    </span>
                   </div>
+                  {guestTaxError ? <p className="text-xs text-rose-600">{guestTaxError}</p> : null}
                 </div>
                 <div className="border-t border-gray-300 pt-3 mb-4">
                   <div className="flex justify-between text-xl font-bold text-gray-700">
@@ -1160,8 +1234,8 @@ export default function CheckoutPage() {
                     {!canProceedToPayment && !isAuthenticated() && (
                       <p className="text-amber-700 text-sm mb-3 bg-amber-50 border border-amber-200 rounded-md px-3 py-2">
                         {guestCheckoutReady && !guestBillingSaved
-                          ? "Click Save address above to continue and load FedEx shipping options."
-                          : "Enter a valid email and full shipping address, then save, to continue."}
+                          ? "Click Save address above to continue."
+                          : "Enter a valid email and shipping address to continue."}
                       </p>
                     )}
                     {error && <p className="text-sm text-red-600 mb-3">{error}</p>}

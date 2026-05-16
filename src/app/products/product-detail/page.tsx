@@ -17,9 +17,9 @@ import {
   effectiveOrderShipping,
   buildFedexPackagesForProductConfigure,
   hardwareFedexShippingFromProduct,
-  type Tax,
   type FedexRateQuote,
   type FreeShippingPolicy,
+  type TaxEstimateResponse,
 } from "../../../utils/api";
 import { isAuthenticated } from "../../../utils/roles";
 import { SITE_TAB_TITLE, pageTitle } from "../../../utils/tabTitle";
@@ -34,6 +34,7 @@ const PDP_SHIP_ESTIMATE_STORAGE_KEY = "rps_pdp_ship_estimate_v1";
 
 /** After dimensions/qty/address stop changing, fetch FedEx once (avoids many pending /fedex/rates). */
 const PDP_FEDEX_RATES_DEBOUNCE_MS = 350;
+const PDP_TAX_ESTIMATE_DEBOUNCE_MS = 350;
 
 function billableQtyFromFedexJobQtyKey(key: string): number {
   if (!key.length) return 1;
@@ -329,7 +330,9 @@ function ProductDetailContent() {
   const [selectedSubcategory, setSelectedSubcategory] = useState<string | null>(null);
   const [imageZoom, setImageZoom] = useState({ x: 50, y: 50, scale: 1 });
   const [message, setMessage] = useState("");
-  const [activeTax, setActiveTax] = useState<Tax | null>(null);
+  const [taxEstimate, setTaxEstimate] = useState<TaxEstimateResponse | null>(null);
+  const [taxEstimateLoading, setTaxEstimateLoading] = useState(false);
+  const [taxEstimateError, setTaxEstimateError] = useState<string | null>(null);
   const [jobArtworkInfoOpen, setJobArtworkInfoOpen] = useState(false);
   const [estimateShipForm, setEstimateShipForm] = useState({
     streetAddress: "",
@@ -574,21 +577,6 @@ function ProductDetailContent() {
   useEffect(() => {
     return () => {
       document.title = SITE_TAB_TITLE;
-    };
-  }, []);
-
-  useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      try {
-        const res = await taxesAPI.getActive();
-        if (!cancelled) setActiveTax(res?.tax ?? null);
-      } catch {
-        if (!cancelled) setActiveTax(null);
-      }
-    })();
-    return () => {
-      cancelled = true;
     };
   }, []);
 
@@ -1027,7 +1015,7 @@ function ProductDetailContent() {
     };
   });
   const subtotal = jobLines.reduce((sum, line) => sum + line.lineSubtotal, 0);
-  const activeTaxPercentage = Number(activeTax?.percentage || 0);
+  const taxEstimatePostalCode = String(estimateShipForm.postcode || "").trim();
   const selectedFedexRatePdp =
     fedexRates.find((r) => r.serviceType === selectedFedexServiceType) || fedexRates[0] || null;
   const fedexRawChargePdp = isAuthenticated()
@@ -1039,8 +1027,58 @@ function ProductDetailContent() {
     freeShippingPolicy,
     false
   );
-  const taxAmount = ((subtotal + effectiveShippingPdp) * activeTaxPercentage) / 100;
-  const totalWithTax = subtotal + effectiveShippingPdp + taxAmount;
+  const activeTaxPercentage = Number(taxEstimate?.taxPercentage ?? 0);
+  const taxAmount = Number(taxEstimate?.tax ?? 0);
+  const totalWithTax = Number(taxEstimate?.total ?? subtotal + effectiveShippingPdp + taxAmount);
+
+  useEffect(() => {
+    if (!isAuthenticated()) {
+      setTaxEstimate(null);
+      setTaxEstimateError(null);
+      setTaxEstimateLoading(false);
+      return;
+    }
+    if (!taxEstimatePostalCode) {
+      if (!addressDefaultsLoaded) return;
+      setTaxEstimate(null);
+      setTaxEstimateError("Add a default shipping address to calculate tax.");
+      setTaxEstimateLoading(false);
+      return;
+    }
+    if (!/^\d{5}(?:-\d{4})?$/.test(taxEstimatePostalCode)) {
+      setTaxEstimate(null);
+      setTaxEstimateError("Invalid postal code");
+      setTaxEstimateLoading(false);
+      return;
+    }
+
+    let cancelled = false;
+    const timer = setTimeout(() => {
+      void (async () => {
+        try {
+          setTaxEstimateLoading(true);
+          setTaxEstimateError(null);
+          const res = await taxesAPI.estimate({
+            subtotal,
+            shipping: effectiveShippingPdp,
+            postalCode: taxEstimatePostalCode,
+          });
+          if (!cancelled) setTaxEstimate(res);
+        } catch (e) {
+          if (cancelled) return;
+          setTaxEstimate(null);
+          setTaxEstimateError(e instanceof Error ? e.message : "Could not calculate tax");
+        } finally {
+          if (!cancelled) setTaxEstimateLoading(false);
+        }
+      })();
+    }, PDP_TAX_ESTIMATE_DEBOUNCE_MS);
+
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
+  }, [subtotal, effectiveShippingPdp, taxEstimatePostalCode, addressDefaultsLoaded]);
 
   const handleEstimateShipFormChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
     const { name, value } = e.target;
@@ -1890,6 +1928,15 @@ function ProductDetailContent() {
                   {showShipToForm ? (
                     <div className="space-y-3">
                       <p className="text-xs font-medium uppercase tracking-wide text-gray-500">Ship to</p>
+                      {addressDefaultsLoaded && !shipToAddressReady ? (
+                        <div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800">
+                          <span>Add address</span>{" "}
+                          <Link href="/address-book" className="font-medium text-amber-900 underline">
+                            in address book
+                          </Link>{" "}
+                          to calculate shipping and tax.
+                        </div>
+                      ) : null}
                       <input
                         type="text"
                         name="streetAddress"
@@ -1998,7 +2045,7 @@ function ProductDetailContent() {
                     <div className="flex flex-wrap items-end gap-4">
                       <div className="min-w-0 flex-1">
                         <label htmlFor="pdp-fedex-service" className="mb-1 block text-sm font-medium text-gray-700">
-                          Shipping service
+                            Shipping service
                         </label>
                         {fedexRatesError ? <p className="mb-2 text-xs text-rose-600">{fedexRatesError}</p> : null}
                         {fedexRates.length > 0 ? (
@@ -2105,8 +2152,22 @@ function ProductDetailContent() {
                 <span className="text-gray-700">
                   Tax ({activeTaxPercentage.toFixed(2)}%)
                 </span>
-                <span className="font-medium text-gray-900">${taxAmount.toFixed(2)}</span>
+                <span className="font-medium text-gray-900">
+                  {taxEstimateLoading ? (
+                    <span className="inline-block w-16 align-middle" aria-hidden>
+                      <span className="sr-only">Calculating tax</span>
+                      <div className="pdp-fedex-rates-indeterminate-track">
+                        <div className="pdp-fedex-rates-indeterminate-bar" />
+                      </div>
+                    </span>
+                  ) : (
+                    `$${taxAmount.toFixed(2)}`
+                  )}
+                </span>
               </div>
+              {isAuthenticated() && taxEstimateError ? (
+                <p className="mb-2 text-xs text-rose-600">{taxEstimateError}</p>
+              ) : null}
               <div className="flex justify-between border-t border-gray-300 pt-2">
                 <span className="font-bold text-gray-900">Total</span>
                 <span className="text-xl font-bold text-gray-900">${totalWithTax.toFixed(2)}</span>

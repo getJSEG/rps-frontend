@@ -492,7 +492,6 @@ function GuestOrderTrackInner() {
                 <div className="flex justify-between text-gray-600">
                   <span>
                     Tax{Number(order.tax_percentage || 0) > 0 ? ` (${money(order.tax_percentage)}%)` : ""}
-                    {order.tax_name ? ` - ${order.tax_name}` : ""}
                   </span>
                   <span>${money(order.tax_amount)}</span>
                 </div>

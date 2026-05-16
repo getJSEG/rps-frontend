@@ -1297,7 +1297,7 @@ export default function OrderDetails() {
               <DetailCell label="Shipping service" value={dash(order.shipping_method)} />
               <DetailCell label="Shipping charge" value={`$${formatMoney(shipStored)}`} />
               <DetailCell
-                label={`Tax${order.tax_name ? ` (${order.tax_name})` : ""}`}
+                label="Tax"
                 value={`$${formatMoney(order.tax_amount ?? 0)}${order.tax_percentage ? ` (${formatMoney(order.tax_percentage)}%)` : ""}`}
               />
               {(hasDbAddressIds || order.user_id != null) && (
@@ -1316,7 +1316,7 @@ export default function OrderDetails() {
               <h3 className="text-xs font-bold uppercase tracking-wide text-slate-500">
                 {isStorePickup ? "Store pickup address" : "Delivery address"}
               </h3>
-              <p className="mt-1 text-xs text-slate-500">From guest checkout (not linked to saved address IDs)</p>
+              <p className="mt-1 text-xs text-slate-500">From guest checkout</p>
               <div className={`mt-4 grid gap-4 ${billingDiffersFromShipping ? "sm:grid-cols-2" : ""}`}>
                 <FormattedAddressCard title={isStorePickup ? "Store pickup address" : "Shipping"} lines={shipGuest} />
                 {billingDiffersFromShipping ? <FormattedAddressCard title="Billing" lines={billGuest} /> : null}
@@ -1473,7 +1473,7 @@ export default function OrderDetails() {
             )}
             {!!(order.tax_amount ?? 0) && (
               <p className="text-sm text-slate-600">
-                Tax{order.tax_name ? ` (${order.tax_name})` : ""}{" "}
+                Tax{" "}
                 <span className="font-semibold text-slate-900">
                   ${formatMoney(order.tax_amount ?? 0)}
                   {order.tax_percentage ? ` (${formatMoney(order.tax_percentage)}%)` : ""}

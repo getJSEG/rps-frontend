@@ -1010,7 +1010,6 @@ export default function Orders() {
                           <div className="flex justify-between text-gray-600">
                             <span>
                               Tax{orderTaxPct > 0 ? ` (${formatMoney(orderTaxPct)}%)` : ""}
-                              {order.tax_name ? ` - ${order.tax_name}` : ""}
                             </span>
                             <span>${formatMoney(orderTax)}</span>
                           </div>

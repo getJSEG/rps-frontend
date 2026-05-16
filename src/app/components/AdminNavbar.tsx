@@ -56,11 +56,6 @@ const navItems = [
     match: (p: string) => p === "/admin/shipping-rates" || p.startsWith("/admin/shipping-rates"),
   },
   {
-    href: "/admin/taxes",
-    label: "Taxes",
-    match: (p: string) => p === "/admin/taxes" || p.startsWith("/admin/taxes"),
-  },
-  {
     href: "/admin/employees",
     label: "Employees",
     match: (p: string) => p === "/admin/employees" || p.startsWith("/admin/employees"),
@@ -171,11 +166,6 @@ export default function AdminNavbar({
                   {label === "Rates" && (
                     <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                    </svg>
-                  )}
-                  {label === "Taxes" && (
-                    <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 14l6-6m-5 0h5v5M5 20h14a1 1 0 001-1V5a1 1 0 00-1-1H5a1 1 0 00-1 1v14a1 1 0 001 1z" />
                     </svg>
                   )}
                   {label === "Settings" && (

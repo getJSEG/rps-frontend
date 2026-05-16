@@ -161,6 +161,19 @@ export type Tax = {
   updated_at?: string;
 };
 
+export type TaxEstimateResponse = {
+  success: boolean;
+  taxRate: number;
+  taxPercentage: number;
+  tax: number;
+  total: number;
+  subtotal: number;
+  shipping: number;
+  postalCode?: string;
+  addressId?: number | null;
+  warning?: string;
+};
+
 export type ModifierOption = {
   id?: number;
   label: string;
@@ -1284,18 +1297,8 @@ export const storePickupAddressesAPI = {
 };
 
 export const taxesAPI = {
-  getActive: async (): Promise<{ tax: Tax | null }> => apiCall('/taxes/active'),
-  getAdmin: async (): Promise<{ taxes: Tax[] }> => apiCall('/taxes/admin'),
-  createAdmin: async (data: { name: string; percentage: number; isActive?: boolean }) =>
-    apiCall('/taxes/admin', { method: 'POST', body: JSON.stringify(data) }),
-  updateAdmin: async (
-    id: number | string,
-    data: { name?: string; percentage?: number; isActive?: boolean }
-  ) => apiCall(`/taxes/admin/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
-  activateAdmin: async (id: number | string) =>
-    apiCall(`/taxes/admin/${id}/activate`, { method: 'PUT' }),
-  deleteAdmin: async (id: number | string) =>
-    apiCall(`/taxes/admin/${id}`, { method: 'DELETE' }),
+  estimate: async (data: { subtotal: number; shipping: number; postalCode?: string }): Promise<TaxEstimateResponse> =>
+    apiCall('/taxes/estimate', { method: 'POST', body: JSON.stringify(data) }),
 };
 
 export const artworksAPI = {
