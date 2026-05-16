@@ -116,6 +116,7 @@ export function documentTitleFromRoute(
     if (rest.startsWith("users")) return pageTitle("Admin Users");
     if (rest.startsWith("refunds")) return pageTitle("Admin Refunds");
     if (rest.startsWith("shipping-rates")) return pageTitle("Shipping Rates");
+    if (rest.startsWith("store-addresses")) return pageTitle("Store Addresses");
     if (rest.startsWith("employees")) return pageTitle("Admin Employees");
     if (rest.startsWith("cart-item/")) return pageTitle("Admin Cart Item");
     return pageTitle("Admin");

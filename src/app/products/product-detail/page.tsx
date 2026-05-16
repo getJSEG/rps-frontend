@@ -15,6 +15,7 @@ import {
   addressesAPI,
   shippingRatesAPI,
   effectiveOrderShipping,
+  fedexDeliveryEstimateWithProduction,
   buildFedexPackagesForProductConfigure,
   hardwareFedexShippingFromProduct,
   productFedexShippingFromProduct,
@@ -150,6 +151,7 @@ interface Product {
   shipping_width?: number | string | null;
   shipping_height?: number | string | null;
   shipping_weight?: number | string | null;
+  production_time?: number | string | null;
   purchase_options?: Array<{
     id: number;
     label: string;
@@ -1031,6 +1033,11 @@ function ProductDetailContent() {
   const taxEstimatePostalCode = String(estimateShipForm.postcode || "").trim();
   const selectedFedexRatePdp =
     fedexRates.find((r) => r.serviceType === selectedFedexServiceType) || fedexRates[0] || null;
+  const productionTimeDays = product?.production_time ?? 0;
+  const selectedFedexDeliveryEstimatePdp = fedexDeliveryEstimateWithProduction(
+    selectedFedexRatePdp,
+    productionTimeDays
+  );
   const fedexRawChargePdp = isAuthenticated()
     ? Number(selectedFedexRatePdp?.totalCharge) || 0
     : 0;
@@ -1235,7 +1242,7 @@ function ProductDetailContent() {
         const svc = String(resolvedRateForCart.serviceType ?? "").trim();
         const cur = (String(resolvedRateForCart.currency ?? "USD").trim() || "USD").toUpperCase();
         const name = (String(resolvedRateForCart.serviceName ?? "").trim() || svc).trim() || svc;
-        const ed = resolvedRateForCart.estimatedDelivery ?? null;
+        const ed = fedexDeliveryEstimateWithProduction(resolvedRateForCart, product?.production_time ?? 0);
         loggedInFedexPayload = {
           shippingService: svc,
           shipping_service: svc,
@@ -1247,6 +1254,8 @@ function ProductDetailContent() {
           shipping_rate_currency: cur,
           shippingRateEstimatedDelivery: ed,
           shipping_rate_estimated_delivery: ed,
+          productionTime: product?.production_time ?? null,
+          production_time: product?.production_time ?? null,
         };
       }
 
@@ -1258,6 +1267,8 @@ function ProductDetailContent() {
         height: heightInches,
         areaSqFt: areaSqFt,
         ...hardwareCartFields,
+        productionTime: product?.production_time ?? null,
+        production_time: product?.production_time ?? null,
         purchase_option_key: hasPurchaseOptions ? (effectiveScopeKey ?? undefined) : undefined,
         selection_mode: (!hasPurchaseOptions && isGraphicScenario) ? selectedGraphicMode : undefined,
         jobs: jobsPayload,
@@ -2080,7 +2091,6 @@ function ProductDetailContent() {
                             {fedexRates.map((r) => (
                               <option key={r.serviceType} value={r.serviceType}>
                                 {r.serviceName}
-                                {r.estimatedDelivery ? ` (${r.estimatedDelivery})` : ""}
                               </option>
                             ))}
                           </select>
@@ -2112,6 +2122,12 @@ function ProductDetailContent() {
                         </p>
                       </div>
                     </div>
+                    {selectedFedexDeliveryEstimatePdp ? (
+                      <div className="mt-4 border-t border-gray-100 pt-3 text-sm text-gray-800">
+                        <span className="font-medium text-gray-700">Estimate Delivery:</span>{" "}
+                        <span className="font-semibold text-gray-900">{selectedFedexDeliveryEstimatePdp}</span>
+                      </div>
+                    ) : null}
                   </div>
               </div>
               ) : (
@@ -2154,11 +2170,6 @@ function ProductDetailContent() {
               effectiveShippingPdp === 0 &&
               freeShippingPolicy.freeShippingEnabled ? (
                 <p className="mb-2 text-xs text-emerald-700">Free shipping applied (order meets threshold).</p>
-              ) : null}
-              {isAuthenticated() && selectedFedexRatePdp?.estimatedDelivery ? (
-                <p className="mb-2 text-xs text-gray-600">
-                  Estimated delivery: {selectedFedexRatePdp.estimatedDelivery}
-                </p>
               ) : null}
               <div className="mb-2 flex justify-between">
                 <span className="text-gray-700">
