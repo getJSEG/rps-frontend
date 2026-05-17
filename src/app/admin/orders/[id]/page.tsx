@@ -1020,7 +1020,7 @@ export default function OrderDetails() {
                   <div className="flex flex-wrap items-end justify-between gap-x-6 gap-y-2">
                     {order.shipping_estimated_delivery?.trim() ? (
                       <div>
-                        <p className="text-xs text-slate-500">Est. delivery (at checkout)</p>
+                        <p className="text-xs text-slate-500">Est. delivery</p>
                         <p className="font-mono text-sm text-slate-900">{order.shipping_estimated_delivery}</p>
                       </div>
                     ) : (

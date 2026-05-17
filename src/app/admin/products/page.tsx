@@ -559,6 +559,7 @@ export default function AdminProductsPage() {
   const [editingProductId, setEditingProductId] = useState<number | null>(null);
   const [uploadingImage, setUploadingImage] = useState(false);
   const [deletingProductId, setDeletingProductId] = useState<number | null>(null);
+  const [productDeleteTarget, setProductDeleteTarget] = useState<Pick<Product, "id" | "name"> | null>(null);
   const [deletingCategoryId, setDeletingCategoryId] = useState<number | null>(null);
   const [productsPage, setProductsPage] = useState(1);
   const [productsPerPage] = useState(10);
@@ -598,13 +599,13 @@ export default function AdminProductsPage() {
     return false;
   };
 
-  const handleProductDelete = async (id: number, name: string) => {
-    if (!window.confirm(`Delete product "${name}"? This cannot be undone.`)) return;
+  const handleProductDelete = async (id: number) => {
     setDeletingProductId(id);
     try {
       await productsAPI.delete(String(id));
       showMsg("success", "Product deleted.");
       if (editingProductId === id) cancelEdit();
+      setProductDeleteTarget(null);
       await loadProducts();
       await loadCategories();
     } catch (err: unknown) {
@@ -2810,7 +2811,7 @@ export default function AdminProductsPage() {
                                   </button>
                                   <button
                                     type="button"
-                                    onClick={() => handleProductDelete(p.id, p.name)}
+                                    onClick={() => setProductDeleteTarget({ id: p.id, name: p.name })}
                                     disabled={deletingProductId === p.id}
                                     className="font-medium text-rose-600 hover:text-rose-800 disabled:opacity-50"
                                     title="Delete"
@@ -3121,6 +3122,47 @@ export default function AdminProductsPage() {
             )}
         </div>
       </div>
+      {productDeleteTarget ? (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4 backdrop-blur-sm"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="delete-product-modal-title"
+          onClick={() => {
+            if (deletingProductId == null) setProductDeleteTarget(null);
+          }}
+        >
+          <div
+            className="w-full max-w-md rounded-xl border border-slate-200 bg-white p-6 shadow-2xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h2 id="delete-product-modal-title" className="text-lg font-semibold text-slate-900">
+              Delete product?
+            </h2>
+            <p className="mt-2 text-sm leading-6 text-slate-600">
+              Are you sure you want to delete <span className="font-medium text-slate-900">{productDeleteTarget.name}</span>? This cannot be undone.
+            </p>
+            <div className="mt-6 flex flex-wrap justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setProductDeleteTarget(null)}
+                disabled={deletingProductId != null}
+                className="rounded-lg border border-slate-200 bg-white px-4 py-2.5 text-sm font-medium text-slate-700 shadow-sm hover:bg-slate-50 disabled:opacity-50"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={() => void handleProductDelete(productDeleteTarget.id)}
+                disabled={deletingProductId != null}
+                className="inline-flex items-center justify-center rounded-lg bg-rose-600 px-4 py-2.5 text-sm font-medium text-white shadow-sm hover:bg-rose-700 disabled:opacity-50"
+              >
+                {deletingProductId === productDeleteTarget.id ? "Deleting..." : "Delete"}
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </AdminNavbar>
   );
 }
