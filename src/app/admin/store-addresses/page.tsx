@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import AdminNavbar from "../../components/AdminNavbar";
 import { storeAddressesAPI, type StoreAddress } from "../../../utils/api";
+import { FiEdit, FiTrash2 } from "react-icons/fi";
 
 type FormState = {
   label: string;
@@ -75,6 +76,7 @@ export default function AdminStoreAddressesPage() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
+  const [deleteTarget, setDeleteTarget] = useState<StoreAddress | null>(null);
   const pageSize = 4;
   const totalPages = Math.max(1, Math.ceil(rows.length / pageSize));
   const pageRows = rows.slice((page - 1) * pageSize, page * pageSize);
@@ -115,8 +117,8 @@ export default function AdminStoreAddressesPage() {
     setSaving(true);
     setError("");
     setSuccess("");
-    if (!form.label.trim() || !form.streetAddress.trim() || !form.city.trim() || !form.state.trim() || !form.postcode.trim()) {
-      setError("Label, street address, city, state and ZIP are required.");
+    if (!form.label.trim() || !form.phone.trim() || !form.streetAddress.trim() || !form.city.trim() || !form.state.trim() || !form.postcode.trim()) {
+      setError("Label, phone, street address, city, state and ZIP are required.");
       setSaving(false);
       return;
     }
@@ -164,16 +166,24 @@ export default function AdminStoreAddressesPage() {
     }
   };
 
-  const archive = async (id: number) => {
+  const openDelete = (row: StoreAddress) => {
+    setDeleteTarget(row);
+    setSuccess("");
+    setError("");
+  };
+
+  const deleteAddress = async () => {
+    if (!deleteTarget) return;
     setError("");
     setSuccess("");
     try {
-      await storeAddressesAPI.deleteAdmin(id);
-      setSuccess("Store address archived.");
-      if (editingId === id) resetForm();
+      await storeAddressesAPI.deleteAdmin(deleteTarget.id);
+      setSuccess("Store address deleted.");
+      if (editingId === deleteTarget.id) resetForm();
+      setDeleteTarget(null);
       await load();
     } catch (e: unknown) {
-      setError(errorMessage(e, "Failed to archive store address"));
+      setError(errorMessage(e, "Failed to delete store address"));
     }
   };
 
@@ -252,24 +262,36 @@ export default function AdminStoreAddressesPage() {
                         <div className="flex flex-wrap items-center gap-2">
                           <p className="font-semibold text-slate-900">{row.label}</p>
                           {row.is_default ? <span className="rounded bg-emerald-50 px-2 py-0.5 text-xs font-medium text-emerald-700">Default</span> : null}
-                          {row.is_active === false ? <span className="rounded bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-600">Archived</span> : null}
+                          {row.is_active === false ? <span className="rounded bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-600">Inactive</span> : null}
                         </div>
                         <p className="mt-1 text-sm text-slate-600">{fullAddress(row)}</p>
                         <p className="mt-1 text-xs text-slate-500">
                           {[row.company, row.contact_name, row.phone].map((v) => String(v || "").trim()).filter(Boolean).join(" | ") || "No contact details"}
                         </p>
                       </div>
-                      <div className="flex shrink-0 flex-wrap gap-2">
+                      <div className="flex shrink-0 flex-wrap items-center gap-2">
                         {!row.is_default ? (
                           <button onClick={() => setDefault(row.id)} className="rounded-md border border-emerald-300 px-2.5 py-1 text-xs font-medium text-emerald-700">
                             Set Default
                           </button>
                         ) : null}
-                        <button onClick={() => startEdit(row)} className="rounded-md border border-slate-300 px-2.5 py-1 text-xs">
-                          Edit
+                        <button
+                          type="button"
+                          onClick={() => startEdit(row)}
+                          className="p-1 font-medium text-sky-600 transition-colors hover:text-sky-800"
+                          title="Edit"
+                          aria-label={`Edit ${row.label}`}
+                        >
+                          <FiEdit size={18} />
                         </button>
-                        <button onClick={() => archive(row.id)} className="rounded-md border border-rose-300 px-2.5 py-1 text-xs text-rose-700">
-                          Archive
+                        <button
+                          type="button"
+                          onClick={() => openDelete(row)}
+                          className="p-1 font-medium text-rose-600 transition-colors hover:text-rose-800"
+                          title="Delete"
+                          aria-label={`Delete ${row.label}`}
+                        >
+                          <FiTrash2 size={18} />
                         </button>
                       </div>
                     </div>
@@ -308,6 +330,34 @@ export default function AdminStoreAddressesPage() {
           )}
         </section>
       </div>
+
+      {deleteTarget ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 p-4 backdrop-blur-sm">
+          <div className="w-full max-w-sm rounded-xl border border-slate-200/60 bg-white p-6 shadow-2xl shadow-slate-900/20">
+            <h3 className="mb-2 text-lg font-semibold text-slate-900">Delete store address</h3>
+            <p className="mb-5 text-sm text-slate-600">
+              Delete <strong className="text-slate-900">{deleteTarget.label}</strong>? This cannot be undone.
+            </p>
+            <div className="flex flex-wrap gap-2">
+              <button
+                type="button"
+                onClick={deleteAddress}
+                disabled={saving}
+                className="rounded-lg bg-rose-600 px-4 py-2.5 text-sm font-medium text-white shadow-sm hover:bg-rose-700 disabled:opacity-50"
+              >
+                Delete
+              </button>
+              <button
+                type="button"
+                onClick={() => setDeleteTarget(null)}
+                className="rounded-lg border border-slate-200 bg-white px-4 py-2.5 text-sm font-medium text-slate-700 shadow-sm hover:bg-slate-50"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </AdminNavbar>
   );
 }

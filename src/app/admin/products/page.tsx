@@ -126,6 +126,44 @@ const RICH_PLACEHOLDER_HINT = "bold, italic, lists supported";
 
 const isFloatInput = (v: string) => v === "" || /^\d*\.?\d*$/.test(v);
 const isNonNegativeIntInput = (v: string) => v === "" || /^\d+$/.test(v);
+type FedexShippingFieldErrors = Partial<Record<"length" | "width" | "height" | "weight", string>>;
+const validateHardwareFedexShippingData = ({
+  length,
+  width,
+  height,
+  weight,
+}: {
+  length: string;
+  width: string;
+  height: string;
+  weight: string;
+}): { message: string; fields: FedexShippingFieldErrors } | null => {
+  const required = [
+    ["length", "length", length],
+    ["width", "width", width],
+    ["height", "height", height],
+    ["weight", "weight", weight],
+  ] as const;
+  const invalid = required
+    .filter(([, , value]) => {
+      const n = Number(String(value || "").trim());
+      return !Number.isFinite(n) || n <= 0;
+    });
+  if (invalid.length === 0) return null;
+  const fields = invalid.reduce<FedexShippingFieldErrors>((acc, [key]) => {
+    acc[key] = `Add ${key}.`;
+    return acc;
+  }, {});
+  const missingLabels = invalid.map(([, label]) => label);
+  const missingList =
+    missingLabels.length > 1
+      ? `${missingLabels.slice(0, -1).join(", ")}, and ${missingLabels[missingLabels.length - 1]}`
+      : missingLabels[0];
+  return {
+    message: `FedEx shipping data is required. Add ${missingList}.`,
+    fields,
+  };
+};
 const toCleanDecimalInput = (v: unknown): string => {
   if (v == null) return "";
   const raw = String(v).trim();
@@ -516,6 +554,7 @@ export default function AdminProductsPage() {
   const [prodShippingWidth, setProdShippingWidth] = useState("");
   const [prodShippingHeight, setProdShippingHeight] = useState("");
   const [prodShippingWeight, setProdShippingWeight] = useState("");
+  const [fedexShippingFieldErrors, setFedexShippingFieldErrors] = useState<FedexShippingFieldErrors>({});
   const [prodProductionTime, setProdProductionTime] = useState("");
   const [prodHighlights, setProdHighlights] = useState<string[]>([]);
   const [prodPricingMode, setProdPricingMode] = useState<"" | "fixed" | "area">("");
@@ -1016,6 +1055,20 @@ export default function AdminProductsPage() {
       showMsg("error", "Please select which option to show on the listing (Show on listing).");
       return;
     }
+    if (prodGraphicScenarioEnabled) {
+      const fedexShippingValidation = validateHardwareFedexShippingData({
+        length: prodShippingLength,
+        width: prodShippingWidth,
+        height: prodShippingHeight,
+        weight: prodShippingWeight,
+      });
+      if (fedexShippingValidation) {
+        setFedexShippingFieldErrors(fedexShippingValidation.fields);
+        showMsg("error", fedexShippingValidation.message);
+        return;
+      }
+    }
+    setFedexShippingFieldErrors({});
     setSaving(true);
     try {
       const payload = {
@@ -1143,6 +1196,7 @@ export default function AdminProductsPage() {
       setProdShippingWidth("");
       setProdShippingHeight("");
       setProdShippingWeight("");
+      setFedexShippingFieldErrors({});
       setProdProductionTime("");
       setProdHighlights([]);
       setProdPricingMode("");
@@ -1258,6 +1312,7 @@ export default function AdminProductsPage() {
     setProdShippingWidth(toCleanDecimalInput(p.shipping_width));
     setProdShippingHeight(toCleanDecimalInput(p.shipping_height));
     setProdShippingWeight(toCleanDecimalInput(p.shipping_weight));
+    setFedexShippingFieldErrors({});
     setProdProductionTime(
       p.production_time != null && Number.isFinite(Number(p.production_time))
         ? String(Math.trunc(Number(p.production_time)))
@@ -1399,6 +1454,7 @@ export default function AdminProductsPage() {
     setProdShippingWidth("");
     setProdShippingHeight("");
     setProdShippingWeight("");
+    setFedexShippingFieldErrors({});
     setProdProductionTime("");
     setProdHighlights([]);
     setProdPricingMode("");
@@ -1784,50 +1840,86 @@ export default function AdminProductsPage() {
                         <div className="md:col-span-2 rounded-lg border border-slate-200 bg-slate-50 p-3">
                           <p className="mb-3 text-sm font-medium text-slate-700">Fedex shipping data</p>
                           <div className="grid gap-3 md:grid-cols-2">
-                            <input
-                              type="text"
-                              inputMode="decimal"
-                              placeholder="Length (inch)"
-                              value={prodShippingLength}
-                              onChange={(e) => {
-                                const v = e.target.value;
-                                if (isFloatInput(v)) setProdShippingLength(v);
-                              }}
-                              className={inputClass}
-                            />
-                            <input
-                              type="text"
-                              inputMode="decimal"
-                              placeholder="Width (inch)"
-                              value={prodShippingWidth}
-                              onChange={(e) => {
-                                const v = e.target.value;
-                                if (isFloatInput(v)) setProdShippingWidth(v);
-                              }}
-                              className={inputClass}
-                            />
-                            <input
-                              type="text"
-                              inputMode="decimal"
-                              placeholder="Height (inch)"
-                              value={prodShippingHeight}
-                              onChange={(e) => {
-                                const v = e.target.value;
-                                if (isFloatInput(v)) setProdShippingHeight(v);
-                              }}
-                              className={inputClass}
-                            />
-                            <input
-                              type="text"
-                              inputMode="decimal"
-                              placeholder="Weight (kg)"
-                              value={prodShippingWeight}
-                              onChange={(e) => {
-                                const v = e.target.value;
-                                if (isFloatInput(v)) setProdShippingWeight(v);
-                              }}
-                              className={inputClass}
-                            />
+                            <div>
+                              <input
+                                type="text"
+                                inputMode="decimal"
+                                placeholder="Length (inch)"
+                                value={prodShippingLength}
+                                onChange={(e) => {
+                                  const v = e.target.value;
+                                  if (isFloatInput(v)) {
+                                    setProdShippingLength(v);
+                                    setFedexShippingFieldErrors((prev) => ({ ...prev, length: undefined }));
+                                  }
+                                }}
+                                className={inputClass}
+                                aria-invalid={!!fedexShippingFieldErrors.length}
+                              />
+                              {fedexShippingFieldErrors.length ? (
+                                <p className="mt-1 text-xs font-medium text-rose-600">{fedexShippingFieldErrors.length}</p>
+                              ) : null}
+                            </div>
+                            <div>
+                              <input
+                                type="text"
+                                inputMode="decimal"
+                                placeholder="Width (inch)"
+                                value={prodShippingWidth}
+                                onChange={(e) => {
+                                  const v = e.target.value;
+                                  if (isFloatInput(v)) {
+                                    setProdShippingWidth(v);
+                                    setFedexShippingFieldErrors((prev) => ({ ...prev, width: undefined }));
+                                  }
+                                }}
+                                className={inputClass}
+                                aria-invalid={!!fedexShippingFieldErrors.width}
+                              />
+                              {fedexShippingFieldErrors.width ? (
+                                <p className="mt-1 text-xs font-medium text-rose-600">{fedexShippingFieldErrors.width}</p>
+                              ) : null}
+                            </div>
+                            <div>
+                              <input
+                                type="text"
+                                inputMode="decimal"
+                                placeholder="Height (inch)"
+                                value={prodShippingHeight}
+                                onChange={(e) => {
+                                  const v = e.target.value;
+                                  if (isFloatInput(v)) {
+                                    setProdShippingHeight(v);
+                                    setFedexShippingFieldErrors((prev) => ({ ...prev, height: undefined }));
+                                  }
+                                }}
+                                className={inputClass}
+                                aria-invalid={!!fedexShippingFieldErrors.height}
+                              />
+                              {fedexShippingFieldErrors.height ? (
+                                <p className="mt-1 text-xs font-medium text-rose-600">{fedexShippingFieldErrors.height}</p>
+                              ) : null}
+                            </div>
+                            <div>
+                              <input
+                                type="text"
+                                inputMode="decimal"
+                                placeholder="Weight (kg)"
+                                value={prodShippingWeight}
+                                onChange={(e) => {
+                                  const v = e.target.value;
+                                  if (isFloatInput(v)) {
+                                    setProdShippingWeight(v);
+                                    setFedexShippingFieldErrors((prev) => ({ ...prev, weight: undefined }));
+                                  }
+                                }}
+                                className={inputClass}
+                                aria-invalid={!!fedexShippingFieldErrors.weight}
+                              />
+                              {fedexShippingFieldErrors.weight ? (
+                                <p className="mt-1 text-xs font-medium text-rose-600">{fedexShippingFieldErrors.weight}</p>
+                              ) : null}
+                            </div>
                           </div>
                         </div>
                       ) : null}
@@ -1848,6 +1940,7 @@ export default function AdminProductsPage() {
                                 setSelectedHardwareTemplateId("");
                                 setListingPriceOptionKey("");
                                 setListingPriceUseComputed(false);
+                                setFedexShippingFieldErrors({});
                                 setProdModifierAssignments((prev) => {
                                   const next: Record<string, ProductModifierAssignment> = {};
                                   for (const [k, v] of Object.entries(prev)) {
@@ -1882,6 +1975,7 @@ export default function AdminProductsPage() {
                                 setSelectedHardwareTemplateId("");
                                 setListingPriceOptionKey("");
                                 setListingPriceUseComputed(false);
+                                setFedexShippingFieldErrors({});
                               }}
                             >
                               Hardware
