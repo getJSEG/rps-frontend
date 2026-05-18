@@ -12,6 +12,7 @@ import {
 } from "../../components/artwork-review/openUploadReviewSession";
 import { ordersAPI } from "../../../utils/api";
 import {
+  canonicalOrderStatus,
   customerOrderStatusDescription,
   customerOrderStatusTitle,
 } from "../../../utils/orderStatuses";
@@ -70,6 +71,7 @@ type GuestOrder = {
   updated_at?: string | null;
   total_amount?: number | string | null;
   subtotal_amount?: number | string | null;
+  shipping_method?: string | null;
   shipping_charge?: number | string | null;
   shipping_estimated_delivery?: string | null;
   tax_amount?: number | string | null;
@@ -78,6 +80,7 @@ type GuestOrder = {
   items?: OrderItem[] | null;
   order_tracking_id?: string | null;
   carrier?: string | null;
+  carrier_service_type?: string | null;
   shipment_status?: string | null;
   shipment_last_event?: unknown;
   shipment_updated_at?: string | null;
@@ -97,6 +100,10 @@ function canRequestCancellation(status: string | null | undefined): boolean {
   return s === "awaiting_artwork" || s === "on_hold" || s === "awaiting_customer_approval";
 }
 
+function shouldShowTrackingNumber(order: Order): boolean {
+  return canonicalOrderStatus(order.status) === "shipped" && !!order.order_tracking_id?.trim();
+}
+
 function lineSelectedModifiers(item: OrderItem): Array<{
   group_name: string;
   option_label: string;
@@ -113,6 +120,8 @@ function lineSelectedModifiers(item: OrderItem): Array<{
     .filter((m) => m.group_name && m.option_label);
 }
 
+// Kept for the commented FedEx tracking link below.
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 function fedexPublicTrackUrl(tracking: string): string {
   return `https://www.fedex.com/fedextrack/?trknbr=${encodeURIComponent(String(tracking).trim())}`;
 }
@@ -349,6 +358,23 @@ function GuestOrderTrackInner() {
                   <p className="text-gray-500">Payment method</p>
                   <p className="font-medium text-gray-900">{order.payment_method || "—"}</p>
                 </div>
+                {order.carrier_service_type?.trim() ? (
+                  <div>
+                    <p className="text-gray-500">Carrier service</p>
+                    <p className="font-medium text-gray-900">{order.carrier_service_type}</p>
+                  </div>
+                ) : null}
+                {order.shipping_method?.trim() || Number(order.shipping_charge || 0) > 0 ? (
+                  <div>
+                    <p className="text-gray-500">Shipping service</p>
+                    <p className="font-medium text-gray-900">
+                      {order.shipping_method?.trim() || "—"}
+                      {Number(order.shipping_charge || 0) > 0 ? (
+                        <span className="font-normal text-gray-600"> (${money(order.shipping_charge)})</span>
+                      ) : null}
+                    </p>
+                  </div>
+                ) : null}
                 <div>
                   <p className="text-gray-500">Last updated</p>
                   <p className="font-medium text-gray-900">
@@ -357,12 +383,13 @@ function GuestOrderTrackInner() {
                       : "—"}
                   </p>
                 </div>
-                {order.order_tracking_id?.trim() && (
+                {shouldShowTrackingNumber(order) && (
                     <div className="sm:col-span-3">
                       <p className="text-gray-500">Tracking number</p>
                       <p className="font-mono font-medium text-gray-900 break-all">
                         {order.order_tracking_id}
                       </p>
+                      {/* FedEx-only tracking link hidden because tracking numbers can be for any carrier.
                       <a
                         href={fedexPublicTrackUrl(order.order_tracking_id)}
                         target="_blank"
@@ -371,6 +398,7 @@ function GuestOrderTrackInner() {
                       >
                         Track on FedEx
                       </a>
+                      */}
                     </div>
                   )}
                 {order.shipping_estimated_delivery?.trim() ? (
@@ -380,7 +408,7 @@ function GuestOrderTrackInner() {
                   </div>
                 ) : null}
                 {String(order.carrier || "").toLowerCase() === "fedex" &&
-                  order.order_tracking_id?.trim() &&
+                  shouldShowTrackingNumber(order) &&
                   !!(order.shipment_status?.trim() || order.shipment_last_event) && (
                     <div className="sm:col-span-3 rounded-md border border-violet-100 bg-violet-50/60 px-3 py-2">
                       <p className="text-xs font-semibold uppercase tracking-wide text-violet-800">FedEx shipment</p>
@@ -493,7 +521,9 @@ function GuestOrderTrackInner() {
                   <span>${money(order.subtotal_amount)}</span>
                 </div>
                 <div className="flex justify-between text-gray-600">
-                  <span>Shipping</span>
+                  <span>
+                    Shipping{order.shipping_method?.trim() ? ` (${order.shipping_method})` : ""}
+                  </span>
                   <span>${money(order.shipping_charge)}</span>
                 </div>
                 <div className="flex justify-between text-gray-600">

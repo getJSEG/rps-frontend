@@ -349,6 +349,8 @@ function AddressBlock({ title, lines }: { title: string; lines: string[] }) {
   );
 }
 
+// Kept for the commented FedEx tracking link below.
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 function fedexPublicTrackUrl(tracking: string): string {
   return `https://www.fedex.com/fedextrack/?trknbr=${encodeURIComponent(String(tracking).trim())}`;
 }
@@ -695,6 +697,8 @@ export default function Orders() {
               const shippingMethodLabel = order.shipping_method?.trim() || null;
               const isStorePickup = String(order.shipping_mode || "").toLowerCase() === "store_pickup";
               const canRequestCancellation = canRequestCancellationStatus(order.status);
+              const showTrackingNumber =
+                canonicalOrderStatus(order.status) === "shipped" && !!order.order_tracking_id?.trim();
 
               return (
                 <li
@@ -716,7 +720,7 @@ export default function Orders() {
                         >
                           {formatStatus(order.status)}
                         </span>
-                        {order.order_tracking_id?.trim() && (
+                        {showTrackingNumber && (
                           <span
                             className="text-xs font-medium px-2.5 py-0.5 rounded-full bg-blue-100 text-blue-800"
                             title="Tracking number"
@@ -839,12 +843,13 @@ export default function Orders() {
                           <span className="text-gray-500">Order ID</span>
                           <p className="font-medium text-gray-900">{order.id}</p>
                         </div>
-                        {order.order_tracking_id?.trim() && (
+                        {showTrackingNumber && (
                             <div>
                               <span className="text-gray-500">Tracking number</span>
                               <p className="font-mono font-medium text-gray-900 break-all">
                                 {order.order_tracking_id}
                               </p>
+                              {/* FedEx-only tracking link hidden because tracking numbers can be for any carrier.
                               <a
                                 href={fedexPublicTrackUrl(order.order_tracking_id)}
                                 target="_blank"
@@ -853,10 +858,11 @@ export default function Orders() {
                               >
                                 Track on FedEx
                               </a>
+                              */}
                             </div>
                           )}
                         {String(order.carrier || "").toLowerCase() === "fedex" &&
-                          order.order_tracking_id?.trim() &&
+                          showTrackingNumber &&
                           !!(order.shipment_status?.trim() || order.shipment_last_event) && (
                             <div className="sm:col-span-2 rounded-lg border border-violet-100 bg-violet-50/60 px-3 py-3">
                               <span className="text-gray-500 text-xs font-semibold uppercase tracking-wide">

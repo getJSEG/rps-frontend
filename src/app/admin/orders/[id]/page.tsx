@@ -5,7 +5,9 @@ import { useRouter, useParams } from "next/navigation";
 import Image from "next/image";
 import Link from "next/link";
 import { lineCustomerArtworkSource } from "../../../../utils/customerArtworkSource";
-import { ordersAPI, getProductImageUrl, downloadUrlAsFile, fedexAPI, getBackendBaseUrl } from "../../../../utils/api";
+import { ordersAPI, getProductImageUrl, downloadUrlAsFile } from "../../../../utils/api";
+// Legacy FedEx shipment flow imports, kept commented while admin uses manual tracking entry.
+// import { ordersAPI, getProductImageUrl, downloadUrlAsFile, fedexAPI, getBackendBaseUrl } from "../../../../utils/api";
 import AdminNavbar from "../../../components/AdminNavbar";
 import { canAccessAdminPanel, isAuthenticated, getUserRole } from "../../../../utils/roles";
 import {
@@ -143,10 +145,13 @@ function formatMoney(n: number) {
   return (Number.isFinite(n) ? n : 0).toFixed(2);
 }
 
+// Kept for the commented tracking-link display below.
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 function fedexPublicTrackUrl(tracking: string): string {
   return `https://www.fedex.com/fedextrack/?trknbr=${encodeURIComponent(String(tracking).trim())}`;
 }
 
+/* Legacy FedEx shipment flow, kept commented while admin uses manual tracking entry.
 const FEDEX_SERVICE_OPTIONS = [
   "FEDEX_GROUND",
   "FEDEX_2_DAY",
@@ -167,6 +172,7 @@ function fedexShipmentLastLine(ev: unknown): string {
     .filter(Boolean);
   return parts[0] || "";
 }
+*/
 
 function formatStatus(status: string) {
   return adminOrderStatusLabel(status);
@@ -452,8 +458,11 @@ export default function OrderDetails() {
   const [updatingStatus, setUpdatingStatus] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [showStatusDropdown, setShowStatusDropdown] = useState(false);
-  const [fedexActionLoading, setFedexActionLoading] = useState<"create" | null>(null);
-  const [manualFedexServiceType, setManualFedexServiceType] = useState("");
+  const [trackingInput, setTrackingInput] = useState("");
+  const [savingTracking, setSavingTracking] = useState(false);
+  // Legacy FedEx shipment flow state, kept commented while admin uses manual tracking entry.
+  // const [fedexActionLoading, setFedexActionLoading] = useState<"create" | null>(null);
+  // const [manualFedexServiceType, setManualFedexServiceType] = useState("");
   const [deleteOrderModalOpen, setDeleteOrderModalOpen] = useState(false);
   const [refundModalOpen, setRefundModalOpen] = useState(false);
   const [processingRefund, setProcessingRefund] = useState(false);
@@ -625,7 +634,11 @@ export default function OrderDetails() {
           d.shipment_updated_at != null ? String(d.shipment_updated_at) : null,
       };
       setOrder(processedOrder);
-      setManualFedexServiceType(processedOrder.carrier_service_type?.trim() || "");
+      // Keep the add field empty; existing tracking stays on the order record/customer view.
+      // Legacy FedEx shipment flow:
+      // setManualFedexServiceType(processedOrder.carrier_service_type?.trim() || "");
+      // setTrackingInput(processedOrder.order_tracking_id?.trim() || "");
+      setTrackingInput("");
     } catch (err: unknown) {
       const errorMessage = err instanceof Error ? err.message : "Failed to load order details";
 
@@ -747,6 +760,36 @@ export default function OrderDetails() {
     }
   };
 
+  const handleSaveTrackingId = async () => {
+    if (!order) return;
+    const nextTrackingId = trackingInput.trim();
+    if (!nextTrackingId) {
+      setError("Enter a tracking number before adding it.");
+      return;
+    }
+    setSavingTracking(true);
+    setError(null);
+    try {
+      const response = await ordersAPI.updateOrderTrackingId(order.id, nextTrackingId);
+      setOrder((prev) =>
+        prev
+          ? {
+              ...prev,
+              order_tracking_id: String(response?.order?.order_tracking_id || nextTrackingId),
+              updated_at: response?.order?.updated_at ? String(response.order.updated_at) : prev.updated_at,
+            }
+          : prev
+      );
+      setTrackingInput("");
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : "Failed to save tracking ID";
+      setError(msg);
+    } finally {
+      setSavingTracking(false);
+    }
+  };
+
+  /* Legacy FedEx shipment flow, kept commented while admin uses manual tracking entry.
   const handleCreateFedexShipment = async () => {
     if (!order) return;
     const selectedService = String(order.carrier_service_type || manualFedexServiceType || "")
@@ -768,6 +811,7 @@ export default function OrderDetails() {
       setFedexActionLoading(null);
     }
   };
+  */
 
   const getStatusStyles = (status: string) => {
     const s = status.toLowerCase().replace(/\s+/g, "_");
@@ -873,6 +917,10 @@ export default function OrderDetails() {
     .trim()
     .replace(/\s+/g, "_");
   const canRefundFromAdmin = normalizedStatus === "awaiting_refund";
+  // Kept for the commented saved-tracking display below.
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  const savedTrackingId = order.order_tracking_id?.trim() || "";
+  /* Legacy FedEx shipment flow, kept commented while admin uses manual tracking entry.
   const isPaid = String(order.payment_status || "").toLowerCase() === "paid";
   const canCreateFedex =
     isPaid &&
@@ -884,6 +932,7 @@ export default function OrderDetails() {
     order.shipping_label_url && String(order.shipping_label_url).startsWith("/")
       ? `${getBackendBaseUrl()}${order.shipping_label_url}`
       : order.shipping_label_url || "";
+  */
 
   return (
     <AdminNavbar title="Order details" subtitle={order.order_number}>
@@ -974,13 +1023,34 @@ export default function OrderDetails() {
 
         <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
           <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-200 bg-slate-50/90 px-5 py-3">
-            <h2 className="text-sm font-bold text-slate-800">FedEx shipment</h2>
+            <h2 className="text-sm font-bold text-slate-800">Tracking ID</h2>
           </div>
           <div className="space-y-3 px-5 py-4 text-sm text-slate-800">
             {isStorePickup ? (
               <p className="text-slate-600">Store pickup — no carrier shipment.</p>
             ) : (
               <>
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-end">
+                  <label className="min-w-0 flex-1">
+                    <span className="text-xs text-slate-500">Tracking number</span>
+                    <input
+                      type="text"
+                      value={trackingInput}
+                      onChange={(e) => setTrackingInput(e.target.value)}
+                      placeholder="Enter tracking number"
+                      className="mt-1 w-full rounded-xl border border-slate-300 px-3 py-2.5 font-mono text-sm text-slate-900 outline-none transition focus:border-sky-500 focus:ring-2 focus:ring-sky-100"
+                    />
+                  </label>
+                  <button
+                    type="button"
+                    onClick={() => void handleSaveTrackingId()}
+                    disabled={savingTracking || !trackingInput.trim()}
+                    className="rounded-xl border border-sky-200 bg-sky-50 px-4 py-2.5 text-sm font-semibold text-sky-900 hover:bg-sky-100 disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    {savingTracking ? "Saving..." : "Add"}
+                  </button>
+                </div>
+                {/* Legacy FedEx shipment UI, kept commented while admin uses manual tracking entry.
                 <div className="flex flex-wrap items-end justify-between gap-x-6 gap-y-2">
                   <div className="flex min-w-0 flex-1 flex-wrap gap-x-6 gap-y-1">
                     <div>
@@ -1075,10 +1145,29 @@ export default function OrderDetails() {
                       disabled={fedexActionLoading !== null}
                       className="rounded-xl border border-sky-200 bg-sky-50 px-4 py-2.5 text-sm font-semibold text-sky-900 hover:bg-sky-100 disabled:opacity-50"
                     >
-                      {fedexActionLoading === "create" ? "Creating…" : "Create FedEx shipment"}
+                      {fedexActionLoading === "create" ? "Creating..." : "Create FedEx shipment"}
                     </button>
                   ) : null}
                 </div>
+                */}
+                {/* Saved tracking display hidden for simple admin form.
+                {savedTrackingId ? (
+                  <div className="flex flex-wrap items-end justify-between gap-x-6 gap-y-2">
+                    <div className="min-w-0 flex-1">
+                      <span className="text-xs text-slate-500">Saved tracking ID</span>
+                      <p className="mt-0.5 break-all font-mono text-sm">{savedTrackingId}</p>
+                    </div>
+                    <a
+                      href={fedexPublicTrackUrl(savedTrackingId)}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="shrink-0 text-sm font-semibold text-sky-700 hover:underline"
+                    >
+                      Open FedEx tracking
+                    </a>
+                  </div>
+                ) : null}
+                */}
               </>
             )}
           </div>
@@ -1254,9 +1343,11 @@ export default function OrderDetails() {
               <DetailCell label="Order number" value={order.order_number} />
               <DetailCell label="Order ID" value={order.id} />
               <DetailCell label="Order tracking ID" value={order.order_tracking_id?.trim() ? order.order_tracking_id : "—"} />
+              {/* FedEx shipment status hidden for generic tracking-only admin view.
               {order.shipment_status?.trim() ? (
                 <DetailCell label="Shipment status (FedEx)" value={order.shipment_status} />
               ) : null}
+              */}
               {order.carrier_service_type?.trim() ? (
                 <DetailCell label="Carrier service" value={order.carrier_service_type} />
               ) : null}
@@ -1292,8 +1383,10 @@ export default function OrderDetails() {
               <DetailCell label="Total amount" value={`$${formatMoney(order.total_amount)}`} />
               <DetailCell label="Subtotal" value={`$${formatMoney(order.subtotal_amount ?? linesSubtotal)}`} />
               <DetailCell label="Shipping service" value={dash(order.shipping_method)} />
+              {/* Carrier estimated delivery / charge details hidden for generic tracking-only admin view.
               <DetailCell label="Estimated delivery" value={dash(order.shipping_estimated_delivery)} />
               <DetailCell label="Shipping charge" value={`$${formatMoney(shipStored)}`} />
+              */}
               <DetailCell
                 label="Tax"
                 value={`$${formatMoney(order.tax_amount ?? 0)}${order.tax_percentage ? ` (${formatMoney(order.tax_percentage)}%)` : ""}`}
