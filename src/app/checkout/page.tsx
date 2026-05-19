@@ -543,9 +543,19 @@ export default function CheckoutPage() {
       ...(fedexStreetLines.length > 0 ? { streetLines: fedexStreetLines } : {}),
     };
 
-    const packages = buildFedexPackagesFromShippableCartItems(
-      cartItems as unknown as Array<Record<string, unknown>>
-    );
+    let packages: Array<{ weight: number; length: number; width: number; height: number }>;
+    try {
+      packages = buildFedexPackagesFromShippableCartItems(
+        cartItems as unknown as Array<Record<string, unknown>>
+      );
+    } catch (error) {
+      setFedexRates([]);
+      setSelectedFedexServiceType("");
+      setFedexRatesError(error instanceof Error ? error.message : "Shipping box is not configured for this size. Please contact admin.");
+      setFedexRatesLoading(false);
+      lastFedexQuoteKeyRef.current = "";
+      return;
+    }
     const quoteKey = JSON.stringify({ destination, packages });
     if (lastFedexQuoteKeyRef.current === quoteKey && fedexRates.length > 0) {
       return;

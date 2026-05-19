@@ -8,11 +8,13 @@ import { canAccessAdminPanel, isAuthenticated } from "../../../utils/roles";
 import {
   getProductImageUrl,
   productsAPI,
+  shippingBoxesAPI,
   type HardwareTemplate,
   type ModifierGroup,
   type ModifierPreset,
   type ProductConditionalModifierRule,
   type ProductPurchaseOption,
+  type ShippingBox,
 } from "../../../utils/api";
 import { FiEdit, FiTrash2, FiChevronUp, FiChevronDown } from "react-icons/fi";
 
@@ -96,6 +98,12 @@ type ProductModifierAssignment = {
 
 type ConditionalRuleDraft = ProductConditionalModifierRule & {
   hardware_option_key?: string | null;
+};
+
+type ShippingBoxRuleDraft = {
+  shipping_box_id: string;
+  min_smallest_side: string;
+  max_smallest_side: string;
 };
 
 /** First image for admin list: gallery order matches storefront when `image_url` is out of sync. */
@@ -606,6 +614,8 @@ export default function AdminProductsPage() {
   const [modifierCatalog, setModifierCatalog] = useState<ModifierGroup[]>([]);
   const [modifierPresets, setModifierPresets] = useState<ModifierPreset[]>([]);
   const [hardwareTemplates, setHardwareTemplates] = useState<HardwareTemplate[]>([]);
+  const [shippingBoxes, setShippingBoxes] = useState<ShippingBox[]>([]);
+  const [prodShippingBoxRules, setProdShippingBoxRules] = useState<ShippingBoxRuleDraft[]>([]);
   const [selectedHardwareTemplateId, setSelectedHardwareTemplateId] = useState<string>("");
   const [prodModifierAssignments, setProdModifierAssignments] = useState<Record<string, ProductModifierAssignment>>({});
   const [prodConditionalRules, setProdConditionalRules] = useState<ConditionalRuleDraft[]>([]);
@@ -765,6 +775,16 @@ export default function AdminProductsPage() {
     }
   };
 
+  const loadShippingBoxes = async () => {
+    try {
+      const res = await shippingBoxesAPI.getAdmin();
+      setShippingBoxes(Array.isArray(res?.boxes) ? res.boxes : []);
+    } catch (e) {
+      console.error(e);
+      setShippingBoxes([]);
+    }
+  };
+
   const loadModifierPresets = async () => {
     try {
       const res = await productsAPI.getModifierPresetsAdmin();
@@ -863,6 +883,7 @@ export default function AdminProductsPage() {
         loadModifierCatalog(),
         loadModifierPresets(),
         loadHardwareTemplates(),
+        loadShippingBoxes(),
       ]);
       setLoading(false);
     };
@@ -1055,6 +1076,22 @@ export default function AdminProductsPage() {
       showMsg("error", "Please select which option to show on the listing (Show on listing).");
       return;
     }
+    for (const rule of prodShippingBoxRules) {
+      if (!rule.shipping_box_id) {
+        showMsg("error", "Select a box for each shipping box rule.");
+        return;
+      }
+      const min = rule.min_smallest_side === "" ? null : Number(rule.min_smallest_side);
+      const max = rule.max_smallest_side === "" ? null : Number(rule.max_smallest_side);
+      if ((min != null && (!Number.isFinite(min) || min < 0)) || (max != null && (!Number.isFinite(max) || max < 0))) {
+        showMsg("error", "Box rule ranges must be non-negative numbers.");
+        return;
+      }
+      if (min != null && max != null && min > max) {
+        showMsg("error", "Box rule minimum cannot be greater than maximum.");
+        return;
+      }
+    }
     if (prodGraphicScenarioEnabled) {
       const fedexShippingValidation = validateHardwareFedexShippingData({
         length: prodShippingLength,
@@ -1131,6 +1168,13 @@ export default function AdminProductsPage() {
         is_new: prodIsNew,
         is_active: prodIsActive,
         properties: prodProperties.filter((pr) => pr.key.trim() || pr.value.trim()).map((pr) => ({ key: pr.key.trim(), value: pr.value.trim() })),
+        shipping_box_rules: prodGraphicScenarioEnabled ? [] : prodShippingBoxRules
+          .filter((rule) => rule.shipping_box_id)
+          .map((rule) => ({
+            shipping_box_id: Number(rule.shipping_box_id),
+            min_smallest_side: rule.min_smallest_side === "" ? null : Number(rule.min_smallest_side),
+            max_smallest_side: rule.max_smallest_side === "" ? null : Number(rule.max_smallest_side),
+          })),
       };
       const hasPurchaseOpts = prodPurchaseOptions.length > 0;
       const modifierPayload = {
@@ -1167,6 +1211,9 @@ export default function AdminProductsPage() {
         savedProductId = Number(updateRes?.product?.id || editingProductId);
         await productsAPI.updateProductPurchaseOptionsAdmin(String(savedProductId), purchaseOptionsPayload);
         await productsAPI.updateProductModifiersAdmin(String(savedProductId), modifierPayload);
+        await productsAPI.updateProductShippingBoxRulesAdmin(String(savedProductId), {
+          shipping_box_rules: payload.shipping_box_rules,
+        });
         showMsg("success", "Product updated.");
       } else {
         const createRes = await productsAPI.create(payload);
@@ -1215,6 +1262,7 @@ export default function AdminProductsPage() {
       setProdProperties([]);
       setProdModifierAssignments({});
       setProdConditionalRules([]);
+      setProdShippingBoxRules([]);
       setSelectedModifierKey("");
       setSelectedPresetDropdownValue("");
       setProdPurchaseOptions([]);
@@ -1353,10 +1401,12 @@ export default function AdminProductsPage() {
     setProdSku(p.sku || "");
     setProdIsNew(p.is_new);
     setProdIsActive(p.is_active);
+    setProdShippingBoxRules([]);
     try {
-      const [modRes, poRes] = await Promise.all([
+      const [modRes, poRes, boxRulesRes] = await Promise.all([
         productsAPI.getProductModifiersAdmin(String(p.id)),
         productsAPI.getProductPurchaseOptionsAdmin(String(p.id)),
+        productsAPI.getProductShippingBoxRulesAdmin(String(p.id)),
       ]);
       const rows = Array.isArray(modRes?.groups) ? modRes.groups : [];
       const next: Record<string, ProductModifierAssignment> = {};
@@ -1393,6 +1443,22 @@ export default function AdminProductsPage() {
       );
       const poRows: ProductPurchaseOption[] = Array.isArray(poRes?.purchase_options) ? poRes.purchase_options : [];
       setProdPurchaseOptions(poRows);
+      const boxRuleRows = Array.isArray(boxRulesRes?.shipping_box_rules)
+        ? boxRulesRes.shipping_box_rules
+        : [];
+      setProdShippingBoxRules(
+        isGraphicScenario
+          ? []
+          : boxRuleRows.map((rule: {
+              shipping_box_id?: number | string;
+              min_smallest_side?: number | string | null;
+              max_smallest_side?: number | string | null;
+            }) => ({
+              shipping_box_id: rule.shipping_box_id == null ? "" : String(rule.shipping_box_id),
+              min_smallest_side: toCleanDecimalInput(rule.min_smallest_side),
+              max_smallest_side: toCleanDecimalInput(rule.max_smallest_side),
+            }))
+      );
       setSelectedHardwareTemplateId("");
       // Restore listing price option: find the option whose unit_price matches product.price,
       // fallback to the is_default option
@@ -1412,6 +1478,7 @@ export default function AdminProductsPage() {
       console.error(e);
       setProdModifierAssignments({});
       setProdConditionalRules([]);
+      setProdShippingBoxRules([]);
       setSelectedModifierKey("");
       setSelectedPresetDropdownValue("");
       setProdPurchaseOptions([]);
@@ -1473,6 +1540,7 @@ export default function AdminProductsPage() {
     setProdProperties([]);
     setProdModifierAssignments({});
     setProdConditionalRules([]);
+    setProdShippingBoxRules([]);
     setSelectedModifierKey("");
     setSelectedPresetDropdownValue("");
     setProdPurchaseOptions([]);
@@ -1742,7 +1810,7 @@ export default function AdminProductsPage() {
                           <input
                             type="text"
                             inputMode="decimal"
-                            placeholder="Weight (kg)"
+                            placeholder="Weight (lb)"
                             value={prodWeight}
                             onChange={(e) => {
                               const v = e.target.value;
@@ -1836,9 +1904,112 @@ export default function AdminProductsPage() {
                         onChange={(e) => setProdSku(e.target.value)}
                         className={inputClass}
                       />
+                      {!prodGraphicScenarioEnabled ? (
+      <div className="md:col-span-2 rounded-lg border border-slate-200 bg-white p-4">
+                          <div className="mb-3 flex flex-wrap items-start justify-between gap-3">
+                            <div>
+                              <p className="text-sm font-semibold text-slate-800">Shipping box rules</p>
+                              <p className="mt-1 text-xs text-slate-500">
+                                Match the product&apos;s smallest side to a saved box before sending dimensions to FedEx.
+                              </p>
+                            </div>
+                            <div className="flex flex-wrap gap-2">
+                              <Link
+                                href="/admin/box-rules"
+                                className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-medium text-slate-700 shadow-sm hover:bg-slate-50"
+                              >
+                                Manage boxes
+                              </Link>
+                              <button
+                                type="button"
+                                className="rounded-lg bg-slate-900 px-3 py-2 text-xs font-medium text-white disabled:opacity-50"
+                                disabled={shippingBoxes.filter((box) => box.is_active !== false).length === 0}
+                                onClick={() =>
+                                  setProdShippingBoxRules((prev) => [
+                                    ...prev,
+                                    { shipping_box_id: "", min_smallest_side: "", max_smallest_side: "" },
+                                  ])
+                                }
+                              >
+                                + Add rule
+                              </button>
+                            </div>
+                          </div>
+                          {shippingBoxes.length === 0 ? (
+                            <p className="text-xs text-slate-500">Create boxes first in Admin &gt; Box Rules.</p>
+                          ) : prodShippingBoxRules.length === 0 ? (
+                            <p className="text-xs text-slate-400">No box rules attached to this product.</p>
+                          ) : (
+                            <div className="space-y-3">
+                              {prodShippingBoxRules.map((rule, idx) => (
+                                <div key={`shipping-box-rule-${idx}`} className="grid gap-3 rounded-lg border border-slate-200 bg-slate-50 p-3 md:grid-cols-[1.5fr_1fr_1fr_auto]">
+                                  <select
+                                    value={rule.shipping_box_id}
+                                    onChange={(e) => {
+                                      const next = [...prodShippingBoxRules];
+                                      next[idx] = { ...next[idx], shipping_box_id: e.target.value };
+                                      setProdShippingBoxRules(next);
+                                    }}
+                                    className={selectClass}
+                                  >
+                                    <option value="">Select box</option>
+                                    {shippingBoxes
+                                      .filter((box) => box.is_active !== false)
+                                      .map((box) => (
+                                        <option key={box.id} value={box.id}>
+                                          {box.name} ({box.length}&quot; x {box.width}&quot; x {box.height}&quot;)
+                                        </option>
+                                      ))}
+                                  </select>
+                                  <input
+                                    type="text"
+                                    inputMode="decimal"
+                                    placeholder="Min smallest side"
+                                    value={rule.min_smallest_side}
+                                    onChange={(e) => {
+                                      const value = e.target.value;
+                                      if (!isFloatInput(value)) return;
+                                      const next = [...prodShippingBoxRules];
+                                      next[idx] = { ...next[idx], min_smallest_side: value };
+                                      setProdShippingBoxRules(next);
+                                    }}
+                                    className={inputClass}
+                                  />
+                                  <input
+                                    type="text"
+                                    inputMode="decimal"
+                                    placeholder="Max smallest side"
+                                    value={rule.max_smallest_side}
+                                    onChange={(e) => {
+                                      const value = e.target.value;
+                                      if (!isFloatInput(value)) return;
+                                      const next = [...prodShippingBoxRules];
+                                      next[idx] = { ...next[idx], max_smallest_side: value };
+                                      setProdShippingBoxRules(next);
+                                    }}
+                                    className={inputClass}
+                                  />
+                                  <button
+                                    type="button"
+                                    onClick={() => setProdShippingBoxRules((prev) => prev.filter((_, i) => i !== idx))}
+                                    className="rounded-lg border border-rose-200 bg-white px-3 py-2 text-xs font-medium text-rose-700 hover:bg-rose-50"
+                                  >
+                                    Remove
+                                  </button>
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                      </div>
+                      ) : null}
                       {prodGraphicScenarioEnabled ? (
-                        <div className="md:col-span-2 rounded-lg border border-slate-200 bg-slate-50 p-3">
-                          <p className="mb-3 text-sm font-medium text-slate-700">Fedex shipping data</p>
+                        <div className="md:col-span-2 rounded-lg border border-slate-200 bg-white p-4">
+                          <div className="mb-3">
+                            <p className="text-sm font-semibold text-slate-800">Hardware shipping data</p>
+                            <p className="mt-1 text-xs text-slate-500">
+                              Hardware products do not use customer-entered dimensions or box rules. These values are sent to FedEx automatically.
+                            </p>
+                          </div>
                           <div className="grid gap-3 md:grid-cols-2">
                             <div>
                               <input
@@ -1904,7 +2075,7 @@ export default function AdminProductsPage() {
                               <input
                                 type="text"
                                 inputMode="decimal"
-                                placeholder="Weight (kg)"
+                                placeholder="Weight (lb)"
                                 value={prodShippingWeight}
                                 onChange={(e) => {
                                   const v = e.target.value;
@@ -1970,6 +2141,7 @@ export default function AdminProductsPage() {
                                 setProdPurchaseOptions([]);
                                 setProdModifierAssignments({});
                                 setProdConditionalRules([]);
+                                setProdShippingBoxRules([]);
                                 setSelectedModifierKey("");
                                 setSelectedPresetDropdownValue("");
                                 setSelectedHardwareTemplateId("");
