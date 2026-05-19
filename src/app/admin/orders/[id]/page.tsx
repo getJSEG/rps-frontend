@@ -634,11 +634,7 @@ export default function OrderDetails() {
           d.shipment_updated_at != null ? String(d.shipment_updated_at) : null,
       };
       setOrder(processedOrder);
-      // Keep the add field empty; existing tracking stays on the order record/customer view.
-      // Legacy FedEx shipment flow:
-      // setManualFedexServiceType(processedOrder.carrier_service_type?.trim() || "");
-      // setTrackingInput(processedOrder.order_tracking_id?.trim() || "");
-      setTrackingInput("");
+      setTrackingInput(processedOrder.order_tracking_id?.trim() || "");
     } catch (err: unknown) {
       const errorMessage = err instanceof Error ? err.message : "Failed to load order details";
 
@@ -764,23 +760,24 @@ export default function OrderDetails() {
     if (!order) return;
     const nextTrackingId = trackingInput.trim();
     if (!nextTrackingId) {
-      setError("Enter a tracking number before adding it.");
+      setError("Enter a tracking number before saving.");
       return;
     }
     setSavingTracking(true);
     setError(null);
     try {
       const response = await ordersAPI.updateOrderTrackingId(order.id, nextTrackingId);
+      const savedId = String(response?.order?.order_tracking_id || nextTrackingId).trim();
       setOrder((prev) =>
         prev
           ? {
               ...prev,
-              order_tracking_id: String(response?.order?.order_tracking_id || nextTrackingId),
+              order_tracking_id: savedId,
               updated_at: response?.order?.updated_at ? String(response.order.updated_at) : prev.updated_at,
             }
           : prev
       );
-      setTrackingInput("");
+      setTrackingInput(savedId);
     } catch (e) {
       const msg = e instanceof Error ? e.message : "Failed to save tracking ID";
       setError(msg);
@@ -917,9 +914,8 @@ export default function OrderDetails() {
     .trim()
     .replace(/\s+/g, "_");
   const canRefundFromAdmin = normalizedStatus === "awaiting_refund";
-  // Kept for the commented saved-tracking display below.
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const savedTrackingId = order.order_tracking_id?.trim() || "";
+  const trackingDirty = trackingInput.trim() !== savedTrackingId;
   /* Legacy FedEx shipment flow, kept commented while admin uses manual tracking entry.
   const isPaid = String(order.payment_status || "").toLowerCase() === "paid";
   const canCreateFedex =
@@ -1037,6 +1033,14 @@ export default function OrderDetails() {
                       type="text"
                       value={trackingInput}
                       onChange={(e) => setTrackingInput(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") {
+                          e.preventDefault();
+                          if (!savingTracking && trackingInput.trim() && trackingDirty) {
+                            void handleSaveTrackingId();
+                          }
+                        }
+                      }}
                       placeholder="Enter tracking number"
                       className="mt-1 w-full rounded-xl border border-slate-300 px-3 py-2.5 font-mono text-sm text-slate-900 outline-none transition focus:border-sky-500 focus:ring-2 focus:ring-sky-100"
                     />
@@ -1044,10 +1048,10 @@ export default function OrderDetails() {
                   <button
                     type="button"
                     onClick={() => void handleSaveTrackingId()}
-                    disabled={savingTracking || !trackingInput.trim()}
+                    disabled={savingTracking || !trackingInput.trim() || !trackingDirty}
                     className="rounded-xl border border-sky-200 bg-sky-50 px-4 py-2.5 text-sm font-semibold text-sky-900 hover:bg-sky-100 disabled:cursor-not-allowed disabled:opacity-50"
                   >
-                    {savingTracking ? "Saving..." : "Add"}
+                    {savingTracking ? "Saving..." : "Save"}
                   </button>
                 </div>
                 {/* Legacy FedEx shipment UI, kept commented while admin uses manual tracking entry.
