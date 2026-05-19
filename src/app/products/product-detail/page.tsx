@@ -21,6 +21,7 @@ import {
   productFedexShippingFromProduct,
   type FedexRateQuote,
   type FreeShippingPolicy,
+  type ProductShippingBoxRule,
   type TaxEstimateResponse,
 } from "../../../utils/api";
 import { isAuthenticated } from "../../../utils/roles";
@@ -151,6 +152,7 @@ interface Product {
   shipping_width?: number | string | null;
   shipping_height?: number | string | null;
   shipping_weight?: number | string | null;
+  shipping_box_rules?: ProductShippingBoxRule[];
   production_time?: number | string | null;
   purchase_options?: Array<{
     id: number;
@@ -413,6 +415,28 @@ function ProductDetailContent() {
   const hardwareFedexShipping = useMemo(() => hardwareFedexShippingFromProduct(product), [product]);
   /** Standard product FedEx length/weight from product admin; width/height still come from customer input. */
   const productFedexShipping = useMemo(() => productFedexShippingFromProduct(product), [product]);
+  const shippingBoxRules = useMemo(
+    () => (Array.isArray(product?.shipping_box_rules) ? product.shipping_box_rules : []),
+    [product]
+  );
+  const enteredWidthInches = parseFloat(width) || 0;
+  const enteredHeightInches = parseFloat(height) || 0;
+  const productMaxWidth = Number(product?.max_width);
+  const productMaxHeight = Number(product?.max_height);
+  const widthLimitError =
+    !skipDimensionsForPrice &&
+    Number.isFinite(productMaxWidth) &&
+    productMaxWidth > 0 &&
+    enteredWidthInches > productMaxWidth
+      ? `Maximum width is ${productMaxWidth}"`
+      : "";
+  const heightLimitError =
+    !skipDimensionsForPrice &&
+    Number.isFinite(productMaxHeight) &&
+    productMaxHeight > 0 &&
+    enteredHeightInches > productMaxHeight
+      ? `Maximum height is ${productMaxHeight}"`
+      : "";
 
   const activeModifierGroups = (Array.isArray(product?.modifier_groups) ? product.modifier_groups : []).filter(
     (group) => {
@@ -714,6 +738,11 @@ function ProductDetailContent() {
       setFedexRatesLoading(false);
       return cleanup;
     }
+    if (widthLimitError || heightLimitError) {
+      setMessage(`Error: ${widthLimitError || heightLimitError}`);
+      setTimeout(() => setMessage(""), 5000);
+      return;
+    }
     if (missingRequiredModifiers.length > 0) {
       setFedexRates([]);
       setSelectedFedexServiceType("");
@@ -725,6 +754,12 @@ function ProductDetailContent() {
     // or the effect reruns when preview returns and duplicates POST /fedex/rates.
     const wIn = parseFloat(width) || 0;
     const hIn = parseFloat(height) || 0;
+    if (widthLimitError || heightLimitError) {
+      setFedexRates([]);
+      setSelectedFedexServiceType("");
+      setFedexRatesError(null);
+      return cleanup;
+    }
     const useHardwareFedexBox = hardwareFedexShipping != null;
     if (!useHardwareFedexBox && !skipDimensionsForPrice && (wIn <= 0 || hIn <= 0)) {
       setFedexRates([]);
@@ -763,14 +798,23 @@ function ProductDetailContent() {
       ...(fedexStreetLines.length > 0 ? { streetLines: fedexStreetLines } : {}),
     };
 
-    const packages = buildFedexPackagesForProductConfigure({
-      billableQty,
-      widthInches: wIn,
-      heightInches: hIn,
-      isGraphicScenario,
-      hardwareShipping: hardwareFedexShipping,
-      productShipping: productFedexShipping,
-    });
+    let packages: Array<{ weight: number; length: number; width: number; height: number }>;
+    try {
+      packages = buildFedexPackagesForProductConfigure({
+        billableQty,
+        widthInches: wIn,
+        heightInches: hIn,
+        isGraphicScenario,
+        hardwareShipping: hardwareFedexShipping,
+        productShipping: productFedexShipping,
+        shippingBoxRules,
+      });
+    } catch (error) {
+      setFedexRates([]);
+      setSelectedFedexServiceType("");
+      setFedexRatesError(error instanceof Error ? error.message : "Shipping box is not configured for this size. Please contact admin.");
+      return cleanup;
+    }
 
     debounceHolder.timer = setTimeout(() => {
       if (fedexRatesRunRef.current !== myRun) return;
@@ -811,10 +855,13 @@ function ProductDetailContent() {
     missingRequiredModifiers.length,
     width,
     height,
+    widthLimitError,
+    heightLimitError,
     skipDimensionsForPrice,
     isGraphicScenario,
     hardwareFedexShipping,
     productFedexShipping,
+    shippingBoxRules,
     fedexJobQtyKey,
     estimateShipForm.postcode,
     estimateShipForm.country,
@@ -1215,16 +1262,43 @@ function ProductDetailContent() {
       const productImageForCart =
         getProductImageUrl(firstListingRaw ? String(firstListingRaw).trim() : "") || "";
 
-      const hardwareCartFields: Record<string, string | number> = {};
-      if (hardwareFedexShipping && product?.hardware_template_id != null) {
+      const hardwareCartFields: Record<string, unknown> = {};
+      const shippingBoxRulesForCart = Array.isArray(product?.shipping_box_rules)
+        ? product.shipping_box_rules
+        : [];
+      if (shippingBoxRulesForCart.length > 0) {
+        hardwareCartFields.shipping_box_rules = shippingBoxRulesForCart;
+        hardwareCartFields.shippingBoxRules = shippingBoxRulesForCart;
+      }
+      if (hardwareFedexShipping) {
+        if (product?.hardware_template_id != null) {
+          const hid = Number(product.hardware_template_id);
+          if (Number.isFinite(hid)) {
+            hardwareCartFields.hardware_template_id = hid;
+            hardwareCartFields.hardwareTemplateId = hid;
+          }
+        }
+        if (product?.graphic_scenario_enabled) {
+          hardwareCartFields.graphic_scenario_enabled = true;
+          hardwareCartFields.graphicScenarioEnabled = true;
+        }
+        hardwareCartFields.shipping_length = hardwareFedexShipping.length;
+        hardwareCartFields.shipping_width = hardwareFedexShipping.width;
+        hardwareCartFields.shipping_height = hardwareFedexShipping.height;
+        hardwareCartFields.shipping_weight = hardwareFedexShipping.weightPerUnit;
+      } else if (product?.hardware_template_id != null) {
         const hid = Number(product.hardware_template_id);
         if (Number.isFinite(hid)) {
           hardwareCartFields.hardware_template_id = hid;
           hardwareCartFields.hardwareTemplateId = hid;
-          hardwareCartFields.shipping_length = hardwareFedexShipping.length;
-          hardwareCartFields.shipping_width = hardwareFedexShipping.width;
-          hardwareCartFields.shipping_height = hardwareFedexShipping.height;
-          hardwareCartFields.shipping_weight = hardwareFedexShipping.weightPerUnit;
+        }
+        if (productFedexShipping.length != null) {
+          hardwareCartFields.shipping_length = productFedexShipping.length;
+          hardwareCartFields.shippingLength = productFedexShipping.length;
+        }
+        if (productFedexShipping.weightPerUnit != null) {
+          hardwareCartFields.shipping_weight = productFedexShipping.weightPerUnit;
+          hardwareCartFields.shippingWeight = productFedexShipping.weightPerUnit;
         }
       } else {
         if (productFedexShipping.length != null) {
@@ -1709,6 +1783,7 @@ function ProductDetailContent() {
                       placeholder="0"
                       className="w-full px-3 py-2 border border-gray-300 text-black rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
                     />
+                    {widthLimitError ? <p className="mt-1 text-xs text-rose-600">{widthLimitError}</p> : null}
                   </div>
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-2">
@@ -1725,6 +1800,7 @@ function ProductDetailContent() {
                       placeholder="0"
                       className="w-full px-3 py-2 border border-gray-300 text-black rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
                     />
+                    {heightLimitError ? <p className="mt-1 text-xs text-rose-600">{heightLimitError}</p> : null}
                   </div>
                 </div>
               </div>

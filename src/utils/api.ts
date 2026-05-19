@@ -140,6 +140,31 @@ export type ShippingMethod = {
   is_active?: boolean;
   sort_order?: number;
 };
+
+export type ShippingBox = {
+  id: number;
+  name: string;
+  length: number;
+  width: number;
+  height: number;
+  is_active?: boolean;
+};
+
+export type ProductShippingBoxRule = {
+  id?: number;
+  shipping_box_id: number;
+  min_smallest_side?: number | null;
+  max_smallest_side?: number | null;
+  sort_order?: number;
+  is_active?: boolean;
+  box?: {
+    id?: number;
+    name?: string;
+    length?: number;
+    width?: number;
+    height?: number;
+  };
+};
 export type StorePickupAddress = {
   id: number;
   label: string;
@@ -548,11 +573,88 @@ function parsePositiveProductNumber(value: unknown): number | null {
   return n;
 }
 
+function productShippingBoxRulesFrom(value: {
+  shipping_box_rules?: unknown;
+  shippingBoxRules?: unknown;
+  pricing_snapshot?: Record<string, unknown>;
+} | null | undefined): ProductShippingBoxRule[] {
+  const raw =
+    value?.shipping_box_rules ??
+    value?.shippingBoxRules ??
+    value?.pricing_snapshot?.shipping_box_rules ??
+    value?.pricing_snapshot?.shippingBoxRules;
+  return Array.isArray(raw) ? (raw as ProductShippingBoxRule[]) : [];
+}
+
+function hasActiveShippingBoxRules(value: {
+  shipping_box_rules?: unknown;
+  shippingBoxRules?: unknown;
+  pricing_snapshot?: Record<string, unknown>;
+} | null | undefined): boolean {
+  return productShippingBoxRulesFrom(value).some((rule) => rule?.is_active !== false);
+}
+
+function boxFromRule(rule: ProductShippingBoxRule): { length: number; width: number; height: number } | null {
+  const box = rule.box || {};
+  const length = parsePositiveProductNumber(box.length ?? (rule as unknown as Record<string, unknown>).box_length);
+  const width = parsePositiveProductNumber(box.width ?? (rule as unknown as Record<string, unknown>).box_width);
+  const height = parsePositiveProductNumber(box.height ?? (rule as unknown as Record<string, unknown>).box_height);
+  if (length == null || width == null || height == null) return null;
+  return { length, width, height };
+}
+
+function matchingShippingBoxFromRules(
+  rulesRaw: ProductShippingBoxRule[] | null | undefined,
+  widthInches: number,
+  heightInches: number
+): { length: number; width: number; height: number } | null {
+  const rules = (Array.isArray(rulesRaw) ? rulesRaw : [])
+    .filter((rule) => rule?.is_active !== false)
+    .sort((a, b) => Number(a?.sort_order || 0) - Number(b?.sort_order || 0));
+  if (rules.length === 0) return null;
+  const smallestSide =
+    widthInches > 0 && heightInches > 0 ? Math.min(widthInches, heightInches) : null;
+
+  if (smallestSide != null) {
+    for (const rule of rules) {
+      const min = parsePositiveProductNumber(rule.min_smallest_side);
+      const max = parsePositiveProductNumber(rule.max_smallest_side);
+      const minOk = min == null || smallestSide >= min;
+      const maxOk = max == null || smallestSide <= max;
+      const box = boxFromRule(rule);
+      if (box && minOk && maxOk) return box;
+    }
+  }
+
+  for (const rule of rules) {
+    const min = parsePositiveProductNumber(rule.min_smallest_side);
+    const max = parsePositiveProductNumber(rule.max_smallest_side);
+    const box = boxFromRule(rule);
+    if (box && min == null && max == null) return box;
+  }
+  return null;
+}
+
+/** Hardware / graphic-scenario products use admin `shipping_*` for FedEx (matches backend validation). */
+function isHardwareFedexProduct(row: {
+  graphic_scenario_enabled?: unknown;
+  graphicScenarioEnabled?: unknown;
+  hardware_template_id?: unknown;
+  hardwareTemplateId?: unknown;
+} | null | undefined): boolean {
+  if (!row) return false;
+  if (row.graphic_scenario_enabled === true || row.graphicScenarioEnabled === true) return true;
+  const htRaw = row.hardware_template_id ?? row.hardwareTemplateId;
+  return htRaw != null && String(htRaw).trim() !== "" && Number.isFinite(Number(htRaw));
+}
+
 /**
- * Returns shipping dimensions/weight for FedEx when the product has `hardware_template_id`
+ * Returns shipping dimensions/weight for FedEx when the product is hardware/graphic-scenario
  * and all `shipping_length`, `shipping_width`, `shipping_height`, `shipping_weight` are positive.
  */
 export function hardwareFedexShippingFromProduct(product: {
+  graphic_scenario_enabled?: unknown;
+  graphicScenarioEnabled?: unknown;
   hardware_template_id?: number | null;
   hardwareTemplateId?: number | null;
   shipping_length?: unknown;
@@ -560,10 +662,7 @@ export function hardwareFedexShippingFromProduct(product: {
   shipping_height?: unknown;
   shipping_weight?: unknown;
 } | null | undefined): HardwareFedexShipping | null {
-  if (!product) return null;
-  const htRaw = product.hardware_template_id ?? product.hardwareTemplateId;
-  if (htRaw == null || String(htRaw).trim() === "") return null;
-  if (!Number.isFinite(Number(htRaw))) return null;
+  if (!product || !isHardwareFedexProduct(product)) return null;
   const length = parsePositiveProductNumber(product.shipping_length);
   const width = parsePositiveProductNumber(product.shipping_width);
   const height = parsePositiveProductNumber(product.shipping_height);
@@ -573,15 +672,20 @@ export function hardwareFedexShippingFromProduct(product: {
 }
 
 export function productFedexShippingFromProduct(product: {
+  graphic_scenario_enabled?: unknown;
+  graphicScenarioEnabled?: unknown;
+  hardware_template_id?: unknown;
+  hardwareTemplateId?: unknown;
   length?: unknown;
   weight?: unknown;
   shipping_length?: unknown;
   shipping_weight?: unknown;
 } | null | undefined): ProductFedexShipping {
   if (!product) return { length: null, weightPerUnit: null };
+  const hasHardware = isHardwareFedexProduct(product);
   return {
-    length: parsePositiveProductNumber(product.length ?? product.shipping_length),
-    weightPerUnit: parsePositiveProductNumber(product.weight ?? product.shipping_weight),
+    length: parsePositiveProductNumber(hasHardware ? product.shipping_length : (product.length ?? product.shipping_length)),
+    weightPerUnit: parsePositiveProductNumber(hasHardware ? product.shipping_weight : (product.weight ?? product.shipping_weight)),
   };
 }
 
@@ -607,6 +711,8 @@ function billableQtyFromCartLikeItem(item: {
 }
 
 function hardwareFedexShippingFromCartLikeItem(item: {
+  graphic_scenario_enabled?: unknown;
+  graphicScenarioEnabled?: unknown;
   hardware_template_id?: number | null;
   hardwareTemplateId?: number | null;
   shipping_length?: unknown;
@@ -620,9 +726,7 @@ function hardwareFedexShippingFromCartLikeItem(item: {
   pricing_snapshot?: Record<string, unknown>;
 }): HardwareFedexShipping | null {
   const snap = item.pricing_snapshot && typeof item.pricing_snapshot === "object" ? item.pricing_snapshot : {};
-  const htRaw = item.hardware_template_id ?? item.hardwareTemplateId ?? snap.hardware_template_id ?? snap.hardwareTemplateId;
-  if (htRaw == null || String(htRaw).trim() === "") return null;
-  if (!Number.isFinite(Number(htRaw))) return null;
+  if (!isHardwareFedexProduct({ ...item, ...snap })) return null;
 
   const pick = (snake: string, camel: string) =>
     (item as Record<string, unknown>)[snake] ??
@@ -636,6 +740,17 @@ function hardwareFedexShippingFromCartLikeItem(item: {
   const weightPerUnit = parsePositiveProductNumber(pick("shipping_weight", "shippingWeight"));
   if (length == null || width == null || height == null || weightPerUnit == null) return null;
   return { length, width, height, weightPerUnit };
+}
+
+function hasHardwareTemplateOnCartLikeItem(item: {
+  graphic_scenario_enabled?: unknown;
+  graphicScenarioEnabled?: unknown;
+  hardware_template_id?: unknown;
+  hardwareTemplateId?: unknown;
+  pricing_snapshot?: Record<string, unknown>;
+}): boolean {
+  const snap = item.pricing_snapshot && typeof item.pricing_snapshot === "object" ? item.pricing_snapshot : {};
+  return isHardwareFedexProduct({ ...item, ...snap });
 }
 
 /**
@@ -679,6 +794,30 @@ export function buildFedexPackagesFromShippableCartItems(
       pricing_snapshot?: Record<string, unknown>;
     };
     const qty = billableQtyFromCartLikeItem(item);
+    const itemWidth = Number(item.width ?? item.width_inches) || 0;
+    const itemHeight = Number(item.height ?? item.height_inches) || 0;
+    const isHardware = hasHardwareTemplateOnCartLikeItem(item);
+    const matchedBox = isHardware
+      ? null
+      : matchingShippingBoxFromRules(productShippingBoxRulesFrom(item), itemWidth, itemHeight);
+    if (matchedBox) {
+      const storedWeight = parsePositiveProductNumber(
+        item.shipping_weight ??
+          item.shippingWeight ??
+          (item as Record<string, unknown>).weight ??
+          item.pricing_snapshot?.shipping_weight ??
+          item.pricing_snapshot?.shippingWeight
+      );
+      maxLen = Math.max(maxLen, Math.ceil(matchedBox.length));
+      maxWid = Math.max(maxWid, Math.ceil(matchedBox.width));
+      maxHt = Math.max(maxHt, Math.ceil(matchedBox.height));
+      sumWeight += (storedWeight != null ? storedWeight : 1) * qty;
+      continue;
+    }
+    if (!isHardware && hasActiveShippingBoxRules(item)) {
+      throw new Error("Shipping box is not configured for this size. Please contact admin.");
+    }
+
     const hw = hardwareFedexShippingFromCartLikeItem(item);
     if (hw) {
       maxLen = Math.max(maxLen, Math.ceil(hw.length));
@@ -686,13 +825,11 @@ export function buildFedexPackagesFromShippableCartItems(
       maxHt = Math.max(maxHt, Math.ceil(hw.height));
       sumWeight += hw.weightPerUnit * qty;
     } else {
-      const w = Number(item.width ?? item.width_inches) || 0;
-      const h = Number(item.height ?? item.height_inches) || 0;
       const storedLength = parsePositiveProductNumber(item.shipping_length ?? item.shippingLength);
       const storedWeight = parsePositiveProductNumber(item.shipping_weight ?? item.shippingWeight);
       maxLen = Math.max(maxLen, storedLength != null ? Math.ceil(storedLength) : 12);
-      maxWid = Math.max(maxWid, w > 0 ? Math.max(1, Math.ceil(w)) : 10);
-      maxHt = Math.max(maxHt, h > 0 ? Math.max(1, Math.ceil(h)) : 6);
+      maxWid = Math.max(maxWid, itemWidth > 0 ? Math.max(1, Math.ceil(itemWidth)) : 10);
+      maxHt = Math.max(maxHt, itemHeight > 0 ? Math.max(1, Math.ceil(itemHeight)) : 6);
       sumWeight += (storedWeight != null ? storedWeight : 1) * qty;
     }
   }
@@ -819,9 +956,31 @@ export function buildFedexPackagesForProductConfigure(options: {
   isGraphicScenario: boolean;
   hardwareShipping?: HardwareFedexShipping | null;
   productShipping?: ProductFedexShipping | null;
+  shippingBoxRules?: ProductShippingBoxRule[] | null;
 }): Array<{ weight: number; length: number; width: number; height: number }> {
-  const { billableQty, widthInches, heightInches, hardwareShipping, productShipping } = options;
+  const { billableQty, widthInches, heightInches, hardwareShipping, productShipping, shippingBoxRules } = options;
   const totalQty = Math.max(1, billableQty);
+  const matchedBox = hardwareShipping
+    ? null
+    : matchingShippingBoxFromRules(shippingBoxRules, widthInches, heightInches);
+  if (matchedBox) {
+    const packageWeight =
+      hardwareShipping?.weightPerUnit ??
+      productShipping?.weightPerUnit ??
+      null;
+    const weight = packageWeight != null ? Math.round(packageWeight * totalQty * 100) / 100 : totalQty;
+    return [
+      {
+        weight: Math.max(1, weight),
+        length: Math.max(1, Math.ceil(matchedBox.length)),
+        width: Math.max(1, Math.ceil(matchedBox.width)),
+        height: Math.max(1, Math.ceil(matchedBox.height)),
+      },
+    ];
+  }
+  if (!hardwareShipping && Array.isArray(shippingBoxRules) && shippingBoxRules.some((rule) => rule?.is_active !== false)) {
+    throw new Error("Shipping box is not configured for this size. Please contact admin.");
+  }
 
   if (hardwareShipping) {
     const wt = Math.round(hardwareShipping.weightPerUnit * totalQty * 100) / 100;
@@ -1340,6 +1499,24 @@ export const productsAPI = {
       body: JSON.stringify(data),
     });
   },
+  getProductShippingBoxRulesAdmin: async (id: string) => {
+    return apiCall(`/products/admin/products/${id}/shipping-box-rules`);
+  },
+  updateProductShippingBoxRulesAdmin: async (
+    id: string,
+    data: {
+      shipping_box_rules: Array<{
+        shipping_box_id: number;
+        min_smallest_side: number | null;
+        max_smallest_side: number | null;
+      }>;
+    }
+  ) => {
+    return apiCall(`/products/admin/products/${id}/shipping-box-rules`, {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    });
+  },
   getHardwareTemplatesAdmin: async () => {
     return apiCall('/products/admin/hardware-templates') as Promise<{ templates: HardwareTemplate[] }>;
   },
@@ -1386,6 +1563,18 @@ export const shippingRatesAPI = {
     data: { name?: string; price?: number; isActive?: boolean }
   ) => apiCall(`/shipping-rates/admin/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
   deleteAdminMethod: async (id: number | string) => apiCall(`/shipping-rates/admin/${id}`, { method: 'DELETE' }),
+};
+
+export const shippingBoxesAPI = {
+  getAdmin: async (): Promise<{ boxes: ShippingBox[] }> => apiCall('/shipping-boxes/admin'),
+  createAdmin: async (data: { name: string; length: number; width: number; height: number; isActive?: boolean }) =>
+    apiCall('/shipping-boxes/admin', { method: 'POST', body: JSON.stringify(data) }) as Promise<{ box: ShippingBox }>,
+  updateAdmin: async (
+    id: number | string,
+    data: Partial<{ name: string; length: number; width: number; height: number; isActive: boolean }>
+  ) =>
+    apiCall(`/shipping-boxes/admin/${id}`, { method: 'PUT', body: JSON.stringify(data) }) as Promise<{ box: ShippingBox }>,
+  deleteAdmin: async (id: number | string) => apiCall(`/shipping-boxes/admin/${id}`, { method: 'DELETE' }),
 };
 
 export const storePickupAddressesAPI = {
