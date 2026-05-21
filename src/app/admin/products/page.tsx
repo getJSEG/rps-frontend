@@ -41,6 +41,18 @@ interface ProductFaqItem {
   answer: string;
 }
 
+interface ProductionTimeRuleDraft {
+  minQty: string;
+  maxQty: string;
+  businessDays: string;
+}
+
+interface ProductionTimeRulePayload {
+  minQty: number;
+  maxQty: number | null;
+  businessDays: number;
+}
+
 interface Product {
   id: number;
   name: string;
@@ -64,8 +76,9 @@ interface Product {
   shipping_width?: number | null;
   shipping_height?: number | null;
   shipping_weight?: number | null;
-  /** Whole units (e.g. business days); meaning is app-defined. */
+  /** Legacy column kept in the DB, ignored by the dynamic admin flow. */
   production_time?: number | null;
+  production_time_rules?: unknown;
   /** Ordered bullet points shown under the product image on the storefront. */
   product_highlights?: string[] | null;
   pricing_mode?: "fixed" | "area" | null;
@@ -182,6 +195,142 @@ const toCleanDecimalInput = (v: unknown): string => {
   if (!/^-?\d+(\.\d+)?$/.test(raw)) return raw;
   return raw.replace(/(\.\d*?[1-9])0+$/,"$1").replace(/\.0+$/,"");
 };
+
+function normalizeProductionTimeRuleDrafts(value: unknown): ProductionTimeRuleDraft[] {
+  let raw = value;
+  if (typeof raw === "string") {
+    try {
+      raw = raw.trim() ? JSON.parse(raw) : [];
+    } catch {
+      raw = [];
+    }
+  }
+  if (!Array.isArray(raw)) return [];
+  return raw
+    .map((rule) => {
+      const r = rule && typeof rule === "object" ? rule as Record<string, unknown> : {};
+      const minQty = Math.trunc(Number(r.minQty ?? r.min_qty ?? 1));
+      const maxQtyRaw = r.maxQty ?? r.max_qty;
+      const maxQty =
+        maxQtyRaw == null || maxQtyRaw === "" ? null : Math.trunc(Number(maxQtyRaw));
+      const businessDays = Math.trunc(Number(r.businessDays ?? r.business_days));
+      if (!Number.isFinite(minQty) || minQty < 1) return null;
+      if (maxQty !== null && (!Number.isFinite(maxQty) || maxQty < minQty)) return null;
+      if (!Number.isFinite(businessDays) || businessDays < 0) return null;
+      return {
+        minQty: String(minQty),
+        maxQty: maxQty == null ? "" : String(maxQty),
+        businessDays: String(businessDays),
+      };
+    })
+    .filter((rule): rule is ProductionTimeRuleDraft => Boolean(rule))
+    .sort((a, b) => Number(a.minQty) - Number(b.minQty));
+}
+
+function nextProductionTimeRuleDraft(rules: ProductionTimeRuleDraft[]): ProductionTimeRuleDraft {
+  const last = [...rules]
+    .reverse()
+    .find((rule) => rule.minQty.trim() || rule.maxQty.trim() || rule.businessDays.trim());
+  const lastMax = last?.maxQty === "" ? NaN : Number(last?.maxQty);
+  return {
+    minQty: Number.isFinite(lastMax) ? String(Math.trunc(lastMax) + 1) : "",
+    maxQty: "",
+    businessDays: "",
+  };
+}
+
+function parseProductionTimeRulesForSubmit(
+  rules: ProductionTimeRuleDraft[]
+): { rules: ProductionTimeRulePayload[]; error?: string } {
+  const filledRules = rules.filter(
+    (rule) => rule.minQty.trim() || rule.maxQty.trim() || rule.businessDays.trim()
+  );
+  const parsed: ProductionTimeRulePayload[] = [];
+
+  for (let idx = 0; idx < filledRules.length; idx += 1) {
+    const rule = filledRules[idx];
+    const row = idx + 1;
+    if (!rule.minQty.trim()) return { rules: [], error: `Production time row ${row}: add min qty.` };
+    if (!rule.businessDays.trim()) return { rules: [], error: `Production time row ${row}: add business days.` };
+
+    const minQty = Math.trunc(Number(rule.minQty));
+    const maxQty = rule.maxQty.trim() === "" ? null : Math.trunc(Number(rule.maxQty));
+    const businessDays = Math.trunc(Number(rule.businessDays));
+
+    if (!Number.isFinite(minQty) || minQty < 1) {
+      return { rules: [], error: `Production time row ${row}: min qty must be 1 or higher.` };
+    }
+    if (maxQty !== null && (!Number.isFinite(maxQty) || maxQty < minQty)) {
+      return { rules: [], error: `Production time row ${row}: max qty must be greater than or equal to min qty.` };
+    }
+    if (!Number.isFinite(businessDays) || businessDays < 0) {
+      return { rules: [], error: `Production time row ${row}: business days must be 0 or higher.` };
+    }
+
+    const previous = parsed[parsed.length - 1];
+    if (previous) {
+      if (previous.maxQty === null) {
+        return { rules: [], error: `Production time row ${row - 1} has no max qty, so no later row can be added.` };
+      }
+      const minimumAllowed = previous.maxQty + 1;
+      if (minQty !== minimumAllowed) {
+        return {
+          rules: [],
+          error: `Production time row ${row}: min qty must be equal to or greater than ${minimumAllowed}.`,
+        };
+      }
+    }
+
+    parsed.push({ minQty, maxQty, businessDays });
+  }
+
+  return { rules: parsed };
+}
+
+function productionTimeRuleFieldErrors(
+  rules: ProductionTimeRuleDraft[],
+  idx: number
+): Partial<Record<"minQty" | "maxQty" | "businessDays", string>> {
+  const rule = rules[idx];
+  if (!rule) return {};
+  const hasAnyValue = Boolean(rule.minQty.trim() || rule.maxQty.trim() || rule.businessDays.trim());
+  if (!hasAnyValue) return {};
+
+  const errors: Partial<Record<"minQty" | "maxQty" | "businessDays", string>> = {};
+  const minQty = rule.minQty.trim() === "" ? NaN : Math.trunc(Number(rule.minQty));
+  const maxQty = rule.maxQty.trim() === "" ? null : Math.trunc(Number(rule.maxQty));
+  const businessDays = rule.businessDays.trim() === "" ? NaN : Math.trunc(Number(rule.businessDays));
+
+  if (rule.minQty.trim() && (!Number.isFinite(minQty) || minQty < 1)) {
+    errors.minQty = "Min qty must be 1 or higher.";
+  }
+  if (maxQty !== null && (!Number.isFinite(maxQty) || (Number.isFinite(minQty) && maxQty < minQty))) {
+    errors.maxQty = "Max qty must be greater than min qty.";
+  }
+  if (rule.businessDays.trim() && (!Number.isFinite(businessDays) || businessDays < 0)) {
+    errors.businessDays = "Business days must be 0 or higher.";
+  }
+
+  const previous = rules
+    .slice(0, idx)
+    .reverse()
+    .find((row) => row.minQty.trim() || row.maxQty.trim() || row.businessDays.trim());
+  if (previous && rule.minQty.trim()) {
+    if (!previous.maxQty.trim()) {
+      errors.minQty = "Previous row needs max qty first.";
+    } else {
+      const previousMax = Math.trunc(Number(previous.maxQty));
+      if (Number.isFinite(previousMax)) {
+        const minimumAllowed = previousMax + 1;
+        if (Number.isFinite(minQty) && minQty !== minimumAllowed) {
+          errors.minQty = `Min qty must be equal to or greater than ${minimumAllowed}.`;
+        }
+      }
+    }
+  }
+
+  return errors;
+}
 
 /** Seed contenteditable: existing HTML as-is; plain text escaped with line breaks as &lt;br&gt;. */
 function toEditorInitialHtml(raw: string | null | undefined): string {
@@ -567,7 +716,9 @@ export default function AdminProductsPage() {
   const [prodShippingHeight, setProdShippingHeight] = useState("");
   const [prodShippingWeight, setProdShippingWeight] = useState("");
   const [fedexShippingFieldErrors, setFedexShippingFieldErrors] = useState<FedexShippingFieldErrors>({});
-  const [prodProductionTime, setProdProductionTime] = useState("");
+  const [prodProductionTimeRules, setProdProductionTimeRules] = useState<ProductionTimeRuleDraft[]>([
+    { minQty: "", maxQty: "", businessDays: "" },
+  ]);
   const [prodHighlights, setProdHighlights] = useState<string[]>([]);
   const [prodPricingMode, setProdPricingMode] = useState<"" | "fixed" | "area">("");
   const [prodGraphicScenarioEnabled, setProdGraphicScenarioEnabled] = useState(false);
@@ -1080,6 +1231,11 @@ export default function AdminProductsPage() {
       showMsg("error", "Please select which option to show on the listing (Show on listing).");
       return;
     }
+    const productionTimeRulesResult = parseProductionTimeRulesForSubmit(prodProductionTimeRules);
+    if (productionTimeRulesResult.error) {
+      showMsg("error", productionTimeRulesResult.error);
+      return;
+    }
     for (const rule of prodShippingBoxRules) {
       if (!rule.shipping_box_id) {
         showMsg("error", "Select a box for each shipping box rule.");
@@ -1169,7 +1325,7 @@ export default function AdminProductsPage() {
         shipping_width: prodShippingWidth === "" ? null : parseFloat(prodShippingWidth),
         shipping_height: prodShippingHeight === "" ? null : parseFloat(prodShippingHeight),
         shipping_weight: prodShippingWeight === "" ? null : parseFloat(prodShippingWeight),
-        production_time: prodProductionTime === "" ? null : parseInt(prodProductionTime, 10),
+        production_time_rules: productionTimeRulesResult.rules,
         product_highlights: prodHighlights.map((h) => h.trim()).filter(Boolean),
         pricing_mode: prodPricingMode as "fixed" | "area",
         graphic_scenario_enabled: prodGraphicScenarioEnabled,
@@ -1269,7 +1425,7 @@ export default function AdminProductsPage() {
       setProdShippingHeight("");
       setProdShippingWeight("");
       setFedexShippingFieldErrors({});
-      setProdProductionTime("");
+      setProdProductionTimeRules([{ minQty: "", maxQty: "", businessDays: "" }]);
       setProdHighlights([]);
       setProdPricingMode("");
       setProdGraphicScenarioEnabled(false);
@@ -1387,10 +1543,9 @@ export default function AdminProductsPage() {
     setProdShippingHeight(toCleanDecimalInput(p.shipping_height));
     setProdShippingWeight(toCleanDecimalInput(p.shipping_weight));
     setFedexShippingFieldErrors({});
-    setProdProductionTime(
-      p.production_time != null && Number.isFinite(Number(p.production_time))
-        ? String(Math.trunc(Number(p.production_time)))
-        : ""
+    const productionRules = normalizeProductionTimeRuleDrafts(p.production_time_rules);
+    setProdProductionTimeRules(
+      productionRules.length ? productionRules : [{ minQty: "", maxQty: "", businessDays: "" }]
     );
     {
       const h = p.product_highlights;
@@ -1551,7 +1706,7 @@ export default function AdminProductsPage() {
     setProdShippingHeight("");
     setProdShippingWeight("");
     setFedexShippingFieldErrors({});
-    setProdProductionTime("");
+    setProdProductionTimeRules([{ minQty: "", maxQty: "", businessDays: "" }]);
     setProdHighlights([]);
     setProdPricingMode("");
     setProdGraphicScenarioEnabled(false);
@@ -1867,17 +2022,6 @@ export default function AdminProductsPage() {
                         onChange={(e) => setProdMaterial(e.target.value)}
                         className={inputClass}
                       />
-                      <input
-                        type="text"
-                        inputMode="numeric"
-                        placeholder="Production time (e.g. business days)"
-                        value={prodProductionTime}
-                        onChange={(e) => {
-                          const v = e.target.value;
-                          if (isNonNegativeIntInput(v)) setProdProductionTime(v);
-                        }}
-                        className={inputClass}
-                      />
                       {!prodGraphicScenarioEnabled ? (
                         <>
                           <input
@@ -1939,6 +2083,114 @@ export default function AdminProductsPage() {
                               <p className="text-sm font-semibold text-slate-800">
                                 {prodGraphicScenarioEnabled ? "Hardware box limits" : "Shipping box rules"}
                               </p>
+                      <div className="md:col-span-2 space-y-2 rounded-lg border border-gray-200 bg-gray-50 p-3">
+                        <div className="flex flex-wrap items-center justify-between gap-2">
+                          <p className="text-sm font-semibold text-gray-800">Estimate Production Time </p>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const validation = parseProductionTimeRulesForSubmit(prodProductionTimeRules);
+                              if (validation.error) {
+                                showMsg("error", validation.error);
+                                return;
+                              }
+                              setProdProductionTimeRules((prev) => [
+                                ...prev,
+                                nextProductionTimeRuleDraft(prev),
+                              ]);
+                            }}
+                            className="rounded-md bg-gray-900 px-3 py-1.5 text-xs font-semibold text-white hover:bg-gray-800"
+                          >
+                            Add production time 
+                          </button>
+                        </div>
+                        <div className="space-y-2">
+                          {prodProductionTimeRules.map((rule, idx) => {
+                            const rowErrors = productionTimeRuleFieldErrors(prodProductionTimeRules, idx);
+                            return (
+                              <div key={idx} className="grid grid-cols-1 gap-2 md:grid-cols-[1fr_1fr_1fr_auto]">
+                                <div>
+                                  <input
+                                    type="text"
+                                    inputMode="numeric"
+                                    placeholder="Min qty"
+                                    value={rule.minQty}
+                                    onChange={(e) => {
+                                      const v = e.target.value;
+                                      if (!isNonNegativeIntInput(v)) return;
+                                      setProdProductionTimeRules((prev) =>
+                                        prev.map((r, i) => (i === idx ? { ...r, minQty: v } : r))
+                                      );
+                                    }}
+                                    className={inputClass}
+                                    aria-invalid={!!rowErrors.minQty}
+                                  />
+                                  {rowErrors.minQty ? (
+                                    <p className="mt-1 text-xs font-medium text-red-600">{rowErrors.minQty}</p>
+                                  ) : null}
+                                </div>
+                                <div>
+                                  <input
+                                    type="text"
+                                    inputMode="numeric"
+                                    placeholder="Max qty empty = no limit"
+                                    value={rule.maxQty}
+                                    onChange={(e) => {
+                                      const v = e.target.value;
+                                      if (!isNonNegativeIntInput(v)) return;
+                                      setProdProductionTimeRules((prev) =>
+                                        prev.map((r, i) => (i === idx ? { ...r, maxQty: v } : r))
+                                      );
+                                    }}
+                                    className={inputClass}
+                                    aria-invalid={!!rowErrors.maxQty}
+                                  />
+                                  {rowErrors.maxQty ? (
+                                    <p className="mt-1 text-xs font-medium text-red-600">{rowErrors.maxQty}</p>
+                                  ) : null}
+                                </div>
+                                <div>
+                                  <input
+                                    type="text"
+                                    inputMode="numeric"
+                                    placeholder="Business days"
+                                    value={rule.businessDays}
+                                    onChange={(e) => {
+                                      const v = e.target.value;
+                                      if (!isNonNegativeIntInput(v)) return;
+                                      setProdProductionTimeRules((prev) =>
+                                        prev.map((r, i) => (i === idx ? { ...r, businessDays: v } : r))
+                                      );
+                                    }}
+                                    className={inputClass}
+                                    aria-invalid={!!rowErrors.businessDays}
+                                  />
+                                  {rowErrors.businessDays ? (
+                                    <p className="mt-1 text-xs font-medium text-red-600">{rowErrors.businessDays}</p>
+                                  ) : null}
+                                </div>
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                    setProdProductionTimeRules((prev) =>
+                                      prev.length > 1 ? prev.filter((_, i) => i !== idx) : prev
+                                    )
+                                  }
+                                  className="inline-flex h-10 items-center justify-center rounded-md border border-gray-200 bg-white px-3 text-sm font-semibold text-red-600 hover:bg-red-50"
+                                  aria-label="Remove production time rule"
+                                >
+                                  <FiTrash2 className="h-4 w-4" />
+                                </button>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                      {!prodGraphicScenarioEnabled ? (
+      <div className="md:col-span-2 rounded-lg border border-slate-200 bg-white p-4">
+                          <div className="mb-3 flex flex-wrap items-start justify-between gap-3">
+                            <div>
+                              <p className="text-sm font-semibold text-slate-800">Shipping Box Rules</p>
                               <p className="mt-1 text-xs text-slate-500">
                                 {prodGraphicScenarioEnabled
                                   ? "Hardware uses the selected box dimensions and the shipping weight above. These limits split quantity and optional weight into multiple FedEx boxes."

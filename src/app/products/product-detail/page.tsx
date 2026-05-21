@@ -16,6 +16,7 @@ import {
   shippingRatesAPI,
   effectiveOrderShipping,
   fedexDeliveryEstimateWithProduction,
+  productionTimeBusinessDaysForQuantity,
   buildFedexPackagesForProductConfigure,
   hardwareFedexShippingFromProduct,
   productFedexShippingFromProduct,
@@ -155,6 +156,7 @@ interface Product {
   shipping_weight?: number | string | null;
   shipping_box_rules?: ProductShippingBoxRule[];
   production_time?: number | string | null;
+  production_time_rules?: unknown;
   purchase_options?: Array<{
     id: number;
     label: string;
@@ -1080,10 +1082,14 @@ function ProductDetailContent() {
     };
   });
   const subtotal = jobLines.reduce((sum, line) => sum + line.lineSubtotal, 0);
+  const configuredQty = Math.max(1, jobLines.reduce((sum, line) => sum + line.qtyNum, 0));
   const taxEstimatePostalCode = String(estimateShipForm.postcode || "").trim();
   const selectedFedexRatePdp =
     fedexRates.find((r) => r.serviceType === selectedFedexServiceType) || fedexRates[0] || null;
-  const productionTimeDays = product?.production_time ?? 0;
+  const productionTimeDays = productionTimeBusinessDaysForQuantity(
+    configuredQty,
+    product?.production_time_rules
+  );
   const selectedFedexDeliveryEstimatePdp = fedexDeliveryEstimateWithProduction(
     selectedFedexRatePdp,
     productionTimeDays
@@ -1246,6 +1252,10 @@ function ProductDetailContent() {
         };
       });
       const totalQty = jobsPayload.reduce((s, j) => s + j.quantity, 0);
+      const addToCartProductionTimeDays = productionTimeBusinessDaysForQuantity(
+        totalQty,
+        product?.production_time_rules
+      );
       const subtotalNum = jobsPayload.reduce((s, j) => s + j.lineSubtotal, 0);
       const fedexRawAdd = fedExValidatedQuoteAmount ?? 0;
       const shipEffAdd = effectiveOrderShipping(fedexRawAdd, subtotalNum, freeShippingPolicy, false);
@@ -1321,7 +1331,7 @@ function ProductDetailContent() {
         const svc = String(resolvedRateForCart.serviceType ?? "").trim();
         const cur = (String(resolvedRateForCart.currency ?? "USD").trim() || "USD").toUpperCase();
         const name = (String(resolvedRateForCart.serviceName ?? "").trim() || svc).trim() || svc;
-        const ed = fedexDeliveryEstimateWithProduction(resolvedRateForCart, product?.production_time ?? 0);
+        const ed = fedexDeliveryEstimateWithProduction(resolvedRateForCart, addToCartProductionTimeDays);
         loggedInFedexPayload = {
           shippingService: svc,
           shipping_service: svc,
@@ -1333,8 +1343,8 @@ function ProductDetailContent() {
           shipping_rate_currency: cur,
           shippingRateEstimatedDelivery: ed,
           shipping_rate_estimated_delivery: ed,
-          productionTime: product?.production_time ?? null,
-          production_time: product?.production_time ?? null,
+          productionTime: addToCartProductionTimeDays,
+          production_time: addToCartProductionTimeDays,
         };
       }
 
@@ -1346,8 +1356,8 @@ function ProductDetailContent() {
         height: heightInches,
         areaSqFt: areaSqFt,
         ...hardwareCartFields,
-        productionTime: product?.production_time ?? null,
-        production_time: product?.production_time ?? null,
+        productionTime: addToCartProductionTimeDays,
+        production_time: addToCartProductionTimeDays,
         purchase_option_key: hasPurchaseOptions ? (effectiveScopeKey ?? undefined) : undefined,
         selection_mode: (!hasPurchaseOptions && isGraphicScenario) ? selectedGraphicMode : undefined,
         jobs: jobsPayload,

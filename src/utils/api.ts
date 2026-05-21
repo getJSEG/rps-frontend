@@ -412,6 +412,61 @@ export function productionTimeBusinessDays(value: unknown): number {
   return Math.trunc(n);
 }
 
+export type ProductionTimeRule = {
+  minQty: number;
+  maxQty: number | null;
+  businessDays: number;
+};
+
+export function normalizeProductionTimeRules(value: unknown): ProductionTimeRule[] {
+  let raw = value;
+  if (typeof raw === "string") {
+    try {
+      raw = raw.trim() ? JSON.parse(raw) : [];
+    } catch {
+      raw = [];
+    }
+  }
+  if (!Array.isArray(raw)) return [];
+  return raw
+    .map((rule) => {
+      const r = rule && typeof rule === "object" ? rule as Record<string, unknown> : {};
+      const minQty = Math.trunc(Number(r.minQty ?? r.min_qty ?? 1));
+      const maxQtyRaw = r.maxQty ?? r.max_qty;
+      const maxQty =
+        maxQtyRaw == null || maxQtyRaw === "" ? null : Math.trunc(Number(maxQtyRaw));
+      const businessDays = Math.trunc(Number(r.businessDays ?? r.business_days));
+      if (!Number.isFinite(minQty) || minQty < 1) return null;
+      if (maxQty !== null && (!Number.isFinite(maxQty) || maxQty < minQty)) return null;
+      if (!Number.isFinite(businessDays) || businessDays < 0) return null;
+      return { minQty, maxQty, businessDays };
+    })
+    .filter((rule): rule is ProductionTimeRule => Boolean(rule))
+    .sort((a, b) => a.minQty - b.minQty);
+}
+
+export function productionTimeBusinessDaysForQuantity(
+  quantity: unknown,
+  rules: unknown
+): number {
+  const qty = Math.max(1, Math.trunc(Number(quantity) || 1));
+  const match = normalizeProductionTimeRules(rules).find(
+    (rule) => qty >= rule.minQty && (rule.maxQty == null || qty <= rule.maxQty)
+  );
+  return match ? match.businessDays : 0;
+}
+
+function productionTimeQuantityFromItem(item: Record<string, unknown>): number {
+  const jobs = Array.isArray(item.jobs) ? item.jobs : [];
+  if (jobs.length > 0) {
+    return jobs.reduce((sum, job) => {
+      const row = job && typeof job === "object" ? job as Record<string, unknown> : {};
+      return sum + Math.max(1, Math.trunc(Number(row.quantity) || 1));
+    }, 0);
+  }
+  return Math.max(1, Math.trunc(Number(item.quantity) || 1));
+}
+
 export function maxProductionTimeBusinessDays(
   items: Array<Record<string, unknown>> | null | undefined
 ): number {
@@ -419,11 +474,18 @@ export function maxProductionTimeBusinessDays(
     const snap = item.pricing_snapshot && typeof item.pricing_snapshot === "object"
       ? item.pricing_snapshot as Record<string, unknown>
       : {};
+    const rules =
+      item.productionTimeRules ??
+      item.production_time_rules ??
+      snap.productionTimeRules ??
+      snap.production_time_rules;
+    const productionDays = productionTimeBusinessDaysForQuantity(
+      productionTimeQuantityFromItem(item),
+      rules
+    );
     return Math.max(
       max,
-      productionTimeBusinessDays(
-        item.productionTime ?? item.production_time ?? snap.productionTime ?? snap.production_time
-      )
+      productionDays
     );
   }, 0);
 }
