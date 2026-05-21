@@ -147,6 +147,7 @@ interface Product {
   }>;
   hardware_template_id?: number | null;
   weight?: number | string | null;
+  weight_per_sqft?: number | string | null;
   length?: number | string | null;
   shipping_length?: number | string | null;
   shipping_width?: number | string | null;
@@ -808,6 +809,7 @@ function ProductDetailContent() {
         hardwareShipping: hardwareFedexShipping,
         productShipping: productFedexShipping,
         shippingBoxRules,
+        weightPerSqft: product?.weight_per_sqft ?? null,
       });
     } catch (error) {
       setFedexRates([]);
@@ -862,6 +864,7 @@ function ProductDetailContent() {
     hardwareFedexShipping,
     productFedexShipping,
     shippingBoxRules,
+    product?.weight_per_sqft,
     fedexJobQtyKey,
     estimateShipForm.postcode,
     estimateShipForm.country,
@@ -1269,6 +1272,8 @@ function ProductDetailContent() {
       if (shippingBoxRulesForCart.length > 0) {
         hardwareCartFields.shipping_box_rules = shippingBoxRulesForCart;
         hardwareCartFields.shippingBoxRules = shippingBoxRulesForCart;
+        hardwareCartFields.weight_per_sqft = product?.weight_per_sqft ?? null;
+        hardwareCartFields.weightPerSqft = product?.weight_per_sqft ?? null;
       }
       if (hardwareFedexShipping) {
         if (product?.hardware_template_id != null) {

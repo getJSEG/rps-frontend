@@ -58,6 +58,7 @@ interface Product {
   price_per_sqft: number | null;
   min_charge: number | null;
   weight?: number | null;
+  weight_per_sqft?: number | null;
   length?: number | null;
   shipping_length?: number | null;
   shipping_width?: number | null;
@@ -104,6 +105,8 @@ type ShippingBoxRuleDraft = {
   shipping_box_id: string;
   min_smallest_side: string;
   max_smallest_side: string;
+  max_quantity_per_box: string;
+  max_weight_per_box: string;
 };
 
 /** First image for admin list: gallery order matches storefront when `image_url` is out of sync. */
@@ -557,6 +560,7 @@ export default function AdminProductsPage() {
   const [prodPricePerSqft, setProdPricePerSqft] = useState("");
   const [prodMinCharge, setProdMinCharge] = useState("");
   const [prodWeight, setProdWeight] = useState("");
+  const [prodWeightPerSqft, setProdWeightPerSqft] = useState("");
   const [prodLength, setProdLength] = useState("");
   const [prodShippingLength, setProdShippingLength] = useState("");
   const [prodShippingWidth, setProdShippingWidth] = useState("");
@@ -1083,12 +1087,29 @@ export default function AdminProductsPage() {
       }
       const min = rule.min_smallest_side === "" ? null : Number(rule.min_smallest_side);
       const max = rule.max_smallest_side === "" ? null : Number(rule.max_smallest_side);
-      if ((min != null && (!Number.isFinite(min) || min < 0)) || (max != null && (!Number.isFinite(max) || max < 0))) {
+      if (!prodGraphicScenarioEnabled && ((min != null && (!Number.isFinite(min) || min < 0)) || (max != null && (!Number.isFinite(max) || max < 0)))) {
         showMsg("error", "Box rule ranges must be non-negative numbers.");
         return;
       }
-      if (min != null && max != null && min > max) {
+      if (!prodGraphicScenarioEnabled && min != null && max != null && min > max) {
         showMsg("error", "Box rule minimum cannot be greater than maximum.");
+        return;
+      }
+      const maxQty = rule.max_quantity_per_box === "" ? null : Number(rule.max_quantity_per_box);
+      const maxWeight = rule.max_weight_per_box === "" ? null : Number(rule.max_weight_per_box);
+      if (!Number.isFinite(maxQty) || Number(maxQty) <= 0) {
+        showMsg("error", "Add max quantity per box for each shipping box rule.");
+        return;
+      }
+      if (maxWeight != null && (!Number.isFinite(maxWeight) || Number(maxWeight) <= 0)) {
+        showMsg("error", "Max weight per box must be greater than zero.");
+        return;
+      }
+    }
+    if (!prodGraphicScenarioEnabled && prodShippingBoxRules.length > 0) {
+      const wpsf = Number(prodWeightPerSqft);
+      if (!Number.isFinite(wpsf) || wpsf <= 0) {
+        showMsg("error", "Weight per sq ft is required when shipping box rules are attached.");
         return;
       }
     }
@@ -1141,7 +1162,8 @@ export default function AdminProductsPage() {
               : parseFloat(prodPricePerSqft)
             : null,
         min_charge: prodMinCharge === "" ? null : parseFloat(prodMinCharge),
-        weight: prodWeight === "" ? null : parseFloat(prodWeight),
+        weight: prodGraphicScenarioEnabled ? (prodWeight === "" ? null : parseFloat(prodWeight)) : null,
+        weight_per_sqft: prodGraphicScenarioEnabled ? null : (prodWeightPerSqft === "" ? null : parseFloat(prodWeightPerSqft)),
         length: prodLength === "" ? null : parseFloat(prodLength),
         shipping_length: prodShippingLength === "" ? null : parseFloat(prodShippingLength),
         shipping_width: prodShippingWidth === "" ? null : parseFloat(prodShippingWidth),
@@ -1168,12 +1190,14 @@ export default function AdminProductsPage() {
         is_new: prodIsNew,
         is_active: prodIsActive,
         properties: prodProperties.filter((pr) => pr.key.trim() || pr.value.trim()).map((pr) => ({ key: pr.key.trim(), value: pr.value.trim() })),
-        shipping_box_rules: prodGraphicScenarioEnabled ? [] : prodShippingBoxRules
+        shipping_box_rules: prodShippingBoxRules
           .filter((rule) => rule.shipping_box_id)
           .map((rule) => ({
             shipping_box_id: Number(rule.shipping_box_id),
-            min_smallest_side: rule.min_smallest_side === "" ? null : Number(rule.min_smallest_side),
-            max_smallest_side: rule.max_smallest_side === "" ? null : Number(rule.max_smallest_side),
+            min_smallest_side: prodGraphicScenarioEnabled || rule.min_smallest_side === "" ? null : Number(rule.min_smallest_side),
+            max_smallest_side: prodGraphicScenarioEnabled || rule.max_smallest_side === "" ? null : Number(rule.max_smallest_side),
+            max_quantity_per_box: rule.max_quantity_per_box === "" ? null : Number(rule.max_quantity_per_box),
+            max_weight_per_box: rule.max_weight_per_box === "" ? null : Number(rule.max_weight_per_box),
           })),
       };
       const hasPurchaseOpts = prodPurchaseOptions.length > 0;
@@ -1238,6 +1262,7 @@ export default function AdminProductsPage() {
       setProdPricePerSqft("");
       setProdMinCharge("");
       setProdWeight("");
+      setProdWeightPerSqft("");
       setProdLength("");
       setProdShippingLength("");
       setProdShippingWidth("");
@@ -1355,6 +1380,7 @@ export default function AdminProductsPage() {
     }
     setProdMinCharge(p.min_charge != null ? String(p.min_charge) : "");
     setProdWeight(toCleanDecimalInput(p.weight));
+    setProdWeightPerSqft(toCleanDecimalInput(p.weight_per_sqft));
     setProdLength(toCleanDecimalInput(p.length));
     setProdShippingLength(toCleanDecimalInput(p.shipping_length));
     setProdShippingWidth(toCleanDecimalInput(p.shipping_width));
@@ -1447,16 +1473,18 @@ export default function AdminProductsPage() {
         ? boxRulesRes.shipping_box_rules
         : [];
       setProdShippingBoxRules(
-        isGraphicScenario
-          ? []
-          : boxRuleRows.map((rule: {
-              shipping_box_id?: number | string;
-              min_smallest_side?: number | string | null;
-              max_smallest_side?: number | string | null;
-            }) => ({
+        boxRuleRows.map((rule: {
+            shipping_box_id?: number | string;
+            min_smallest_side?: number | string | null;
+            max_smallest_side?: number | string | null;
+            max_quantity_per_box?: number | string | null;
+            max_weight_per_box?: number | string | null;
+          }) => ({
               shipping_box_id: rule.shipping_box_id == null ? "" : String(rule.shipping_box_id),
               min_smallest_side: toCleanDecimalInput(rule.min_smallest_side),
               max_smallest_side: toCleanDecimalInput(rule.max_smallest_side),
+              max_quantity_per_box: toCleanDecimalInput(rule.max_quantity_per_box),
+              max_weight_per_box: toCleanDecimalInput(rule.max_weight_per_box),
             }))
       );
       setSelectedHardwareTemplateId("");
@@ -1516,6 +1544,7 @@ export default function AdminProductsPage() {
     setProdPricePerSqft("");
     setProdMinCharge("");
     setProdWeight("");
+    setProdWeightPerSqft("");
     setProdLength("");
     setProdShippingLength("");
     setProdShippingWidth("");
@@ -1810,11 +1839,11 @@ export default function AdminProductsPage() {
                           <input
                             type="text"
                             inputMode="decimal"
-                            placeholder="Weight (lb)"
-                            value={prodWeight}
+                            placeholder="Weight per sq ft (lb)"
+                            value={prodWeightPerSqft}
                             onChange={(e) => {
                               const v = e.target.value;
-                              if (isFloatInput(v)) setProdWeight(v);
+                              if (isFloatInput(v)) setProdWeightPerSqft(v);
                             }}
                             className={inputClass}
                           />
@@ -1904,13 +1933,16 @@ export default function AdminProductsPage() {
                         onChange={(e) => setProdSku(e.target.value)}
                         className={inputClass}
                       />
-                      {!prodGraphicScenarioEnabled ? (
-      <div className="md:col-span-2 rounded-lg border border-slate-200 bg-white p-4">
+                      <div className="md:col-span-2 rounded-lg border border-slate-200 bg-white p-4">
                           <div className="mb-3 flex flex-wrap items-start justify-between gap-3">
                             <div>
-                              <p className="text-sm font-semibold text-slate-800">Shipping box rules</p>
+                              <p className="text-sm font-semibold text-slate-800">
+                                {prodGraphicScenarioEnabled ? "Hardware box limits" : "Shipping box rules"}
+                              </p>
                               <p className="mt-1 text-xs text-slate-500">
-                                Match the product&apos;s smallest side to a saved box before sending dimensions to FedEx.
+                                {prodGraphicScenarioEnabled
+                                  ? "Hardware uses the selected box dimensions and the shipping weight above. These limits split quantity and optional weight into multiple FedEx boxes."
+                                  : "Match the product's smallest side to a saved box before sending dimensions to FedEx."}
                               </p>
                             </div>
                             <div className="flex flex-wrap gap-2">
@@ -1927,7 +1959,7 @@ export default function AdminProductsPage() {
                                 onClick={() =>
                                   setProdShippingBoxRules((prev) => [
                                     ...prev,
-                                    { shipping_box_id: "", min_smallest_side: "", max_smallest_side: "" },
+                                    { shipping_box_id: "", min_smallest_side: "", max_smallest_side: "", max_quantity_per_box: "", max_weight_per_box: "" },
                                   ])
                                 }
                               >
@@ -1942,7 +1974,7 @@ export default function AdminProductsPage() {
                           ) : (
                             <div className="space-y-3">
                               {prodShippingBoxRules.map((rule, idx) => (
-                                <div key={`shipping-box-rule-${idx}`} className="grid gap-3 rounded-lg border border-slate-200 bg-slate-50 p-3 md:grid-cols-[1.5fr_1fr_1fr_auto]">
+                                <div key={`shipping-box-rule-${idx}`} className={`grid gap-3 rounded-lg border border-slate-200 bg-slate-50 p-3 ${prodGraphicScenarioEnabled ? "md:grid-cols-4" : "md:grid-cols-6"}`}>
                                   <select
                                     value={rule.shipping_box_id}
                                     onChange={(e) => {
@@ -1961,16 +1993,48 @@ export default function AdminProductsPage() {
                                         </option>
                                       ))}
                                   </select>
+                                  {!prodGraphicScenarioEnabled ? (
+                                    <>
+                                      <input
+                                        type="text"
+                                        inputMode="decimal"
+                                        placeholder="Min smallest side"
+                                        value={rule.min_smallest_side}
+                                        onChange={(e) => {
+                                          const value = e.target.value;
+                                          if (!isFloatInput(value)) return;
+                                          const next = [...prodShippingBoxRules];
+                                          next[idx] = { ...next[idx], min_smallest_side: value };
+                                          setProdShippingBoxRules(next);
+                                        }}
+                                        className={inputClass}
+                                      />
+                                      <input
+                                        type="text"
+                                        inputMode="decimal"
+                                        placeholder="Max smallest side"
+                                        value={rule.max_smallest_side}
+                                        onChange={(e) => {
+                                          const value = e.target.value;
+                                          if (!isFloatInput(value)) return;
+                                          const next = [...prodShippingBoxRules];
+                                          next[idx] = { ...next[idx], max_smallest_side: value };
+                                          setProdShippingBoxRules(next);
+                                        }}
+                                        className={inputClass}
+                                      />
+                                    </>
+                                  ) : null}
                                   <input
                                     type="text"
-                                    inputMode="decimal"
-                                    placeholder="Min smallest side"
-                                    value={rule.min_smallest_side}
+                                    inputMode="numeric"
+                                    placeholder="Max qty/box"
+                                    value={rule.max_quantity_per_box}
                                     onChange={(e) => {
                                       const value = e.target.value;
-                                      if (!isFloatInput(value)) return;
+                                      if (!isNonNegativeIntInput(value)) return;
                                       const next = [...prodShippingBoxRules];
-                                      next[idx] = { ...next[idx], min_smallest_side: value };
+                                      next[idx] = { ...next[idx], max_quantity_per_box: value };
                                       setProdShippingBoxRules(next);
                                     }}
                                     className={inputClass}
@@ -1978,13 +2042,13 @@ export default function AdminProductsPage() {
                                   <input
                                     type="text"
                                     inputMode="decimal"
-                                    placeholder="Max smallest side"
-                                    value={rule.max_smallest_side}
+                                    placeholder="Max weight/box optional"
+                                    value={rule.max_weight_per_box}
                                     onChange={(e) => {
                                       const value = e.target.value;
                                       if (!isFloatInput(value)) return;
                                       const next = [...prodShippingBoxRules];
-                                      next[idx] = { ...next[idx], max_smallest_side: value };
+                                      next[idx] = { ...next[idx], max_weight_per_box: value };
                                       setProdShippingBoxRules(next);
                                     }}
                                     className={inputClass}
@@ -2001,7 +2065,6 @@ export default function AdminProductsPage() {
                             </div>
                           )}
                       </div>
-                      ) : null}
                       {prodGraphicScenarioEnabled ? (
                         <div className="md:col-span-2 rounded-lg border border-slate-200 bg-white p-4">
                           <div className="mb-3">
@@ -2141,7 +2204,6 @@ export default function AdminProductsPage() {
                                 setProdPurchaseOptions([]);
                                 setProdModifierAssignments({});
                                 setProdConditionalRules([]);
-                                setProdShippingBoxRules([]);
                                 setSelectedModifierKey("");
                                 setSelectedPresetDropdownValue("");
                                 setSelectedHardwareTemplateId("");

@@ -70,8 +70,8 @@ export default function LoginPage() {
           router.push("/");
         }
       }
-    } catch (err: any) {
-      const msg = err.message || "Login failed. Please check your credentials.";
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : "Login failed. Please check your credentials.";
       setError(msg);
       toast.error(msg);
       console.error("Login error:", err);
@@ -157,7 +157,7 @@ export default function LoginPage() {
 
             {/* Create Account Section */}
             <div className="text-center space-y-4">
-              <p className="text-[#ddd] text-md">Don't have an account?</p>
+              <p className="text-[#ddd] text-md">Don&apos;t have an account?</p>
               <a
                 href="/register"
                 className="block w-full  text-md bg-red-500 hover:bg-red-600 text-white font-medium py-3 px-6 rounded-lg transition-colors text-center"
