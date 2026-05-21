@@ -2180,11 +2180,12 @@ export default function AdminProductsPage() {
                           })}
                         </div>
                       </div>
-                      {!prodGraphicScenarioEnabled ? (
-                        <div className="md:col-span-2 rounded-lg border border-slate-200 bg-white p-4">
+                      <div className="md:col-span-2 rounded-lg border border-slate-200 bg-white p-4">
                           <div className="mb-3 flex flex-wrap items-start justify-between gap-3">
                             <div>
-                              <p className="text-sm font-semibold text-slate-800">Shipping Box Rules</p>
+                              <p className="text-sm font-semibold text-slate-800">
+                                {prodGraphicScenarioEnabled ? "Hardware Box Limits" : "Shipping Box Rules"}
+                              </p>
                               <p className="mt-1 text-xs text-slate-500">
                                 {prodGraphicScenarioEnabled
                                   ? "Hardware uses the selected box dimensions and the shipping weight above. These limits split quantity and optional weight into multiple FedEx boxes."
@@ -2311,13 +2312,12 @@ export default function AdminProductsPage() {
                             </div>
                           )}
                       </div>
-                      ) : null}
                       {prodGraphicScenarioEnabled ? (
                         <div className="md:col-span-2 rounded-lg border border-slate-200 bg-white p-4">
                           <div className="mb-3">
                             <p className="text-sm font-semibold text-slate-800">Hardware shipping data</p>
                             <p className="mt-1 text-xs text-slate-500">
-                              Hardware products do not use customer-entered dimensions or box rules. These values are sent to FedEx automatically.
+                              Hardware products do not use customer-entered dimensions. If a hardware box limit is attached, FedEx uses that box&apos;s dimensions and this weight.
                             </p>
                           </div>
                           <div className="grid gap-3 md:grid-cols-2">
