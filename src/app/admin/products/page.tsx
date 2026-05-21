@@ -2077,12 +2077,6 @@ export default function AdminProductsPage() {
                         onChange={(e) => setProdSku(e.target.value)}
                         className={inputClass}
                       />
-                      <div className="md:col-span-2 rounded-lg border border-slate-200 bg-white p-4">
-                          <div className="mb-3 flex flex-wrap items-start justify-between gap-3">
-                            <div>
-                              <p className="text-sm font-semibold text-slate-800">
-                                {prodGraphicScenarioEnabled ? "Hardware box limits" : "Shipping box rules"}
-                              </p>
                       <div className="md:col-span-2 space-y-2 rounded-lg border border-gray-200 bg-gray-50 p-3">
                         <div className="flex flex-wrap items-center justify-between gap-2">
                           <p className="text-sm font-semibold text-gray-800">Estimate Production Time </p>
@@ -2101,7 +2095,7 @@ export default function AdminProductsPage() {
                             }}
                             className="rounded-md bg-gray-900 px-3 py-1.5 text-xs font-semibold text-white hover:bg-gray-800"
                           >
-                            Add production time 
+                            Add production time
                           </button>
                         </div>
                         <div className="space-y-2">
@@ -2187,7 +2181,7 @@ export default function AdminProductsPage() {
                         </div>
                       </div>
                       {!prodGraphicScenarioEnabled ? (
-      <div className="md:col-span-2 rounded-lg border border-slate-200 bg-white p-4">
+                        <div className="md:col-span-2 rounded-lg border border-slate-200 bg-white p-4">
                           <div className="mb-3 flex flex-wrap items-start justify-between gap-3">
                             <div>
                               <p className="text-sm font-semibold text-slate-800">Shipping Box Rules</p>
@@ -2317,6 +2311,7 @@ export default function AdminProductsPage() {
                             </div>
                           )}
                       </div>
+                      ) : null}
                       {prodGraphicScenarioEnabled ? (
                         <div className="md:col-span-2 rounded-lg border border-slate-200 bg-white p-4">
                           <div className="mb-3">
