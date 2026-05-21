@@ -2107,7 +2107,7 @@ export default function AdminProductsPage() {
                                   <input
                                     type="text"
                                     inputMode="numeric"
-                                    placeholder="Min qty"
+                                    placeholder="Min quantity"
                                     value={rule.minQty}
                                     onChange={(e) => {
                                       const v = e.target.value;
@@ -2127,7 +2127,7 @@ export default function AdminProductsPage() {
                                   <input
                                     type="text"
                                     inputMode="numeric"
-                                    placeholder="Max qty empty = no limit"
+                                    placeholder="Max quantity "
                                     value={rule.maxQty}
                                     onChange={(e) => {
                                       const v = e.target.value;
@@ -2147,7 +2147,7 @@ export default function AdminProductsPage() {
                                   <input
                                     type="text"
                                     inputMode="numeric"
-                                    placeholder="Business days"
+                                    placeholder="Production time"
                                     value={rule.businessDays}
                                     onChange={(e) => {
                                       const v = e.target.value;
