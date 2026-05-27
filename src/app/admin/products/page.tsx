@@ -144,6 +144,16 @@ function descriptionPreview(html: string | null | undefined): string {
     .trim();
 }
 
+function slugify(value: string): string {
+  return value
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, "-")
+    .replace(/[^a-z0-9-]/g, "")
+    .replace(/-+/g, "-")
+    .replace(/^-|-$/g, "");
+}
+
 /** Same suffix as Description for Spec / File setup labels. */
 const WORD_STYLE_LABEL_SUFFIX = " (Word-style formatting)";
 const RICH_PLACEHOLDER_HINT = "bold, italic, lists supported";
@@ -630,6 +640,7 @@ function ThemedDropdown({
     return () => document.removeEventListener("mousedown", onPointerDown);
   }, []);
 
+  const hasValue = value !== "";
   const selectedLabel = options.find((opt) => opt.value === value)?.label ?? placeholder;
 
   return (
@@ -641,7 +652,11 @@ function ThemedDropdown({
         }}
         disabled={disabled}
         className={`w-full rounded-lg border border-slate-200 px-3 py-2 text-left text-sm shadow-sm outline-none transition focus:border-sky-400 focus:ring-2 focus:ring-sky-400/25 ${
-          disabled ? "cursor-not-allowed bg-slate-50 text-slate-400" : "bg-white text-slate-900"
+          disabled
+            ? "cursor-not-allowed bg-slate-50 text-slate-400"
+            : hasValue
+              ? "bg-white text-slate-900"
+              : "bg-white text-slate-500"
         }`}
         aria-haspopup="listbox"
         aria-expanded={open}
@@ -654,6 +669,9 @@ function ThemedDropdown({
       </button>
       {open ? (
         <div className="absolute z-40 mt-1 max-h-64 w-full overflow-auto rounded-lg border border-slate-200 bg-white py-1 shadow-lg">
+          {!hasValue ? (
+            <div className="px-3 py-2 text-sm text-slate-400">{placeholder}</div>
+          ) : null}
           {options.map((opt) => {
             const isActive = opt.value === value;
             return (
@@ -1177,12 +1195,16 @@ export default function AdminProductsPage() {
       showMsg("error", "Name is required");
       return;
     }
+    if (activeTab === "subcategories" && catParentId === "") {
+      showMsg("error", "Please select parent category in the list");
+      return;
+    }
     setSaving(true);
     try {
       if (editingCategoryId) {
         await productsAPI.updateCategory(String(editingCategoryId), {
           name: catName.trim(),
-          slug: catSlug.trim() || undefined,
+          slug: catSlug.trim() ? slugify(catSlug) : undefined,
           parent_id: catParentId === "" ? null : parseInt(catParentId),
           description: catDescription.trim() || undefined,
         });
@@ -1190,7 +1212,7 @@ export default function AdminProductsPage() {
       } else {
         await productsAPI.createCategory({
           name: catName.trim(),
-          slug: (catSlug.trim() || catName.trim().toLowerCase().replace(/\s+/g, "-")).replace(/[^a-z0-9-]/g, ""),
+          slug: slugify(catSlug.trim() || catName.trim()),
           parent_id: catParentId === "" ? null : parseInt(catParentId),
           description: catDescription.trim() || undefined,
         });
@@ -3574,18 +3596,15 @@ export default function AdminProductsPage() {
                       className="max-w-md space-y-3 rounded-xl border border-slate-200/60 bg-slate-50/80 p-5"
                     >
                       <h3 className="font-semibold text-slate-900">{editingCategoryId ? "Edit Subcategory" : "Add Subcategory"}</h3>
-                      <select
+                      <ThemedDropdown
                         value={catParentId}
-                        onChange={(e) => setCatParentId(e.target.value)}
-                        className={selectClass}
-                      >
-                        <option value="">Select parent category *</option>
-                        {parentCategories.map((c) => (
-                          <option key={c.id} value={c.id}>
-                            {c.name}
-                          </option>
-                        ))}
-                      </select>
+                        placeholder="Select parent category *"
+                        options={parentCategories.map((c) => ({
+                          value: String(c.id),
+                          label: c.name,
+                        }))}
+                        onChange={setCatParentId}
+                      />
                       <input
                         type="text"
                         placeholder="Subcategory name *"
