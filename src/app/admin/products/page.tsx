@@ -780,7 +780,9 @@ export default function AdminProductsPage() {
   const [uploadingImage, setUploadingImage] = useState(false);
   const [deletingProductId, setDeletingProductId] = useState<number | null>(null);
   const [productDeleteTarget, setProductDeleteTarget] = useState<Pick<Product, "id" | "name"> | null>(null);
+  const [manageBoxesConfirmOpen, setManageBoxesConfirmOpen] = useState(false);
   const [deletingCategoryId, setDeletingCategoryId] = useState<number | null>(null);
+  const [categoryDeleteTarget, setCategoryDeleteTarget] = useState<Pick<Category, "id" | "name" | "parent_id"> | null>(null);
   const [productsPage, setProductsPage] = useState(1);
   const [productsPerPage] = useState(10);
   const [productsPagination, setProductsPagination] = useState({ total: 0, pages: 0 });
@@ -1496,17 +1498,18 @@ export default function AdminProductsPage() {
     }, 0);
   };
 
-  const handleCategoryDelete = async (id: number, name: string) => {
-    if (!window.confirm(`Delete "${name}"? This cannot be undone. If it has products or subcategories, delete will be blocked.`)) return;
+  const handleCategoryDelete = async (id: number) => {
     setDeletingCategoryId(id);
     try {
       await productsAPI.deleteCategory(String(id));
       showMsg("success", "Category deleted.");
       if (editingCategoryId === id) cancelEdit();
+      setCategoryDeleteTarget(null);
       await loadCategories();
     } catch (err: unknown) {
       showMsg("error", err instanceof Error ? err.message : "Failed to delete category");
     } finally {
+      setCategoryDeleteTarget(null);
       setDeletingCategoryId(null);
     }
   };
@@ -2215,12 +2218,13 @@ export default function AdminProductsPage() {
                               </p>
                             </div>
                             <div className="flex flex-wrap gap-2">
-                              <Link
-                                href="/admin/box-rules"
+                              <button
+                                type="button"
+                                onClick={() => setManageBoxesConfirmOpen(true)}
                                 className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-medium text-slate-700 shadow-sm hover:bg-slate-50"
                               >
                                 Manage boxes
-                              </Link>
+                              </button>
                               <button
                                 type="button"
                                 className="rounded-lg bg-slate-900 px-3 py-2 text-xs font-medium text-white disabled:opacity-50"
@@ -3566,7 +3570,7 @@ export default function AdminProductsPage() {
                                 </button>
                                 <button
                                   type="button"
-                                  onClick={() => handleCategoryDelete(c.id, c.name)}
+                                  onClick={() => setCategoryDeleteTarget({ id: c.id, name: c.name, parent_id: c.parent_id })}
                                   disabled={deletingCategoryId === c.id}
                                   className="font-medium text-rose-600 hover:text-rose-800 disabled:opacity-50"
                                   title="Delete"
@@ -3687,7 +3691,7 @@ export default function AdminProductsPage() {
                                   </button>
                                   <button
                                     type="button"
-                                    onClick={() => handleCategoryDelete(c.id, c.name)}
+                                    onClick={() => setCategoryDeleteTarget({ id: c.id, name: c.name, parent_id: c.parent_id })}
                                     disabled={deletingCategoryId === c.id}
                                     className="font-medium text-rose-600 hover:text-rose-800 disabled:opacity-50"
                                     title="Delete"
@@ -3752,6 +3756,89 @@ export default function AdminProductsPage() {
                 className="inline-flex items-center justify-center rounded-lg bg-rose-600 px-4 py-2.5 text-sm font-medium text-white shadow-sm hover:bg-rose-700 disabled:opacity-50"
               >
                 {deletingProductId === productDeleteTarget.id ? "Deleting..." : "Delete"}
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+      {categoryDeleteTarget ? (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4 backdrop-blur-sm"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="delete-category-modal-title"
+          onClick={() => {
+            if (deletingCategoryId == null) setCategoryDeleteTarget(null);
+          }}
+        >
+          <div
+            className="w-full max-w-md rounded-xl border border-slate-200 bg-white p-6 shadow-2xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h2 id="delete-category-modal-title" className="text-lg font-semibold text-slate-900">
+              Delete {categoryDeleteTarget.parent_id == null ? "category" : "subcategory"}?
+            </h2>
+            <p className="mt-2 text-sm leading-6 text-slate-600">
+              Are you sure you want to delete <span className="font-medium text-slate-900">{categoryDeleteTarget.name}</span>? This cannot be undone.
+            </p>
+            <p className="mt-2 text-xs leading-5 text-slate-500">
+              {categoryDeleteTarget.parent_id == null
+                ? "Delete will be blocked if this category still has products or subcategories."
+                : "Delete will be blocked if this subcategory still has products."}
+            </p>
+            <div className="mt-6 flex flex-wrap justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setCategoryDeleteTarget(null)}
+                disabled={deletingCategoryId != null}
+                className="rounded-lg border border-slate-200 bg-white px-4 py-2.5 text-sm font-medium text-slate-700 shadow-sm hover:bg-slate-50 disabled:opacity-50"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={() => void handleCategoryDelete(categoryDeleteTarget.id)}
+                disabled={deletingCategoryId != null}
+                className="inline-flex items-center justify-center rounded-lg bg-rose-600 px-4 py-2.5 text-sm font-medium text-white shadow-sm hover:bg-rose-700 disabled:opacity-50"
+              >
+                {deletingCategoryId === categoryDeleteTarget.id ? "Deleting..." : "Delete"}
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+      {manageBoxesConfirmOpen ? (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4 backdrop-blur-sm"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="manage-boxes-modal-title"
+          onClick={() => setManageBoxesConfirmOpen(false)}
+        >
+          <div
+            className="w-full max-w-md rounded-xl border border-slate-200 bg-white p-6 shadow-2xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h2 id="manage-boxes-modal-title" className="text-lg font-semibold text-slate-900">
+              Leave product editor?
+            </h2>
+            <p className="mt-2 text-sm leading-6 text-slate-600">
+              Opening Manage boxes will take you away from this product form. Any unsaved product changes may be lost.
+            </p>
+            <div className="mt-6 flex flex-wrap justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setManageBoxesConfirmOpen(false)}
+                className="rounded-lg border border-slate-200 bg-white px-4 py-2.5 text-sm font-medium text-slate-700 shadow-sm hover:bg-slate-50"
+              >
+                Stay here
+              </button>
+              <button
+                type="button"
+                onClick={() => router.push("/admin/box-rules")}
+                className="inline-flex items-center justify-center rounded-lg bg-slate-900 px-4 py-2.5 text-sm font-medium text-white shadow-sm hover:bg-slate-800"
+              >
+                Continue
               </button>
             </div>
           </div>
