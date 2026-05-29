@@ -76,6 +76,8 @@ interface CartItem {
   selectionMode?: string;
   graphic_scenario_enabled?: boolean;
   graphicScenarioEnabled?: boolean;
+  fixed_price_shipping_only?: boolean;
+  fixedPriceShippingOnly?: boolean;
   productionTime?: unknown;
   production_time?: unknown;
   pricing_snapshot?: {
@@ -83,6 +85,8 @@ interface CartItem {
     selectionMode?: string;
     graphic_scenario_enabled?: boolean;
     graphicScenarioEnabled?: boolean;
+    fixed_price_shipping_only?: boolean;
+    fixedPriceShippingOnly?: boolean;
     productionTime?: unknown;
     production_time?: unknown;
   };
@@ -120,6 +124,16 @@ function isGraphicScenarioCheckoutItem(item: CartItem): boolean {
     item.graphicScenarioEnabled === true ||
     item.pricing_snapshot?.graphic_scenario_enabled === true ||
     item.pricing_snapshot?.graphicScenarioEnabled === true
+  );
+}
+
+function hidesCustomerSizeCheckoutItem(item: CartItem): boolean {
+  return (
+    isGraphicScenarioCheckoutItem(item) ||
+    item.fixed_price_shipping_only === true ||
+    item.fixedPriceShippingOnly === true ||
+    item.pricing_snapshot?.fixed_price_shipping_only === true ||
+    item.pricing_snapshot?.fixedPriceShippingOnly === true
   );
 }
 
@@ -1144,7 +1158,7 @@ export default function CheckoutPage() {
                 <div className="mb-4 space-y-3 border-b border-gray-200 pb-4">
                   {cartItems.map((item, idx) => {
                     const name = item.productName ?? item.product_name ?? "Product";
-                    const isGraphicScenario = isGraphicScenarioCheckoutItem(item);
+                    const hideCustomerSize = hidesCustomerSizeCheckoutItem(item);
                     const w = Number(item.width ?? 0);
                     const h = Number(item.height ?? 0);
                     const pl =
@@ -1159,7 +1173,7 @@ export default function CheckoutPage() {
                       >
                         <div className="min-w-0 flex-1">
                           <p className="font-medium text-gray-900">{name}</p>
-                          {!isGraphicScenario && (
+                          {!hideCustomerSize && (
                             <p className="text-sm text-gray-600">
                               Size: <span className="tabular-nums text-gray-800">{sizeLine}</span>
                             </p>

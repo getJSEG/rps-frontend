@@ -1074,6 +1074,8 @@ export default function AdminProductsPage() {
     { label: "Option 1", option_key: "option_1", pricing_mode: "fixed" as const, unit_price: null, is_default: true },
     { label: "Option 2", option_key: "option_2", pricing_mode: "fixed" as const, unit_price: null, is_default: false },
   ]);
+  const fixedPriceShippingFlow = prodPricingMode === "fixed";
+  const adminSetBoxFlow = prodGraphicScenarioEnabled || fixedPriceShippingFlow;
   const assignedModifierGroups = modifierCatalog.filter((g) => !!prodModifierAssignments[g.key]);
   const findModifierGroupById = (id: number | null | undefined) =>
     assignedModifierGroups.find((g) => Number(g.id) === Number(id));
@@ -1267,11 +1269,11 @@ export default function AdminProductsPage() {
       }
       const min = rule.min_smallest_side === "" ? null : Number(rule.min_smallest_side);
       const max = rule.max_smallest_side === "" ? null : Number(rule.max_smallest_side);
-      if (!prodGraphicScenarioEnabled && ((min != null && (!Number.isFinite(min) || min < 0)) || (max != null && (!Number.isFinite(max) || max < 0)))) {
+      if (!adminSetBoxFlow && ((min != null && (!Number.isFinite(min) || min < 0)) || (max != null && (!Number.isFinite(max) || max < 0)))) {
         showMsg("error", "Box rule ranges must be non-negative numbers.");
         return;
       }
-      if (!prodGraphicScenarioEnabled && min != null && max != null && min > max) {
+      if (!adminSetBoxFlow && min != null && max != null && min > max) {
         showMsg("error", "Box rule minimum cannot be greater than maximum.");
         return;
       }
@@ -1286,14 +1288,14 @@ export default function AdminProductsPage() {
         return;
       }
     }
-    if (!prodGraphicScenarioEnabled && prodShippingBoxRules.length > 0) {
+    if (!adminSetBoxFlow && prodShippingBoxRules.length > 0) {
       const wpsf = Number(prodWeightPerSqft);
       if (!Number.isFinite(wpsf) || wpsf <= 0) {
         showMsg("error", "Weight per sq ft is required when shipping box rules are attached.");
         return;
       }
     }
-    if (prodGraphicScenarioEnabled) {
+    if (adminSetBoxFlow) {
       const fedexShippingValidation = validateHardwareFedexShippingData({
         length: prodShippingLength,
         width: prodShippingWidth,
@@ -1358,10 +1360,10 @@ export default function AdminProductsPage() {
           : null,
         size_mode: "custom" as const,
         base_unit: prodBaseUnit,
-        min_width: prodGraphicScenarioEnabled ? null : (prodMinWidth === "" ? null : parseFloat(prodMinWidth)),
-        max_width: prodGraphicScenarioEnabled ? null : (prodMaxWidth === "" ? null : parseFloat(prodMaxWidth)),
-        min_height: prodGraphicScenarioEnabled ? null : (prodMinHeight === "" ? null : parseFloat(prodMinHeight)),
-        max_height: prodGraphicScenarioEnabled ? null : (prodMaxHeight === "" ? null : parseFloat(prodMaxHeight)),
+        min_width: adminSetBoxFlow ? null : (prodMinWidth === "" ? null : parseFloat(prodMinWidth)),
+        max_width: adminSetBoxFlow ? null : (prodMaxWidth === "" ? null : parseFloat(prodMaxWidth)),
+        min_height: adminSetBoxFlow ? null : (prodMinHeight === "" ? null : parseFloat(prodMinHeight)),
+        max_height: adminSetBoxFlow ? null : (prodMaxHeight === "" ? null : parseFloat(prodMaxHeight)),
         size_options: [],
         material: prodMaterial.trim() || undefined,
         gallery_images: prodGalleryUrls,
@@ -1374,8 +1376,8 @@ export default function AdminProductsPage() {
           .filter((rule) => rule.shipping_box_id)
           .map((rule) => ({
             shipping_box_id: Number(rule.shipping_box_id),
-            min_smallest_side: prodGraphicScenarioEnabled || rule.min_smallest_side === "" ? null : Number(rule.min_smallest_side),
-            max_smallest_side: prodGraphicScenarioEnabled || rule.max_smallest_side === "" ? null : Number(rule.max_smallest_side),
+            min_smallest_side: adminSetBoxFlow || rule.min_smallest_side === "" ? null : Number(rule.min_smallest_side),
+            max_smallest_side: adminSetBoxFlow || rule.max_smallest_side === "" ? null : Number(rule.max_smallest_side),
             max_quantity_per_box: rule.max_quantity_per_box === "" ? null : Number(rule.max_quantity_per_box),
             max_weight_per_box: rule.max_weight_per_box === "" ? null : Number(rule.max_weight_per_box),
           })),
@@ -1948,6 +1950,12 @@ export default function AdminProductsPage() {
                           setProdPricingMode(v);
                           if (v === "fixed") setProdPricePerSqft("");
                           if (v === "area") setProdPrice("");
+                          if (v === "fixed") {
+                            setProdMinWidth("");
+                            setProdMaxWidth("");
+                            setProdMinHeight("");
+                            setProdMaxHeight("");
+                          }
                         }}
                         className={selectClass}
                         aria-label="Price type"
@@ -2014,7 +2022,7 @@ export default function AdminProductsPage() {
                         }}
                         className={inputClass}
                       />
-                      {!prodGraphicScenarioEnabled ? (
+                      {!prodGraphicScenarioEnabled && prodPricingMode !== "fixed" ? (
                         <>
                           <input
                             type="text"
@@ -2047,7 +2055,7 @@ export default function AdminProductsPage() {
                         onChange={(e) => setProdMaterial(e.target.value)}
                         className={inputClass}
                       />
-                      {!prodGraphicScenarioEnabled ? (
+                      {!adminSetBoxFlow ? (
                         <>
                           <input
                             type="text"
@@ -2209,11 +2217,15 @@ export default function AdminProductsPage() {
                           <div className="mb-3 flex flex-wrap items-start justify-between gap-3">
                             <div>
                               <p className="text-sm font-semibold text-slate-800">
-                                {prodGraphicScenarioEnabled ? "Hardware Box Limits" : "Shipping Box Rules"}
+                                {prodGraphicScenarioEnabled
+                                  ? "Hardware Box Limits"
+                                  : fixedPriceShippingFlow
+                                    ? "Fixed Price Box Limits"
+                                    : "Shipping Box Rules"}
                               </p>
                               <p className="mt-1 text-xs text-slate-500">
-                                {prodGraphicScenarioEnabled
-                                  ? "Hardware uses the selected box dimensions and the shipping weight above. These limits split quantity and optional weight into multiple FedEx boxes."
+                                {adminSetBoxFlow
+                                  ? "FedEx uses the admin shipping box dimensions and weight below. These limits split quantity and optional weight into multiple FedEx boxes."
                                   : "Match the product's smallest side to a saved box before sending dimensions to FedEx."}
                               </p>
                             </div>
@@ -2247,7 +2259,7 @@ export default function AdminProductsPage() {
                           ) : (
                             <div className="space-y-3">
                               {prodShippingBoxRules.map((rule, idx) => (
-                                <div key={`shipping-box-rule-${idx}`} className={`grid gap-3 rounded-lg border border-slate-200 bg-slate-50 p-3 ${prodGraphicScenarioEnabled ? "md:grid-cols-4" : "md:grid-cols-6"}`}>
+                                <div key={`shipping-box-rule-${idx}`} className={`grid gap-3 rounded-lg border border-slate-200 bg-slate-50 p-3 ${adminSetBoxFlow ? "md:grid-cols-4" : "md:grid-cols-6"}`}>
                                   <select
                                     value={rule.shipping_box_id}
                                     onChange={(e) => {
@@ -2266,7 +2278,7 @@ export default function AdminProductsPage() {
                                         </option>
                                       ))}
                                   </select>
-                                  {!prodGraphicScenarioEnabled ? (
+                                  {!adminSetBoxFlow ? (
                                     <>
                                       <input
                                         type="text"
@@ -2338,12 +2350,16 @@ export default function AdminProductsPage() {
                             </div>
                           )}
                       </div>
-                      {prodGraphicScenarioEnabled ? (
+                      {adminSetBoxFlow ? (
                         <div className="md:col-span-2 rounded-lg border border-slate-200 bg-white p-4">
                           <div className="mb-3">
-                            <p className="text-sm font-semibold text-slate-800">Hardware shipping data</p>
+                            <p className="text-sm font-semibold text-slate-800">
+                              {prodGraphicScenarioEnabled ? "Hardware shipping data" : "Fixed price shipping data"}
+                            </p>
                             <p className="mt-1 text-xs text-slate-500">
-                              Hardware products do not use customer-entered dimensions. If a hardware box limit is attached, FedEx uses that box&apos;s dimensions and this weight.
+                              {prodGraphicScenarioEnabled
+                                ? "Hardware products do not use customer-entered dimensions. If a hardware box limit is attached, FedEx uses that box's dimensions and this weight."
+                                : "Fixed price products do not use customer-entered dimensions. FedEx uses these admin dimensions and weight immediately on the product page."}
                             </p>
                           </div>
                           <div className="grid gap-3 md:grid-cols-2">

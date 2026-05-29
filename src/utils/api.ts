@@ -782,6 +782,19 @@ function isHardwareFedexProduct(row: {
   return htRaw != null && String(htRaw).trim() !== "" && Number.isFinite(Number(htRaw));
 }
 
+function isFixedPriceShippingProduct(row: {
+  pricing_mode?: unknown;
+  pricingMode?: unknown;
+  graphic_scenario_enabled?: unknown;
+  graphicScenarioEnabled?: unknown;
+  hardware_template_id?: unknown;
+  hardwareTemplateId?: unknown;
+} | null | undefined): boolean {
+  if (!row || isHardwareFedexProduct(row)) return false;
+  const mode = String(row.pricing_mode ?? row.pricingMode ?? "").trim().toLowerCase();
+  return mode === "fixed";
+}
+
 /**
  * Returns shipping dimensions/weight for FedEx when the product is hardware/graphic-scenario
  * and all `shipping_length`, `shipping_width`, `shipping_height`, `shipping_weight` are positive.
@@ -797,6 +810,27 @@ export function hardwareFedexShippingFromProduct(product: {
   shipping_weight?: unknown;
 } | null | undefined): HardwareFedexShipping | null {
   if (!product || !isHardwareFedexProduct(product)) return null;
+  const length = parsePositiveProductNumber(product.shipping_length);
+  const width = parsePositiveProductNumber(product.shipping_width);
+  const height = parsePositiveProductNumber(product.shipping_height);
+  const weightPerUnit = parsePositiveProductNumber(product.shipping_weight);
+  if (length == null || width == null || height == null || weightPerUnit == null) return null;
+  return { length, width, height, weightPerUnit };
+}
+
+export function fixedPriceFedexShippingFromProduct(product: {
+  pricing_mode?: unknown;
+  pricingMode?: unknown;
+  graphic_scenario_enabled?: unknown;
+  graphicScenarioEnabled?: unknown;
+  hardware_template_id?: unknown;
+  hardwareTemplateId?: unknown;
+  shipping_length?: unknown;
+  shipping_width?: unknown;
+  shipping_height?: unknown;
+  shipping_weight?: unknown;
+} | null | undefined): HardwareFedexShipping | null {
+  if (!product || !isFixedPriceShippingProduct(product)) return null;
   const length = parsePositiveProductNumber(product.shipping_length);
   const width = parsePositiveProductNumber(product.shipping_width);
   const height = parsePositiveProductNumber(product.shipping_height);
@@ -858,10 +892,17 @@ function hardwareFedexShippingFromCartLikeItem(item: {
   shippingWidth?: unknown;
   shippingHeight?: unknown;
   shippingWeight?: unknown;
+  fixed_price_shipping_only?: unknown;
+  fixedPriceShippingOnly?: unknown;
   pricing_snapshot?: Record<string, unknown>;
 }): HardwareFedexShipping | null {
   const snap = item.pricing_snapshot && typeof item.pricing_snapshot === "object" ? item.pricing_snapshot : {};
-  if (!isHardwareFedexProduct({ ...item, ...snap })) return null;
+  const isFixedPriceShipping =
+    item.fixed_price_shipping_only === true ||
+    item.fixedPriceShippingOnly === true ||
+    snap.fixed_price_shipping_only === true ||
+    snap.fixedPriceShippingOnly === true;
+  if (!isHardwareFedexProduct({ ...item, ...snap }) && !isFixedPriceShipping) return null;
 
   const pick = (snake: string, camel: string) =>
     (item as Record<string, unknown>)[snake] ??
@@ -886,6 +927,20 @@ function hasHardwareTemplateOnCartLikeItem(item: {
 }): boolean {
   const snap = item.pricing_snapshot && typeof item.pricing_snapshot === "object" ? item.pricing_snapshot : {};
   return isHardwareFedexProduct({ ...item, ...snap });
+}
+
+function isFixedPriceShippingCartLikeItem(item: {
+  fixed_price_shipping_only?: unknown;
+  fixedPriceShippingOnly?: unknown;
+  pricing_snapshot?: Record<string, unknown>;
+}): boolean {
+  const snap = item.pricing_snapshot && typeof item.pricing_snapshot === "object" ? item.pricing_snapshot : {};
+  return (
+    item.fixed_price_shipping_only === true ||
+    item.fixedPriceShippingOnly === true ||
+    snap.fixed_price_shipping_only === true ||
+    snap.fixedPriceShippingOnly === true
+  );
 }
 
 /**
@@ -929,12 +984,14 @@ export function buildFedexPackagesFromShippableCartItems(
       shippingWeight?: unknown;
       weight_per_sqft?: unknown;
       weightPerSqft?: unknown;
+      fixed_price_shipping_only?: unknown;
+      fixedPriceShippingOnly?: unknown;
       pricing_snapshot?: Record<string, unknown>;
     };
     const qty = billableQtyFromCartLikeItem(item);
     const itemWidth = Number(item.width ?? item.width_inches) || 0;
     const itemHeight = Number(item.height ?? item.height_inches) || 0;
-    const isHardware = hasHardwareTemplateOnCartLikeItem(item);
+    const isHardware = hasHardwareTemplateOnCartLikeItem(item) || isFixedPriceShippingCartLikeItem(item);
     const hw = hardwareFedexShippingFromCartLikeItem(item);
     const matchedRule = isHardware
       ? firstActiveShippingBoxRuleWithBox(productShippingBoxRulesFrom(item))

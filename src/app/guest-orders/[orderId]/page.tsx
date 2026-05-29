@@ -100,7 +100,7 @@ function canRequestCancellation(status: string | null | undefined): boolean {
   return s === "awaiting_artwork" || s === "on_hold" || s === "awaiting_customer_approval";
 }
 
-function shouldShowTrackingNumber(order: Order): boolean {
+function shouldShowTrackingNumber(order: GuestOrder): boolean {
   return canonicalOrderStatus(order.status) === "shipped" && !!order.order_tracking_id?.trim();
 }
 

@@ -19,6 +19,7 @@ import {
   productionTimeBusinessDaysForQuantity,
   buildFedexPackagesForProductConfigure,
   hardwareFedexShippingFromProduct,
+  fixedPriceFedexShippingFromProduct,
   productFedexShippingFromProduct,
   type FedexRateQuote,
   type FreeShippingPolicy,
@@ -392,6 +393,8 @@ function ProductDetailContent() {
   const isGraphicScenario = !!product?.graphic_scenario_enabled;
   const purchaseOptions = Array.isArray(product?.purchase_options) ? product.purchase_options : [];
   const hasPurchaseOptions = purchaseOptions.length > 0;
+  const productPricingMode = inferPricingModeForProduct(product ?? null);
+  const fixedPriceShippingOnly = !isGraphicScenario && !hasPurchaseOptions && productPricingMode === "fixed";
 
   // Determine the effective scope key for modifier filtering
   const effectiveScopeKey: string | null = hasPurchaseOptions
@@ -411,11 +414,13 @@ function ProductDetailContent() {
   const activePurchaseOptionIsFixed = activePurchaseOption
     ? String(activePurchaseOption.pricing_mode || "fixed") === "fixed"
     : false;
-  /** True when no width/height input is needed (graphic scenario OR fixed-price purchase option) */
-  const skipDimensionsForPrice = isGraphicScenario || (hasPurchaseOptions && activePurchaseOptionIsFixed);
+  /** True when no width/height input is needed (graphic scenario, fixed-price product, or fixed-price purchase option). */
+  const skipDimensionsForPrice = isGraphicScenario || fixedPriceShippingOnly || (hasPurchaseOptions && activePurchaseOptionIsFixed);
 
   /** FedEx physical box from admin `shipping_*` when product has a hardware template and all dims are set. */
   const hardwareFedexShipping = useMemo(() => hardwareFedexShippingFromProduct(product), [product]);
+  const fixedPriceFedexShipping = useMemo(() => fixedPriceFedexShippingFromProduct(product), [product]);
+  const adminFedexShipping = hardwareFedexShipping ?? fixedPriceFedexShipping;
   /** Standard product FedEx length/weight from product admin; width/height still come from customer input. */
   const productFedexShipping = useMemo(() => productFedexShippingFromProduct(product), [product]);
   const shippingBoxRules = useMemo(
@@ -763,8 +768,8 @@ function ProductDetailContent() {
       setFedexRatesError(null);
       return cleanup;
     }
-    const useHardwareFedexBox = hardwareFedexShipping != null;
-    if (!useHardwareFedexBox && !skipDimensionsForPrice && (wIn <= 0 || hIn <= 0)) {
+    const useAdminFedexBox = adminFedexShipping != null;
+    if (!useAdminFedexBox && !skipDimensionsForPrice && (wIn <= 0 || hIn <= 0)) {
       setFedexRates([]);
       setSelectedFedexServiceType("");
       setFedexRatesError(null);
@@ -808,7 +813,7 @@ function ProductDetailContent() {
         widthInches: wIn,
         heightInches: hIn,
         isGraphicScenario,
-        hardwareShipping: hardwareFedexShipping,
+        hardwareShipping: adminFedexShipping,
         productShipping: productFedexShipping,
         shippingBoxRules,
         weightPerSqft: product?.weight_per_sqft ?? null,
@@ -863,7 +868,7 @@ function ProductDetailContent() {
     heightLimitError,
     skipDimensionsForPrice,
     isGraphicScenario,
-    hardwareFedexShipping,
+    adminFedexShipping,
     productFedexShipping,
     shippingBoxRules,
     product?.weight_per_sqft,
@@ -1038,7 +1043,6 @@ function ProductDetailContent() {
   const widthInches = previewPricing?.width ?? (parseFloat(width) || 0);
   const heightInches = previewPricing?.height ?? (parseFloat(height) || 0);
   const areaSqFt = previewPricing?.areaSqft ?? ((widthInches * heightInches) / 144);
-  const productPricingMode = inferPricingModeForProduct(product ?? null);
   const listFixedUnit = parseProductMoney(product?.price);
   const fallbackFixedFromProduct = listFixedUnit != null ? listFixedUnit : 0;
   const fallbackAreaPrice = Math.max(areaSqFt * pricePerSqFt, minCharge);
@@ -1285,7 +1289,7 @@ function ProductDetailContent() {
         hardwareCartFields.weight_per_sqft = product?.weight_per_sqft ?? null;
         hardwareCartFields.weightPerSqft = product?.weight_per_sqft ?? null;
       }
-      if (hardwareFedexShipping) {
+      if (adminFedexShipping) {
         if (product?.hardware_template_id != null) {
           const hid = Number(product.hardware_template_id);
           if (Number.isFinite(hid)) {
@@ -1297,10 +1301,14 @@ function ProductDetailContent() {
           hardwareCartFields.graphic_scenario_enabled = true;
           hardwareCartFields.graphicScenarioEnabled = true;
         }
-        hardwareCartFields.shipping_length = hardwareFedexShipping.length;
-        hardwareCartFields.shipping_width = hardwareFedexShipping.width;
-        hardwareCartFields.shipping_height = hardwareFedexShipping.height;
-        hardwareCartFields.shipping_weight = hardwareFedexShipping.weightPerUnit;
+        if (fixedPriceShippingOnly) {
+          hardwareCartFields.fixed_price_shipping_only = true;
+          hardwareCartFields.fixedPriceShippingOnly = true;
+        }
+        hardwareCartFields.shipping_length = adminFedexShipping.length;
+        hardwareCartFields.shipping_width = adminFedexShipping.width;
+        hardwareCartFields.shipping_height = adminFedexShipping.height;
+        hardwareCartFields.shipping_weight = adminFedexShipping.weightPerUnit;
       } else if (product?.hardware_template_id != null) {
         const hid = Number(product.hardware_template_id);
         if (Number.isFinite(hid)) {
@@ -1384,7 +1392,10 @@ function ProductDetailContent() {
         minCharge: minCharge,
         material: productMaterial,
         selectedModifiers,
-        pricing_snapshot: previewPricing ?? undefined,
+        pricing_snapshot: {
+          ...(previewPricing ?? {}),
+          ...(fixedPriceShippingOnly ? { fixed_price_shipping_only: true } : {}),
+        },
         timestamp: new Date().toISOString()
       };
 
@@ -1780,7 +1791,7 @@ function ProductDetailContent() {
                   </button>
                 </div>
               </div>
-            ) : (
+            ) : fixedPriceShippingOnly ? null : (
               <div className="mb-6 p-4 border border-gray-200 rounded-lg">
                 <div className="grid grid-cols-2 gap-4 mb-4">
                   <div>

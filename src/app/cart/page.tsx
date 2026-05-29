@@ -70,6 +70,8 @@ interface CartItem {
     graphic_scenario_enabled?: boolean;
     purchase_option_key?: string;
     purchase_option_label?: string;
+    fixed_price_shipping_only?: boolean;
+    fixedPriceShippingOnly?: boolean;
     selected_modifiers?: Array<{
       group_key: string;
       group_name: string;
@@ -154,6 +156,16 @@ function isGraphicScenarioItem(item: CartItem): boolean {
     item.graphicScenarioEnabled === true ||
     item.pricing_snapshot?.graphic_scenario_enabled === true;
   return graphicFlag || selectionMode === "graphic_only" || selectionMode === "graphic_frame";
+}
+
+function hidesCustomerSize(item: CartItem): boolean {
+  return (
+    isGraphicScenarioItem(item) ||
+    item.fixed_price_shipping_only === true ||
+    item.fixedPriceShippingOnly === true ||
+    item.pricing_snapshot?.fixed_price_shipping_only === true ||
+    item.pricing_snapshot?.fixedPriceShippingOnly === true
+  );
 }
 
 function graphicSelectionLabel(item: CartItem): string | null {
@@ -501,7 +513,7 @@ export default function CartPage() {
                             <p className="mt-1 text-xs font-medium text-sky-700">{graphicSelectionLabel(item)}</p>
                           ) : null}
                         </div>
-                        {!isGraphicScenarioItem(item) &&
+                        {!hidesCustomerSize(item) &&
                         ((item.width > 0 && item.height > 0) || (item.print_size_label && String(item.print_size_label).trim())) ? (
                           <div className="shrink-0 rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-right">
                             <p className="text-[10px] font-semibold uppercase tracking-wide text-gray-500">Print size</p>
