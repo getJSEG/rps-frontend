@@ -310,6 +310,7 @@ export type ProductConditionalModifierRule = {
   source_modifier_key?: string;
   source_modifier_name?: string;
   source_option_id?: number | null;
+  source_option_ids?: number[];
   source_option_value?: string | null;
   source_option_label?: string | null;
   action_type: "auto_select" | "disable";
@@ -317,6 +318,7 @@ export type ProductConditionalModifierRule = {
   target_modifier_key?: string;
   target_modifier_name?: string;
   target_option_id?: number | null;
+  target_option_ids?: number[];
   target_option_value?: string | null;
   target_option_label?: string | null;
   sort_order?: number;

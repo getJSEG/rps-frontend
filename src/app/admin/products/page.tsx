@@ -112,6 +112,8 @@ type ProductModifierAssignment = {
 
 type ConditionalRuleDraft = ProductConditionalModifierRule & {
   hardware_option_key?: string | null;
+  source_option_ids?: number[];
+  target_option_ids?: number[];
 };
 
 type ShippingBoxRuleDraft = {
@@ -696,6 +698,113 @@ function ThemedDropdown({
   );
 }
 
+function MultiCheckboxDropdown({
+  options,
+  selectedIds,
+  placeholder,
+  disabled = false,
+  onChange,
+}: {
+  options: Array<{ id?: number | null; label?: string; value?: string }>;
+  selectedIds: number[];
+  placeholder: string;
+  disabled?: boolean;
+  onChange: (selectedIds: number[]) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const rootRef = useRef<HTMLDivElement>(null);
+  const optionRows = options
+    .map((option) => ({
+      id: option.id == null ? null : Number(option.id),
+      label: String(option.label || option.value || "").trim(),
+    }))
+    .filter((option): option is { id: number; label: string } => option.id != null && Number.isFinite(option.id) && option.id > 0);
+  const normalizedSelected = selectedIds
+    .map((id) => Number(id))
+    .filter((id) => Number.isFinite(id) && id > 0);
+  const selectedSet = new Set(normalizedSelected);
+  const allChecked = optionRows.length > 0 && optionRows.every((option) => selectedSet.has(option.id));
+  const selectedLabels = optionRows.filter((option) => selectedSet.has(option.id)).map((option) => option.label);
+  const selectedLabel =
+    selectedLabels.length === 0
+      ? placeholder
+      : selectedLabels.length <= 2
+        ? selectedLabels.join(", ")
+        : `${selectedLabels.length} selected`;
+
+  useEffect(() => {
+    const onPointerDown = (event: MouseEvent) => {
+      if (!rootRef.current?.contains(event.target as Node)) setOpen(false);
+    };
+    document.addEventListener("mousedown", onPointerDown);
+    return () => document.removeEventListener("mousedown", onPointerDown);
+  }, []);
+
+  const toggleOne = (id: number, checked: boolean) => {
+    const next = new Set(selectedSet);
+    if (checked) next.add(id);
+    else next.delete(id);
+    onChange([...next]);
+  };
+
+  return (
+    <div ref={rootRef} className="relative">
+      <button
+        type="button"
+        onClick={() => {
+          if (!disabled) setOpen((prev) => !prev);
+        }}
+        disabled={disabled}
+        className={`w-full rounded-lg border border-slate-200 px-3 py-2 text-left text-sm shadow-sm outline-none transition focus:border-sky-400 focus:ring-2 focus:ring-sky-400/25 ${
+          disabled
+            ? "cursor-not-allowed bg-slate-50 text-slate-400"
+            : selectedLabels.length > 0
+              ? "bg-white text-slate-900"
+              : "bg-white text-slate-500"
+        }`}
+        aria-haspopup="listbox"
+        aria-expanded={open}
+      >
+        <span className="block truncate pr-6">{selectedLabel}</span>
+        <FiChevronDown
+          className={`pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-slate-500 transition-transform ${open ? "rotate-180" : ""}`}
+          aria-hidden
+        />
+      </button>
+      {open ? (
+        <div className="absolute z-40 mt-1 max-h-64 w-full overflow-auto rounded-lg border border-slate-200 bg-white p-2 shadow-lg">
+          <label className="flex cursor-pointer items-center gap-2 rounded px-2 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-50">
+            <input
+              type="checkbox"
+              checked={allChecked}
+              disabled={optionRows.length === 0}
+              onChange={(event) => onChange(event.target.checked ? optionRows.map((option) => option.id) : [])}
+            />
+            <span>All</span>
+          </label>
+          {optionRows.length === 0 ? (
+            <div className="px-2 py-1.5 text-sm text-slate-400">No options</div>
+          ) : (
+            optionRows.map((option) => (
+              <label
+                key={option.id}
+                className="flex cursor-pointer items-center gap-2 rounded px-2 py-1.5 text-sm text-slate-700 hover:bg-slate-50"
+              >
+                <input
+                  type="checkbox"
+                  checked={selectedSet.has(option.id)}
+                  onChange={(event) => toggleOne(option.id, event.target.checked)}
+                />
+                <span className="truncate">{option.label}</span>
+              </label>
+            ))
+          )}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
 export default function AdminProductsPage() {
   const router = useRouter();
   const [activeTab, setActiveTab] = useState<Tab>("products");
@@ -1081,6 +1190,17 @@ export default function AdminProductsPage() {
     assignedModifierGroups.find((g) => Number(g.id) === Number(id));
   const findModifierOptionById = (groupId: number | null | undefined, optionId: number | null | undefined) =>
     findModifierGroupById(groupId)?.options.find((o) => Number(o.id) === Number(optionId));
+  const normalizeRuleOptionIds = (rule: ConditionalRuleDraft, field: "source" | "target") => {
+    const plural = field === "source" ? rule.source_option_ids : rule.target_option_ids;
+    const single = field === "source" ? rule.source_option_id : rule.target_option_id;
+    const ids = Array.isArray(plural) ? plural : [];
+    const normalized = ids
+      .map((id) => Number(id))
+      .filter((id) => Number.isFinite(id) && id > 0);
+    const singleId = Number(single || 0);
+    if (Number.isFinite(singleId) && singleId > 0) normalized.push(singleId);
+    return [...new Set(normalized)];
+  };
   const isModifierVisibleForHardwareKey = (groupId: number, hardwareKey: string | null | undefined) => {
     const group = findModifierGroupById(groupId);
     if (!group) return false;
@@ -1095,13 +1215,15 @@ export default function AdminProductsPage() {
       if (!rule.source_modifier_id || !rule.target_modifier_id) return false;
       if (rule.action_type !== "auto_select" && rule.action_type !== "disable") return false;
       const hardwareKey = String(rule.hardware_option_key || "").trim().toLowerCase();
+      const sourceIds = normalizeRuleOptionIds(rule, "source");
+      const targetIds = normalizeRuleOptionIds(rule, "target");
       return (
         isModifierVisibleForHardwareKey(rule.source_modifier_id, hardwareKey) &&
         isModifierVisibleForHardwareKey(rule.target_modifier_id, hardwareKey) &&
-        (!rule.source_option_id || !!findModifierOptionById(rule.source_modifier_id, rule.source_option_id)) &&
-        (rule.action_type === "disable" && !rule.target_option_id
+        (sourceIds.length === 0 || sourceIds.every((id) => !!findModifierOptionById(rule.source_modifier_id, id))) &&
+        (rule.action_type === "disable" && targetIds.length === 0
           ? true
-          : !!findModifierOptionById(rule.target_modifier_id, rule.target_option_id))
+          : targetIds.length > 0 && targetIds.every((id) => !!findModifierOptionById(rule.target_modifier_id, id)))
       );
     });
   const createDefaultConditionalRule = (): ConditionalRuleDraft | null => {
@@ -1111,9 +1233,11 @@ export default function AdminProductsPage() {
       hardware_option_key: null,
       source_modifier_id: 0,
       source_option_id: 0,
+      source_option_ids: [],
       action_type: "auto_select",
       target_modifier_id: 0,
       target_option_id: null,
+      target_option_ids: [],
       sort_order: prodConditionalRules.length,
     };
   };
@@ -1396,15 +1520,21 @@ export default function AdminProductsPage() {
               o.price_adjustment_override == null ? null : Number(o.price_adjustment_override),
           })),
         })),
-        conditional_rules: cleanConditionalRules(prodConditionalRules).map((rule, i) => ({
-          hardware_option_key: rule.hardware_option_key || null,
-          source_modifier_id: Number(rule.source_modifier_id),
-          source_option_id: rule.source_option_id == null || Number(rule.source_option_id) <= 0 ? null : Number(rule.source_option_id),
-          action_type: rule.action_type,
-          target_modifier_id: Number(rule.target_modifier_id),
-          target_option_id: rule.target_option_id == null || Number(rule.target_option_id) <= 0 ? null : Number(rule.target_option_id),
-          sort_order: i,
-        })),
+        conditional_rules: cleanConditionalRules(prodConditionalRules).map((rule, i) => {
+          const sourceIds = normalizeRuleOptionIds(rule, "source");
+          const targetIds = normalizeRuleOptionIds(rule, "target");
+          return {
+            hardware_option_key: rule.hardware_option_key || null,
+            source_modifier_id: Number(rule.source_modifier_id),
+            source_option_id: sourceIds[0] ?? null,
+            source_option_ids: sourceIds,
+            action_type: rule.action_type,
+            target_modifier_id: Number(rule.target_modifier_id),
+            target_option_id: targetIds[0] ?? null,
+            target_option_ids: targetIds,
+            sort_order: i,
+          };
+        }),
       };
       const purchaseOptionsPayload = {
         purchase_options: prodPurchaseOptions
@@ -1637,16 +1767,56 @@ export default function AdminProductsPage() {
       const ruleRows: ProductConditionalModifierRule[] = Array.isArray(modRes?.conditional_rules)
         ? modRes.conditional_rules
         : [];
+      const groupedRuleRows = Array.from(
+        ruleRows.reduce((groups, rule) => {
+          const key = [
+            String(rule.hardware_option_key || ""),
+            Number(rule.source_modifier_id || 0),
+            rule.action_type === "disable" ? "disable" : "auto_select",
+            Number(rule.target_modifier_id || 0),
+            rule.target_option_id == null ? "" : Number(rule.target_option_id || 0),
+          ].join("|");
+          const current = groups.get(key);
+          if (!current) {
+            groups.set(key, {
+              ...rule,
+              source_option_ids: rule.source_option_id == null ? [] : [Number(rule.source_option_id || 0)],
+              target_option_ids: rule.target_option_id == null ? [] : [Number(rule.target_option_id || 0)],
+            });
+            return groups;
+          }
+          if (rule.source_option_id != null) {
+            current.source_option_ids = [
+              ...new Set([...(current.source_option_ids || []), Number(rule.source_option_id || 0)].filter((id) => id > 0)),
+            ];
+            current.source_option_id = current.source_option_ids[0] ?? null;
+          }
+          return groups;
+        }, new Map<string, ProductConditionalModifierRule>())
+          .values()
+      );
       setProdConditionalRules(
-        ruleRows.map((rule) => ({
+        groupedRuleRows.map((rule) => ({
           ...rule,
           hardware_option_key: rule.hardware_option_key || null,
           hardware_option_id: rule.hardware_option_id ?? null,
           source_modifier_id: Number(rule.source_modifier_id || 0),
           source_option_id: rule.source_option_id == null ? null : Number(rule.source_option_id || 0),
+          source_option_ids:
+            Array.isArray(rule.source_option_ids) && rule.source_option_ids.length > 0
+              ? rule.source_option_ids.map((id) => Number(id)).filter((id) => Number.isFinite(id) && id > 0)
+              : rule.source_option_id == null
+                ? []
+                : [Number(rule.source_option_id || 0)].filter((id) => Number.isFinite(id) && id > 0),
           action_type: rule.action_type === "disable" ? "disable" : "auto_select",
           target_modifier_id: Number(rule.target_modifier_id || 0),
           target_option_id: rule.target_option_id == null ? null : Number(rule.target_option_id || 0),
+          target_option_ids:
+            Array.isArray(rule.target_option_ids) && rule.target_option_ids.length > 0
+              ? rule.target_option_ids.map((id) => Number(id)).filter((id) => Number.isFinite(id) && id > 0)
+              : rule.target_option_id == null
+                ? []
+                : [Number(rule.target_option_id || 0)].filter((id) => Number.isFinite(id) && id > 0),
         }))
       );
       const poRows: ProductPurchaseOption[] = Array.isArray(poRes?.purchase_options) ? poRes.purchase_options : [];
@@ -2938,8 +3108,10 @@ export default function AdminProductsPage() {
                                               hardware_option_id: null,
                                               source_modifier_id: 0,
                                               source_option_id: 0,
+                                              source_option_ids: [],
                                               target_modifier_id: 0,
                                               target_option_id: null,
+                                              target_option_ids: [],
                                             });
                                           }}
                                         />
@@ -2962,32 +3134,30 @@ export default function AdminProductsPage() {
                                           updateRule({
                                             source_modifier_id: Number(group?.id || 0),
                                             source_option_id: null,
+                                            source_option_ids: [],
                                             target_modifier_id: 0,
                                             target_option_id: null,
+                                            target_option_ids: [],
                                           });
                                         }}
                                       />
                                     </div>
                                     <div className="md:col-span-2">
-                                      <label className="mb-1 block text-xs font-medium text-slate-600">OPTION</label>
-                                      <ThemedDropdown
-                                        value={String(rule.source_option_id || "")}
-                                        placeholder="Any selected option"
-                                        options={[
-                                          { value: "", label: "Any selected option" },
-                                          ...sourceOptions.map((o) => ({
-                                            value: String(o.id),
-                                            label: o.label || o.value,
-                                          })),
-                                        ]}
-                                        onChange={(value) =>
+                                      <label className="mb-1 block text-xs font-medium text-slate-600">OPTIONS</label>
+                                      <MultiCheckboxDropdown
+                                        options={sourceOptions}
+                                        selectedIds={normalizeRuleOptionIds(rule, "source")}
+                                        placeholder="Select options"
+                                        disabled={!hasSourceModifier}
+                                        onChange={(selectedIds) =>
                                           updateRule({
-                                            source_option_id: value ? Number(value) : null,
+                                            source_option_ids: selectedIds,
+                                            source_option_id: selectedIds[0] ?? null,
                                             target_modifier_id: 0,
                                             target_option_id: null,
+                                            target_option_ids: [],
                                           })
                                         }
-                                        disabled={!hasSourceModifier}
                                       />
                                     </div>
                                     <div className="md:col-span-2">
@@ -2999,10 +3169,15 @@ export default function AdminProductsPage() {
                                           { value: "auto_select", label: "Auto-select" },
                                           { value: "disable", label: "Disable" },
                                         ]}
-                                        onChange={(value) => updateRule({
-                                          action_type: value === "disable" ? "disable" : "auto_select",
-                                          target_option_id: null,
-                                        })}
+                                        onChange={(value) => {
+                                          const nextAction = value === "disable" ? "disable" : "auto_select";
+                                          const targetIds = normalizeRuleOptionIds(rule, "target");
+                                          updateRule({
+                                            action_type: nextAction,
+                                            target_option_id: nextAction === "auto_select" ? targetIds[0] ?? null : rule.target_option_id ?? null,
+                                            target_option_ids: nextAction === "auto_select" ? (targetIds[0] ? [targetIds[0]] : []) : targetIds,
+                                          });
+                                        }}
                                         disabled={!hasSourceModifier}
                                       />
                                     </div>
@@ -3023,29 +3198,50 @@ export default function AdminProductsPage() {
                                           updateRule({
                                             target_modifier_id: Number(group?.id || 0),
                                             target_option_id: null,
+                                            target_option_ids: [],
                                           });
                                         }}
                                         disabled={!hasSourceModifier}
                                       />
                                     </div>
                                     <div className="md:col-span-2">
-                                      <label className="mb-1 block text-xs font-medium text-slate-600">TARGET OPTION</label>
-                                      <ThemedDropdown
-                                        value={String(rule.target_option_id || "")}
-                                        placeholder={rule.action_type === "disable" ? "None - disable whole modifier" : "Select option"}
-                                        options={[
-                                          {
-                                            value: "",
-                                            label: rule.action_type === "disable" ? "None - disable whole modifier" : "Select option",
-                                          },
-                                          ...targetOptions.map((o) => ({
-                                            value: String(o.id),
-                                            label: o.label || o.value,
-                                          })),
-                                        ]}
-                                        onChange={(value) => updateRule({ target_option_id: value ? Number(value) : null })}
-                                        disabled={!hasTargetModifier}
-                                      />
+                                      <label className="mb-1 block text-xs font-medium text-slate-600">
+                                        {rule.action_type === "auto_select" ? "TARGET OPTION" : "TARGET OPTIONS"}
+                                      </label>
+                                      {rule.action_type === "auto_select" ? (
+                                        <ThemedDropdown
+                                          value={String(normalizeRuleOptionIds(rule, "target")[0] || "")}
+                                          placeholder="Select target option"
+                                          options={[
+                                            { value: "", label: "Select target option" },
+                                            ...targetOptions.map((o) => ({
+                                              value: String(o.id),
+                                              label: o.label || o.value,
+                                            })),
+                                          ]}
+                                          onChange={(value) => {
+                                            const targetId = value ? Number(value) : null;
+                                            updateRule({
+                                              target_option_id: targetId,
+                                              target_option_ids: targetId == null ? [] : [targetId],
+                                            });
+                                          }}
+                                          disabled={!hasTargetModifier}
+                                        />
+                                      ) : (
+                                        <MultiCheckboxDropdown
+                                          options={targetOptions}
+                                          selectedIds={normalizeRuleOptionIds(rule, "target")}
+                                          placeholder="Select target options"
+                                          disabled={!hasTargetModifier}
+                                          onChange={(selectedIds) =>
+                                            updateRule({
+                                              target_option_ids: selectedIds,
+                                              target_option_id: selectedIds[0] ?? null,
+                                            })
+                                          }
+                                        />
+                                      )}
                                     </div>
                                   </div>
                                 </div>
