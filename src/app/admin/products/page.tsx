@@ -2885,7 +2885,7 @@ export default function AdminProductsPage() {
                               if (!assigned) return null;
                               return (
                                 <div key={group.key} className="rounded border border-slate-200 p-2">
-                                  <label className="mb-2 flex items-center justify-between gap-2 text-sm font-medium">
+                                  <div className="mb-2 flex items-center justify-between gap-2 text-sm font-medium">
                                     {group.name} ({group.key})
                                     <button
                                       type="button"
@@ -2900,7 +2900,7 @@ export default function AdminProductsPage() {
                                     >
                                       Remove
                                     </button>
-                                  </label>
+                                  </div>
                                   {(prodPurchaseOptions.length > 0 || prodGraphicScenarioEnabled) ? (
                                     <p className="mb-2 text-[11px] text-slate-500">
                                       Current scope:{" "}
