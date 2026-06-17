@@ -16,7 +16,7 @@ import {
   type ProductPurchaseOption,
   type ShippingBox,
 } from "../../../utils/api";
-import { FiEdit, FiTrash2, FiChevronUp, FiChevronDown } from "react-icons/fi";
+import { FiEdit, FiTrash2, FiChevronUp, FiChevronDown, FiPackage } from "react-icons/fi";
 
 type Tab = "products" | "categories" | "subcategories";
 
@@ -596,7 +596,32 @@ function AdminRichTextField({
           data-placeholder={dataPlaceholder}
           style={{ outline: "none" }}
         />
-      </div>
+    </div>
+  </div>
+  );
+}
+
+function CollapsibleSection({
+  title,
+  children,
+  defaultOpen = false,
+}: {
+  title: string;
+  children: React.ReactNode;
+  defaultOpen?: boolean;
+}) {
+  const [isOpen, setIsOpen] = useState(defaultOpen);
+  return (
+    <div className="md:col-span-2 border border-slate-200 rounded-xl overflow-hidden bg-white shadow-sm mb-1">
+      <button
+        type="button"
+        onClick={() => setIsOpen(!isOpen)}
+        className="w-full flex items-center justify-between px-4 py-3 bg-slate-50 hover:bg-slate-100 transition-colors"
+      >
+        <span className="text-sm font-semibold text-slate-800">{title}</span>
+        {isOpen ? <FiChevronUp className="text-slate-500" /> : <FiChevronDown className="text-slate-500" />}
+      </button>
+      {isOpen && <div className="p-4 border-t border-slate-200 bg-white">{children}</div>}
     </div>
   );
 }
@@ -2037,17 +2062,6 @@ export default function AdminProductsPage() {
                         onChange={(e) => setProdSlug(e.target.value)}
                         className={inputClass}
                       />
-                      <AdminRichTextField
-                        label={`Description${WORD_STYLE_LABEL_SUFFIX}`}
-                        dataPlaceholder={`Enter description (${RICH_PLACEHOLDER_HINT})...`}
-                        editorRef={descEditorRef}
-                        captureSelection={captureDescSelection}
-                        onBold={() => applyDescCommand("bold")}
-                        onItalic={() => applyDescCommand("italic")}
-                        onBulletList={() => insertDescList(false)}
-                        onNumberedList={() => insertDescList(true)}
-                        onInput={() => descEditorRef.current && setProdDescription(descEditorRef.current.innerHTML)}
-                      />
                       <div className="md:col-span-2">
                         <div className="mb-2 flex flex-wrap items-start justify-between mb-4 gap-3">
                           <label className="block text-sm font-medium text-slate-700">
@@ -2639,7 +2653,10 @@ export default function AdminProductsPage() {
                       ) : null}
                       <div className="md:col-span-2 rounded-lg border border-slate-200 bg-white p-3">
                         <div className="mb-3 flex flex-wrap items-center gap-2">
-                          <p className="text-sm font-medium text-slate-700">Product Modifiers</p>
+                          <p className="text-sm font-semibold text-slate-800 flex items-center gap-2">
+                            <FiPackage className="text-sky-500" />
+                            Product Modifiers
+                          </p>
                           <div className="ml-auto inline-flex overflow-hidden rounded border border-slate-200">
                             <button
                               type="button"
@@ -3274,11 +3291,14 @@ export default function AdminProductsPage() {
                           </div>
                         )}
                       </div>
-                      <div className="md:col-span-2 space-y-2">
-                          <p className="text-sm font-medium text-slate-700">Product photos</p>
-                          <p className="text-xs text-slate-500">
+                      <div className="md:col-span-2 rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
+                        <div className="mb-3">
+                          <p className="text-sm font-semibold text-slate-800">Product photos</p>
+                          <p className="mt-1 text-xs text-slate-500">
                             Upload multiple images. The first photo is used on product listings and category grids; all photos appear on the product detail page.
                           </p>
+                        </div>
+                        <div className="space-y-4">
                           <div className="flex min-w-0 flex-wrap items-center gap-2">
                             <label className="shrink-0 cursor-pointer rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-700 shadow-sm transition hover:border-slate-300 hover:bg-slate-50">
                               {uploadingImage ? "Uploading…" : "Add image files"}
@@ -3369,34 +3389,53 @@ export default function AdminProductsPage() {
                             </ul>
                           ) : null}
                         </div>
-                      <AdminRichTextField
-                        label={`Spec${WORD_STYLE_LABEL_SUFFIX}`}
-                        dataPlaceholder={`Enter spec (${RICH_PLACEHOLDER_HINT})...`}
-                        editorRef={specEditorRef}
-                        captureSelection={captureSpecSelection}
-                        onBold={() => applySpecCommand("bold")}
-                        onItalic={() => applySpecCommand("italic")}
-                        onBulletList={() => insertSpecList(false)}
-                        onNumberedList={() => insertSpecList(true)}
-                        onInput={() => specEditorRef.current && setProdSpec(specEditorRef.current.innerHTML)}
-                      />
-                      <AdminRichTextField
-                        label={`File Setup${WORD_STYLE_LABEL_SUFFIX}`}
-                        dataPlaceholder={`Enter file setup (${RICH_PLACEHOLDER_HINT})...`}
-                        editorRef={fileSetupEditorRef}
-                        captureSelection={captureFileSetupSelection}
-                        onBold={() => applyFileSetupCommand("bold")}
-                        onItalic={() => applyFileSetupCommand("italic")}
-                        onBulletList={() => insertFileSetupList(false)}
-                        onNumberedList={() => insertFileSetupList(true)}
-                        onInput={() =>
-                          fileSetupEditorRef.current && setProdFileSetup(fileSetupEditorRef.current.innerHTML)
-                        }
-                      />
-                      <div className="md:col-span-2">
-                        <label className="mb-1 block text-sm font-medium text-slate-700">
-                          Installation Guide
-                        </label>
+                      </div>
+
+                      <CollapsibleSection title={`Description${WORD_STYLE_LABEL_SUFFIX}`}>
+                        <AdminRichTextField
+                          label=""
+                          dataPlaceholder={`Enter description (${RICH_PLACEHOLDER_HINT})...`}
+                          editorRef={descEditorRef}
+                          captureSelection={captureDescSelection}
+                          onBold={() => applyDescCommand("bold")}
+                          onItalic={() => applyDescCommand("italic")}
+                          onBulletList={() => insertDescList(false)}
+                          onNumberedList={() => insertDescList(true)}
+                          onInput={() => descEditorRef.current && setProdDescription(descEditorRef.current.innerHTML)}
+                        />
+                      </CollapsibleSection>
+
+                      <CollapsibleSection title={`Spec${WORD_STYLE_LABEL_SUFFIX}`}>
+                        <AdminRichTextField
+                          label=""
+                          dataPlaceholder={`Enter spec (${RICH_PLACEHOLDER_HINT})...`}
+                          editorRef={specEditorRef}
+                          captureSelection={captureSpecSelection}
+                          onBold={() => applySpecCommand("bold")}
+                          onItalic={() => applySpecCommand("italic")}
+                          onBulletList={() => insertSpecList(false)}
+                          onNumberedList={() => insertSpecList(true)}
+                          onInput={() => specEditorRef.current && setProdSpec(specEditorRef.current.innerHTML)}
+                        />
+                      </CollapsibleSection>
+
+                      <CollapsibleSection title={`File Setup${WORD_STYLE_LABEL_SUFFIX}`}>
+                        <AdminRichTextField
+                          label=""
+                          dataPlaceholder={`Enter file setup (${RICH_PLACEHOLDER_HINT})...`}
+                          editorRef={fileSetupEditorRef}
+                          captureSelection={captureFileSetupSelection}
+                          onBold={() => applyFileSetupCommand("bold")}
+                          onItalic={() => applyFileSetupCommand("italic")}
+                          onBulletList={() => insertFileSetupList(false)}
+                          onNumberedList={() => insertFileSetupList(true)}
+                          onInput={() =>
+                            fileSetupEditorRef.current && setProdFileSetup(fileSetupEditorRef.current.innerHTML)
+                          }
+                        />
+                      </CollapsibleSection>
+
+                      <CollapsibleSection title="Installation Guide">
                         <textarea
                           rows={4}
                           placeholder="Enter installation guide"
@@ -3404,12 +3443,12 @@ export default function AdminProductsPage() {
                           onChange={(e) => setProdInstallationGuide(e.target.value)}
                           className={inputClass}
                         />
-                      </div>
-                      <div className="md:col-span-2">
-                        <div className="mb-2 flex flex-wrap items-center justify-between gap-3">
-                          <label className="block text-sm font-medium text-slate-700">
+                      </CollapsibleSection>
+                      <div className="md:col-span-2 rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
+                        <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
+                          <p className="text-sm font-semibold text-slate-800">
                             Product Highlights
-                          </label>
+                          </p>
                           <button
                             type="button"
                             onClick={() => setProdHighlights([...prodHighlights, ""])}
@@ -3421,66 +3460,68 @@ export default function AdminProductsPage() {
                         {prodHighlights.length === 0 && (
                           <p className="text-xs text-slate-400">No highlights yet. Each highlight appears as one bullet point under the product image.</p>
                         )}
-                        <div className="rounded-lg border border-slate-200 bg-white p-3 space-y-2">
-                          {prodHighlights.map((h, idx) => (
-                            <div key={idx} className="flex gap-2 items-center">
-                              <button
-                                type="button"
-                                disabled={idx === 0}
-                                onClick={() => {
-                                  const next = [...prodHighlights];
-                                  [next[idx - 1], next[idx]] = [next[idx], next[idx - 1]];
-                                  setProdHighlights(next);
-                                }}
-                                title="Move up"
-                                aria-label="Move up"
-                                className="inline-flex shrink-0 items-center justify-center rounded-lg p-1.5 text-slate-500 transition-colors hover:bg-slate-100 disabled:opacity-30"
-                              >
-                                <FiChevronUp size={16} aria-hidden />
-                              </button>
-                              <button
-                                type="button"
-                                disabled={idx === prodHighlights.length - 1}
-                                onClick={() => {
-                                  const next = [...prodHighlights];
-                                  [next[idx], next[idx + 1]] = [next[idx + 1], next[idx]];
-                                  setProdHighlights(next);
-                                }}
-                                title="Move down"
-                                aria-label="Move down"
-                                className="inline-flex shrink-0 items-center justify-center rounded-lg p-1.5 text-slate-500 transition-colors hover:bg-slate-100 disabled:opacity-30"
-                              >
-                                <FiChevronDown size={16} aria-hidden />
-                              </button>
-                              <input
-                                type="text"
-                                placeholder={`Highlight ${idx + 1}`}
-                                value={h}
-                                onChange={(e) => {
-                                  const next = [...prodHighlights];
-                                  next[idx] = e.target.value;
-                                  setProdHighlights(next);
-                                }}
-                                className="min-w-0 flex-1 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm shadow-sm outline-none focus:border-sky-400 focus:ring-2 focus:ring-sky-400/25"
-                              />
-                              <button
-                                type="button"
-                                onClick={() => setProdHighlights(prodHighlights.filter((_, i) => i !== idx))}
-                                title="Remove highlight"
-                                aria-label="Remove highlight"
-                                className="inline-flex shrink-0 items-center justify-center rounded-lg p-2 text-rose-600 transition-colors hover:bg-rose-50 hover:text-rose-800"
-                              >
-                                <FiTrash2 size={18} aria-hidden />
-                              </button>
-                            </div>
-                          ))}
-                        </div>
+                        {prodHighlights.length > 0 && (
+                          <div className="rounded-lg border border-slate-200 bg-white p-3 space-y-2">
+                            {prodHighlights.map((h, idx) => (
+                              <div key={idx} className="flex gap-2 items-center">
+                                <button
+                                  type="button"
+                                  disabled={idx === 0}
+                                  onClick={() => {
+                                    const next = [...prodHighlights];
+                                    [next[idx - 1], next[idx]] = [next[idx], next[idx - 1]];
+                                    setProdHighlights(next);
+                                  }}
+                                  title="Move up"
+                                  aria-label="Move up"
+                                  className="inline-flex shrink-0 items-center justify-center rounded-lg p-1.5 text-slate-500 transition-colors hover:bg-slate-100 disabled:opacity-30"
+                                >
+                                  <FiChevronUp size={16} aria-hidden />
+                                </button>
+                                <button
+                                  type="button"
+                                  disabled={idx === prodHighlights.length - 1}
+                                  onClick={() => {
+                                    const next = [...prodHighlights];
+                                    [next[idx], next[idx + 1]] = [next[idx + 1], next[idx]];
+                                    setProdHighlights(next);
+                                  }}
+                                  title="Move down"
+                                  aria-label="Move down"
+                                  className="inline-flex shrink-0 items-center justify-center rounded-lg p-1.5 text-slate-500 transition-colors hover:bg-slate-100 disabled:opacity-30"
+                                >
+                                  <FiChevronDown size={16} aria-hidden />
+                                </button>
+                                <input
+                                  type="text"
+                                  placeholder={`Highlight ${idx + 1}`}
+                                  value={h}
+                                  onChange={(e) => {
+                                    const next = [...prodHighlights];
+                                    next[idx] = e.target.value;
+                                    setProdHighlights(next);
+                                  }}
+                                  className="min-w-0 flex-1 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm shadow-sm outline-none focus:border-sky-400 focus:ring-2 focus:ring-sky-400/25"
+                                />
+                                <button
+                                  type="button"
+                                  onClick={() => setProdHighlights(prodHighlights.filter((_, i) => i !== idx))}
+                                  title="Remove highlight"
+                                  aria-label="Remove highlight"
+                                  className="inline-flex shrink-0 items-center justify-center rounded-lg p-2 text-rose-600 transition-colors hover:bg-rose-50 hover:text-rose-800"
+                                >
+                                  <FiTrash2 size={18} aria-hidden />
+                                </button>
+                              </div>
+                            ))}
+                          </div>
+                        )}
                       </div>
-                      <div className="md:col-span-2">
-                        <div className="mb-2 flex flex-wrap items-start justify-between gap-3">
-                          <label className="block text-sm font-medium text-slate-700">
+                      <div className="md:col-span-2 rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
+                        <div className="mb-3 flex flex-wrap items-start justify-between gap-3">
+                          <p className="text-sm font-semibold text-slate-800">
                             FAQ
-                          </label>
+                          </p>
                           <button
                             type="button"
                             onClick={() => setProdFaq([...prodFaq, { question: "", answer: "" }])}
@@ -3491,7 +3532,7 @@ export default function AdminProductsPage() {
                         </div>
                         <div className="space-y-3">
                           {prodFaq.map((item, idx) => (
-                            <div key={idx} className="rounded-lg border border-slate-200 bg-white p-3">
+                            <div key={idx} className="rounded-lg border border-slate-200 bg-slate-50/50 p-3">
                               <div className="mb-2 flex justify-end">
                                 <button
                                   type="button"
@@ -3511,7 +3552,7 @@ export default function AdminProductsPage() {
                                   next[idx] = { ...next[idx], question: e.target.value };
                                   setProdFaq(next);
                                 }}
-                                className={`${inputClass} mb-2`}
+                                className={`${inputClass} mb-2 bg-white`}
                               />
                               <textarea
                                 rows={3}
@@ -3522,7 +3563,7 @@ export default function AdminProductsPage() {
                                   next[idx] = { ...next[idx], answer: e.target.value };
                                   setProdFaq(next);
                                 }}
-                                className={inputClass}
+                                className={`${inputClass} bg-white`}
                               />
                             </div>
                           ))}
