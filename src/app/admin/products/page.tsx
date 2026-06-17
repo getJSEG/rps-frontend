@@ -1520,20 +1520,31 @@ export default function AdminProductsPage() {
               o.price_adjustment_override == null ? null : Number(o.price_adjustment_override),
           })),
         })),
-        conditional_rules: cleanConditionalRules(prodConditionalRules).map((rule, i) => {
+        conditional_rules: cleanConditionalRules(prodConditionalRules).flatMap((rule, i) => {
           const sourceIds = normalizeRuleOptionIds(rule, "source");
           const targetIds = normalizeRuleOptionIds(rule, "target");
-          return {
-            hardware_option_key: rule.hardware_option_key || null,
-            source_modifier_id: Number(rule.source_modifier_id),
-            source_option_id: sourceIds[0] ?? null,
-            source_option_ids: sourceIds,
-            action_type: rule.action_type,
-            target_modifier_id: Number(rule.target_modifier_id),
-            target_option_id: targetIds[0] ?? null,
-            target_option_ids: targetIds,
-            sort_order: i,
-          };
+
+          // Flatten multi-option rules into individual rows for the backend
+          const flattenedRows: any[] = [];
+          const finalSourceIds = sourceIds.length > 0 ? sourceIds : [null];
+          const finalTargetIds = targetIds.length > 0 ? targetIds : [null];
+
+          for (const sId of finalSourceIds) {
+            for (const tId of finalTargetIds) {
+              flattenedRows.push({
+                hardware_option_key: rule.hardware_option_key || null,
+                source_modifier_id: Number(rule.source_modifier_id),
+                source_option_id: sId != null ? Number(sId) : null,
+                source_option_ids: sId != null ? [Number(sId)] : [],
+                action_type: rule.action_type,
+                target_modifier_id: Number(rule.target_modifier_id),
+                target_option_id: tId != null ? Number(tId) : null,
+                target_option_ids: tId != null ? [Number(tId)] : [],
+                sort_order: i,
+              });
+            }
+          }
+          return flattenedRows;
         }),
       };
       const purchaseOptionsPayload = {
@@ -1774,8 +1785,10 @@ export default function AdminProductsPage() {
             Number(rule.source_modifier_id || 0),
             rule.action_type === "disable" ? "disable" : "auto_select",
             Number(rule.target_modifier_id || 0),
-            rule.target_option_id == null ? "" : Number(rule.target_option_id || 0),
+            // Auto-select rules are kept separate if they target different options
+            rule.action_type === "auto_select" ? (rule.target_option_id == null ? "" : Number(rule.target_option_id || 0)) : "many",
           ].join("|");
+
           const current = groups.get(key);
           if (!current) {
             groups.set(key, {
@@ -1785,11 +1798,19 @@ export default function AdminProductsPage() {
             });
             return groups;
           }
+
+          // Aggregate source and target IDs from multiple rows into one draft rule
           if (rule.source_option_id != null) {
             current.source_option_ids = [
               ...new Set([...(current.source_option_ids || []), Number(rule.source_option_id || 0)].filter((id) => id > 0)),
             ];
             current.source_option_id = current.source_option_ids[0] ?? null;
+          }
+          if (rule.target_option_id != null) {
+            current.target_option_ids = [
+              ...new Set([...(current.target_option_ids || []), Number(rule.target_option_id || 0)].filter((id) => id > 0)),
+            ];
+            current.target_option_id = current.target_option_ids[0] ?? null;
           }
           return groups;
         }, new Map<string, ProductConditionalModifierRule>())
