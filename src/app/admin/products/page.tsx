@@ -1116,6 +1116,40 @@ export default function AdminProductsPage() {
     })),
   }), []);
 
+  const moveModifierAssignment = useCallback((key: string, delta: number) => {
+    setProdModifierAssignments((prev) => {
+      const entries = Object.values(prev).sort((a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0));
+      const index = entries.findIndex((e) => e.key === key);
+      if (index === -1) return prev;
+      const newIndex = index + delta;
+      if (newIndex < 0 || newIndex >= entries.length) return prev;
+
+      const reordered = [...entries];
+      const [moved] = reordered.splice(index, 1);
+      reordered.splice(newIndex, 0, moved);
+
+      const next: Record<string, ProductModifierAssignment> = {};
+      reordered.forEach((entry, i) => {
+        next[entry.key] = { ...entry, sort_order: i };
+      });
+      return next;
+    });
+  }, []);
+
+  const removeModifierAssignment = useCallback((key: string) => {
+    setProdModifierAssignments((prev) => {
+      if (!prev[key]) return prev;
+      const entries = Object.values(prev)
+        .filter((e) => e.key !== key)
+        .sort((a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0));
+      const next: Record<string, ProductModifierAssignment> = {};
+      entries.forEach((entry, i) => {
+        next[entry.key] = { ...entry, sort_order: i };
+      });
+      return next;
+    });
+  }, []);
+
   const applyHardwareTemplate = useCallback((template: HardwareTemplate) => {
     const templateOptions = (Array.isArray(template.options) ? template.options : []).slice(0, 2);
     const nextOptions: ProductPurchaseOption[] = templateOptions.map((opt, idx) => ({
@@ -1210,7 +1244,13 @@ export default function AdminProductsPage() {
   ]);
   const fixedPriceShippingFlow = prodPricingMode === "fixed";
   const adminSetBoxFlow = prodGraphicScenarioEnabled || fixedPriceShippingFlow;
-  const assignedModifierGroups = modifierCatalog.filter((g) => !!prodModifierAssignments[g.key]);
+  const assignedModifierGroups = modifierCatalog
+    .filter((g) => !!prodModifierAssignments[g.key])
+    .sort(
+      (a, b) =>
+        (prodModifierAssignments[a.key]?.sort_order ?? 0) -
+        (prodModifierAssignments[b.key]?.sort_order ?? 0)
+    );
   const findModifierGroupById = (id: number | null | undefined) =>
     assignedModifierGroups.find((g) => Number(g.id) === Number(id));
   const findModifierOptionById = (groupId: number | null | undefined, optionId: number | null | undefined) =>
@@ -2918,26 +2958,46 @@ export default function AdminProductsPage() {
                                 Add
                               </button>
                             </div>
-                            {modifierCatalog.filter((g) => !!prodModifierAssignments[g.key]).map((group) => {
-                              const assigned = prodModifierAssignments[group.key];
-                              if (!assigned) return null;
+                            {Object.values(prodModifierAssignments)
+                              .sort((a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0))
+                              .map((assigned, idx, arr) => {
+                              const group = modifierCatalog.find((g) => g.key === assigned.key);
+                              if (!group) return null;
                               return (
                                 <div key={group.key} className="rounded border border-slate-200 p-2">
                                   <div className="mb-2 flex items-center justify-between gap-2 text-sm font-medium">
-                                    {group.name} ({group.key})
-                                    <button
-                                      type="button"
-                                      className="rounded border border-rose-200 px-2 py-1 text-xs text-rose-700 hover:bg-rose-50"
-                                      onClick={() =>
-                                        setProdModifierAssignments((prev) => {
-                                          const next = { ...prev };
-                                          delete next[group.key];
-                                          return next;
-                                        })
-                                      }
-                                    >
-                                      Remove
-                                    </button>
+                                    <span>{group.name} ({group.key})</span>
+                                    <div className="flex items-center gap-1">
+                                      <button
+                                        type="button"
+                                        disabled={idx === 0}
+                                        className="flex h-7 w-7 items-center justify-center rounded border border-slate-300 text-slate-600 hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-30 disabled:hover:bg-transparent"
+                                        onClick={() => moveModifierAssignment(group.key, -1)}
+                                        title="Move up"
+                                        aria-label="Move modifier up"
+                                      >
+                                        <FiChevronUp className="h-4 w-4" />
+                                      </button>
+                                      <button
+                                        type="button"
+                                        disabled={idx === arr.length - 1}
+                                        className="flex h-7 w-7 items-center justify-center rounded border border-slate-300 text-slate-600 hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-30 disabled:hover:bg-transparent"
+                                        onClick={() => moveModifierAssignment(group.key, 1)}
+                                        title="Move down"
+                                        aria-label="Move modifier down"
+                                      >
+                                        <FiChevronDown className="h-4 w-4" />
+                                      </button>
+                                      <button
+                                        type="button"
+                                        className="flex h-7 w-7 items-center justify-center rounded border border-rose-200 text-rose-600 hover:bg-rose-50"
+                                        onClick={() => removeModifierAssignment(group.key)}
+                                        title="Remove"
+                                        aria-label="Remove modifier"
+                                      >
+                                        <FiTrash2 className="h-4 w-4" />
+                                      </button>
+                                    </div>
                                   </div>
                                   {(prodPurchaseOptions.length > 0 || prodGraphicScenarioEnabled) ? (
                                     <p className="mb-2 text-[11px] text-slate-500">

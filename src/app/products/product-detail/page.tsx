@@ -138,6 +138,7 @@ interface Product {
     mode_scope?: string;
     input_type?: string;
     is_required?: boolean;
+    sort_order?: number;
     options: Array<{
       id?: number;
       value: string;
@@ -446,14 +447,14 @@ function ProductDetailContent() {
       ? `Maximum height is ${productMaxHeight}"`
       : "";
 
-  const activeModifierGroups = (Array.isArray(product?.modifier_groups) ? product.modifier_groups : []).filter(
-    (group) => {
+  const activeModifierGroups = (Array.isArray(product?.modifier_groups) ? product.modifier_groups : [])
+    .filter((group) => {
       if (!effectiveScopeKey) return true;
       const scope = String((group as { mode_scope?: string }).mode_scope || "all").toLowerCase();
       if (scope === "all") return true;
       return scope === effectiveScopeKey;
-    }
-  );
+    })
+    .sort((a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0));
   const activeGroupsById = new Map(
     activeModifierGroups
       .map((group) => [Number(group.modifier_group_id || 0), group] as const)
