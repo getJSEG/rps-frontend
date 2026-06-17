@@ -671,7 +671,7 @@ function ThemedDropdown({
       </button>
       {open ? (
         <div className="absolute z-40 mt-1 max-h-64 w-full overflow-auto rounded-lg border border-slate-200 bg-white py-1 shadow-lg">
-          {!hasValue ? (
+          {!hasValue && !options.some((opt) => opt.value === "") ? (
             <div className="px-3 py-2 text-sm text-slate-400">{placeholder}</div>
           ) : null}
           {options.map((opt) => {
@@ -3153,9 +3153,6 @@ export default function AdminProductsPage() {
                                           updateRule({
                                             source_option_ids: selectedIds,
                                             source_option_id: selectedIds[0] ?? null,
-                                            target_modifier_id: 0,
-                                            target_option_id: null,
-                                            target_option_ids: [],
                                           })
                                         }
                                       />
@@ -3195,11 +3192,17 @@ export default function AdminProductsPage() {
                                         ]}
                                         onChange={(value) => {
                                           const group = findModifierGroupById(Number(value));
-                                          updateRule({
-                                            target_modifier_id: Number(group?.id || 0),
-                                            target_option_id: null,
-                                            target_option_ids: [],
-                                          });
+                                          const newId = Number(group?.id || 0);
+                                          const prevId = Number(rule.target_modifier_id || 0);
+                                          const patch: Partial<ConditionalRuleDraft> = {
+                                            target_modifier_id: newId,
+                                          };
+                                          // Only clear target options when a DIFFERENT modifier is chosen
+                                          if (newId !== prevId) {
+                                            patch.target_option_id = null;
+                                            patch.target_option_ids = [];
+                                          }
+                                          updateRule(patch);
                                         }}
                                         disabled={!hasSourceModifier}
                                       />
