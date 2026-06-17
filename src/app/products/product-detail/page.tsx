@@ -1934,18 +1934,10 @@ function ProductDetailContent() {
                                     disabled={isDisabledByRule}
                                     onClick={() => {
                                       if (isDisabledByRule) return;
-                                      setSelectedModifiers((prev) => {
-                                        const isUnselecting = !group.is_required && prev[group.key] === optValue;
-                                        if (isUnselecting) {
-                                          const next = { ...prev };
-                                          delete next[group.key];
-                                          return next;
-                                        }
-                                        return {
-                                          ...prev,
-                                          [group.key]: optValue,
-                                        };
-                                      });
+                                      setSelectedModifiers((prev) => ({
+                                        ...prev,
+                                        [group.key]: optValue,
+                                      }));
                                       setOpenModifierKey(null);
                                     }}
                                   >
