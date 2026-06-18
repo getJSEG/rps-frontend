@@ -89,6 +89,17 @@ interface ProductFaqItem {
   answer: string;
 }
 
+interface ProductTemplateFile {
+  id: number;
+  group_label: string;
+  group_value: string;
+  file_type: string;
+  template_name: string;
+  file_url: string;
+  storage_key: string;
+  sort_order?: number;
+}
+
 interface Product {
   id: string;
   name: string;
@@ -106,6 +117,7 @@ interface Product {
   description?: string;
   spec?: string | null;
   file_setup?: string | null;
+  template_files?: ProductTemplateFile[];
   installation_guide?: string | null;
   faq?: ProductFaqItem[] | string | null;
   dimensions?: string;
@@ -1432,6 +1444,23 @@ function ProductDetailContent() {
   const productDescription = product?.description || "";
   const productSpec = product?.spec || "";
   const productFileSetup = product?.file_setup || "";
+  const productTemplateFiles = Array.isArray(product?.template_files)
+    ? product.template_files.filter((file) =>
+        file?.group_value && file?.file_type && file?.template_name && file?.file_url
+      )
+    : [];
+  const templateGroupLabel = productTemplateFiles[0]?.group_label || "Template";
+  const templateFileTypes = Array.from(
+    new Set(productTemplateFiles.map((file) => file.file_type))
+  );
+  const templateRows = Array.from(
+    productTemplateFiles.reduce((groups, file) => {
+      const existing = groups.get(file.group_value) || [];
+      existing.push(file);
+      groups.set(file.group_value, existing);
+      return groups;
+    }, new Map<string, ProductTemplateFile[]>())
+  );
   const productInstallationGuide = product?.installation_guide || "";
   const productFaq: ProductFaqItem[] = (() => {
     const f = product?.faq;
@@ -2439,8 +2468,81 @@ function ProductDetailContent() {
                 ) : (
                   <p className="whitespace-pre-wrap break-words [overflow-wrap:anywhere]">{productFileSetup}</p>
                 )
-              ) : (
+              ) : productTemplateFiles.length === 0 ? (
                 <p className="text-gray-600">No file setup content available for this product yet.</p>
+              ) : null}
+
+              {productTemplateFiles.length > 0 && (
+                <div className="w-fit max-w-none overflow-visible">
+                  <p className="mb-2 text-sm font-semibold text-gray-900">Template Download</p>
+                  <table className="w-auto min-w-[460px] border-collapse border border-gray-300 text-sm">
+                    <thead>
+                      <tr className="bg-gray-50">
+                        <th className="min-w-44 border border-gray-300 px-4 py-3 text-center font-semibold text-gray-900">
+                          {templateGroupLabel}
+                        </th>
+                        {templateFileTypes.map((fileType) => (
+                          <th
+                            key={fileType}
+                            className="min-w-40 border border-gray-300 px-4 py-3 text-center font-semibold text-gray-900"
+                          >
+                            <span
+                              className={`mx-auto mb-1 flex h-7 w-9 items-center justify-center rounded text-[10px] font-bold text-white ${
+                                fileType.toLowerCase() === "pdf"
+                                  ? "bg-red-500"
+                                  : fileType.toLowerCase() === "photoshop"
+                                    ? "bg-blue-700"
+                                    : fileType.toLowerCase() === "ai"
+                                      ? "bg-orange-600"
+                                      : "bg-slate-600"
+                              }`}
+                            >
+                              {fileType.toLowerCase() === "photoshop" ? "PS" : fileType.slice(0, 4).toUpperCase()}
+                            </span>
+                            {fileType}
+                          </th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {templateRows.map(([groupValue, files]) => (
+                        <tr key={groupValue}>
+                          <td className="border border-gray-300 px-4 py-3 text-center text-gray-900">
+                            {groupValue}
+                          </td>
+                          {templateFileTypes.map((fileType) => {
+                            const links = files.filter((file) => file.file_type === fileType);
+                            return (
+                              <td
+                                key={fileType}
+                                className="border border-gray-300 px-4 py-3 text-center"
+                              >
+                                {links.length > 0 ? (
+                                  <div className="flex flex-col items-center gap-1.5">
+                                    {links.map((file) => (
+                                      <a
+                                        key={file.id}
+                                        href={file.file_url}
+                                        download
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                        className="text-sky-600 hover:text-sky-700 hover:underline"
+                                      >
+                                        {file.template_name}
+                                      </a>
+                                    ))}
+                                  </div>
+                                ) : (
+                                  <span className="text-gray-300">—</span>
+                                )}
+                              </td>
+                            );
+                          })}
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
               )}
             </div>
           )}

@@ -41,6 +41,48 @@ interface ProductFaqItem {
   answer: string;
 }
 
+interface ProductTemplateFile {
+  id?: number;
+  group_label: string;
+  group_value: string;
+  file_type: string;
+  template_name: string;
+  file_url: string;
+  storage_key: string;
+  sort_order?: number;
+}
+
+type ProductTemplateFileDraft = ProductTemplateFile & {
+  client_key: string;
+  uploading?: boolean;
+  original_storage_key?: string;
+};
+
+const createTemplateDraftKey = () =>
+  `template-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
+
+const templateFileAccept: Record<string, string> = {
+  PDF: ".pdf,application/pdf",
+  Photoshop: ".psd,.psb,image/vnd.adobe.photoshop",
+  AI: ".ai,application/postscript",
+  Image: ".jpg,.jpeg,.png,.gif,.webp,.svg,.tif,.tiff,.bmp",
+  Other: "",
+};
+
+const templateFileExtensions: Record<string, string[]> = {
+  PDF: [".pdf"],
+  Photoshop: [".psd", ".psb"],
+  AI: [".ai"],
+  Image: [".jpg", ".jpeg", ".png", ".gif", ".webp", ".svg", ".tif", ".tiff", ".bmp"],
+};
+
+const templateFileMatchesType = (fileUrl: string, fileType: string) => {
+  if (!fileUrl || fileType === "Other") return true;
+  const extension = fileUrl.toLowerCase().split("?")[0].match(/\.[^.\/]+$/)?.[0] || "";
+  const allowedExtensions = templateFileExtensions[fileType];
+  return !allowedExtensions || allowedExtensions.includes(extension);
+};
+
 interface ProductionTimeRuleDraft {
   minQty: string;
   maxQty: string;
@@ -99,6 +141,7 @@ interface Product {
   is_active: boolean;
   sku: string | null;
   properties?: ProductProperty[] | null;
+  template_files?: ProductTemplateFile[] | null;
 }
 
 type ProductModifierAssignment = {
@@ -852,6 +895,8 @@ export default function AdminProductsPage() {
   const [prodDescription, setProdDescription] = useState("");
   const [prodSpec, setProdSpec] = useState("");
   const [prodFileSetup, setProdFileSetup] = useState("");
+  const [prodTemplateGroupLabel, setProdTemplateGroupLabel] = useState("");
+  const [prodTemplateFiles, setProdTemplateFiles] = useState<ProductTemplateFileDraft[]>([]);
   const [prodInstallationGuide, setProdInstallationGuide] = useState("");
   const [prodFaq, setProdFaq] = useState<ProductFaqItem[]>([]);
   const [prodParentId, setProdParentId] = useState<string>("");
@@ -1013,6 +1058,82 @@ export default function AdminProductsPage() {
 
   const removeGalleryAt = (index: number) => {
     setProdGalleryUrls((prev) => prev.filter((_, i) => i !== index));
+  };
+
+  const addTemplateFileRow = () => {
+    setProdTemplateFiles((prev) => [
+      ...prev,
+      {
+        client_key: createTemplateDraftKey(),
+        group_label: prodTemplateGroupLabel,
+        group_value: "",
+        file_type: "PDF",
+        template_name: "",
+        file_url: "",
+        storage_key: "",
+      },
+    ]);
+  };
+
+  const updateTemplateFileRow = (clientKey: string, patch: Partial<ProductTemplateFileDraft>) => {
+    setProdTemplateFiles((prev) =>
+      prev.map((row) => (row.client_key === clientKey ? { ...row, ...patch } : row))
+    );
+  };
+
+  const cleanupUnsavedTemplateUpload = async (row: ProductTemplateFileDraft) => {
+    const isUnsavedUpload =
+      row.storage_key &&
+      (!row.id || row.storage_key !== row.original_storage_key);
+    if (!isUnsavedUpload) return;
+    try {
+      await productsAPI.deleteUploadedTemplateFile(row.storage_key);
+    } catch (error) {
+      console.error("Failed to clean up template upload:", error);
+    }
+  };
+
+  const removeTemplateFileRow = async (clientKey: string) => {
+    const row = prodTemplateFiles.find((item) => item.client_key === clientKey);
+    setProdTemplateFiles((prev) => prev.filter((item) => item.client_key !== clientKey));
+    if (row) await cleanupUnsavedTemplateUpload(row);
+  };
+
+  const handleTemplateFileUpload = async (
+    clientKey: string,
+    event: React.ChangeEvent<HTMLInputElement>
+  ) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    const previous = prodTemplateFiles.find((item) => item.client_key === clientKey);
+    if (!previous) return;
+    const extension = file.name.toLowerCase().match(/\.[^.]+$/)?.[0] || "";
+    const allowedExtensions = templateFileExtensions[previous.file_type];
+    if (allowedExtensions && !allowedExtensions.includes(extension)) {
+      showMsg(
+        "error",
+        `${previous.file_type} files must use: ${allowedExtensions.join(", ")}`
+      );
+      event.target.value = "";
+      return;
+    }
+    updateTemplateFileRow(clientKey, { uploading: true });
+    try {
+      const uploaded = await productsAPI.uploadTemplateFile(file, previous.file_type);
+      if (previous) await cleanupUnsavedTemplateUpload(previous);
+      updateTemplateFileRow(clientKey, {
+        file_url: uploaded.url,
+        storage_key: uploaded.storage_key,
+        template_name: previous?.template_name || file.name.replace(/\.[^.]+$/, ""),
+        uploading: false,
+      });
+      showMsg("success", "Template file uploaded.");
+    } catch (err: unknown) {
+      updateTemplateFileRow(clientKey, { uploading: false });
+      showMsg("error", err instanceof Error ? err.message : "Template file upload failed");
+    } finally {
+      event.target.value = "";
+    }
   };
 
   const addGalleryUrlFromInput = () => {
@@ -1497,6 +1618,25 @@ export default function AdminProductsPage() {
         return;
       }
     }
+    const templateRowsWithContent = prodTemplateFiles.filter((row) =>
+      row.group_value.trim() ||
+      row.template_name.trim() ||
+      row.file_url.trim()
+    );
+    if (templateRowsWithContent.length > 0 && !prodTemplateGroupLabel.trim()) {
+      showMsg("error", "Add the first column label for template files.");
+      return;
+    }
+    if (templateRowsWithContent.some((row) =>
+      !row.group_value.trim() ||
+      !row.file_type.trim() ||
+      !row.template_name.trim() ||
+      !row.file_url.trim() ||
+      !row.storage_key.trim()
+    )) {
+      showMsg("error", "Complete every template file row and upload its file.");
+      return;
+    }
     setFedexShippingFieldErrors({});
     setSaving(true);
     try {
@@ -1506,6 +1646,16 @@ export default function AdminProductsPage() {
         description: prodDescription.trim() || undefined,
         spec: prodSpec.trim() || undefined,
         file_setup: prodFileSetup.trim() || undefined,
+        template_files: templateRowsWithContent.map((row, index) => ({
+          id: row.id,
+          group_label: prodTemplateGroupLabel.trim(),
+          group_value: row.group_value.trim(),
+          file_type: row.file_type.trim(),
+          template_name: row.template_name.trim(),
+          file_url: row.file_url,
+          storage_key: row.storage_key,
+          sort_order: index,
+        })),
         installation_guide: prodInstallationGuide.trim() || undefined,
         faq: prodFaq
           .filter((item) => item.question.trim() || item.answer.trim())
@@ -1641,6 +1791,8 @@ export default function AdminProductsPage() {
       setProdDescription("");
       setProdSpec("");
       setProdFileSetup("");
+      setProdTemplateGroupLabel("");
+      setProdTemplateFiles([]);
       setProdInstallationGuide("");
       setProdFaq([]);
       setProdParentId("");
@@ -1730,6 +1882,17 @@ export default function AdminProductsPage() {
     setProdDescription(p.description || "");
     setProdSpec(p.spec || "");
     setProdFileSetup(p.file_setup || "");
+    {
+      const templateFiles = Array.isArray(p.template_files) ? p.template_files : [];
+      setProdTemplateGroupLabel(templateFiles[0]?.group_label || "");
+      setProdTemplateFiles(
+        templateFiles.map((file) => ({
+          ...file,
+          client_key: createTemplateDraftKey(),
+          original_storage_key: file.storage_key,
+        }))
+      );
+    }
     setProdInstallationGuide(p.installation_guide || "");
     {
       const f = p.faq;
@@ -1962,6 +2125,7 @@ export default function AdminProductsPage() {
   };
 
   const cancelEdit = () => {
+    void Promise.all(prodTemplateFiles.map(cleanupUnsavedTemplateUpload));
     setEditingCategoryId(null);
     setEditingProductId(null);
     setCatName("");
@@ -1973,6 +2137,8 @@ export default function AdminProductsPage() {
     setProdDescription("");
     setProdSpec("");
     setProdFileSetup("");
+    setProdTemplateGroupLabel("");
+    setProdTemplateFiles([]);
     setProdInstallationGuide("");
     setProdFaq([]);
     setProdParentId("");
@@ -3449,6 +3615,124 @@ export default function AdminProductsPage() {
                             </ul>
                           ) : null}
                         </div>
+                      </div>
+
+                      <div className="md:col-span-2 rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
+                        <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
+                          <div>
+                            <p className="text-sm font-semibold text-slate-800">Template Files</p>
+                            <p className="mt-1 text-xs text-slate-500">
+                              Add downloadable design templates. Matching row values are grouped together on the product page.
+                            </p>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={addTemplateFileRow}
+                            className="shrink-0 rounded-lg bg-slate-900 px-4 py-2.5 text-sm font-medium text-white shadow-sm transition hover:bg-slate-800"
+                          >
+                            + Add template file
+                          </button>
+                        </div>
+
+                        <label className="mb-4 block">
+                          <span className="mb-1 block text-xs font-medium text-slate-600">
+                            First Column Label
+                          </span>
+                          <input
+                            type="text"
+                            value={prodTemplateGroupLabel}
+                            onChange={(event) => setProdTemplateGroupLabel(event.target.value)}
+                            placeholder='Example: Size or Tension Fabric Stand'
+                            className={inputClass}
+                          />
+                        </label>
+
+                        {prodTemplateFiles.length === 0 ? (
+                          <p className="text-xs text-slate-400">No template files added.</p>
+                        ) : (
+                          <div className="space-y-3">
+                            {prodTemplateFiles.map((row) => (
+                              <div
+                                key={row.client_key}
+                                className="rounded-lg border border-slate-200 bg-slate-50 p-3"
+                              >
+                                <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-[1fr_0.7fr_1fr_1.15fr_auto] xl:items-end">
+                                  <label>
+                                    <span className="mb-1 block text-xs font-medium text-slate-600">Row Value</span>
+                                    <input
+                                      type="text"
+                                      value={row.group_value}
+                                      onChange={(event) => updateTemplateFileRow(row.client_key, { group_value: event.target.value })}
+                                      placeholder='Example: X-Large or 36"x90"'
+                                      className={inputClass}
+                                    />
+                                  </label>
+                                  <div>
+                                    <span className="mb-1 block text-xs font-medium text-slate-600">File Type</span>
+                                    <ThemedDropdown
+                                      value={row.file_type}
+                                      placeholder="Select file type"
+                                      options={[
+                                        { value: "PDF", label: "PDF" },
+                                        { value: "Photoshop", label: "Photoshop" },
+                                        { value: "AI", label: "AI" },
+                                        { value: "Image", label: "Image" },
+                                        { value: "Other", label: "Other" },
+                                      ]}
+                                      onChange={(nextType) => {
+                                        if (!templateFileMatchesType(row.file_url, nextType)) {
+                                          showMsg("error", `The uploaded file does not match ${nextType}. Replace the file first.`);
+                                          return;
+                                        }
+                                        updateTemplateFileRow(row.client_key, { file_type: nextType });
+                                      }}
+                                    />
+                                  </div>
+                                  <label>
+                                    <span className="mb-1 block text-xs font-medium text-slate-600">Template Name</span>
+                                    <input
+                                      type="text"
+                                      value={row.template_name}
+                                      onChange={(event) => updateTemplateFileRow(row.client_key, { template_name: event.target.value })}
+                                      placeholder="Example: Single Sided Print Thru"
+                                      className={inputClass}
+                                    />
+                                  </label>
+                                  <div>
+                                    <span className="mb-1 block text-xs font-medium text-slate-600">File Upload</span>
+                                    <div className="flex min-w-0 items-center gap-2">
+                                      <label className="shrink-0 cursor-pointer rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-700 shadow-sm hover:bg-slate-50">
+                                        {row.uploading ? "Uploading…" : row.file_url ? "Replace file" : "Choose file"}
+                                        <input
+                                          type="file"
+                                          accept={templateFileAccept[row.file_type] || undefined}
+                                          className="hidden"
+                                          disabled={row.uploading}
+                                          onChange={(event) => handleTemplateFileUpload(row.client_key, event)}
+                                        />
+                                      </label>
+                                      <span
+                                        className="min-w-0 truncate text-xs text-slate-500"
+                                        title={row.file_url}
+                                      >
+                                        {row.file_url ? row.file_url.split("/").pop() : "No file uploaded"}
+                                      </span>
+                                    </div>
+                                  </div>
+                                  <button
+                                    type="button"
+                                    onClick={() => void removeTemplateFileRow(row.client_key)}
+                                    disabled={row.uploading}
+                                    className="inline-flex h-10 items-center justify-center rounded-lg border border-rose-200 bg-white px-3 text-rose-600 shadow-sm hover:bg-rose-50"
+                                    title="Remove template file"
+                                  >
+                                    <FiTrash2 size={17} aria-hidden />
+                                  </button>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        )}
                       </div>
 
                       <CollapsibleSection title={`Description${WORD_STYLE_LABEL_SUFFIX}`}>

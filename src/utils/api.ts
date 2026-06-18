@@ -1614,6 +1614,33 @@ export const productsAPI = {
     }
     return res.json();
   },
+  /** Upload a product template file to DigitalOcean Spaces. */
+  uploadTemplateFile: async (
+    file: File,
+    fileType: string
+  ): Promise<{ url: string; storage_key: string; original_name: string }> => {
+    const token = typeof window !== 'undefined' ? localStorage.getItem('token') : null;
+    const formData = new FormData();
+    formData.append('file_type', fileType);
+    formData.append('file', file);
+    const res = await fetch(`${API_BASE_URL}/products/admin/upload-template-file`, {
+      method: 'POST',
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+      body: formData,
+    });
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      throw new Error(data.message || data.error || 'Template file upload failed');
+    }
+    return res.json();
+  },
+  /** Remove a template upload that has not been attached to a saved product. */
+  deleteUploadedTemplateFile: async (storageKey: string) => {
+    return apiCall('/products/admin/upload-template-file', {
+      method: 'DELETE',
+      body: JSON.stringify({ storage_key: storageKey }),
+    });
+  },
   /** Upload category/subcategory image file; returns { url: '/uploads/categories/filename' } */
   uploadCategoryImage: async (file: File) => {
     const token = typeof window !== 'undefined' ? localStorage.getItem('token') : null;
