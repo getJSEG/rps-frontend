@@ -64,6 +64,9 @@ export default function AdminHardwarePage() {
   const [templates, setTemplates] = useState<HardwareTemplate[]>([]);
   const [modifierCatalog, setModifierCatalog] = useState<ModifierGroup[]>([]);
   const [editor, setEditor] = useState<EditorTemplate>(createEmptyTemplate());
+  const [modifierCategoryId, setModifierCategoryId] = useState("");
+  const [modifierSubcategoryId, setModifierSubcategoryId] = useState("");
+  const [modifierSearch, setModifierSearch] = useState("");
 
   const modifierCatalogByKey = useMemo(() => {
     const map = new Map<string, ModifierGroup>();
@@ -72,6 +75,56 @@ export default function AdminHardwarePage() {
     }
     return map;
   }, [modifierCatalog]);
+  const modifierCategories = useMemo(
+    () =>
+      Array.from(
+        new Map(
+          modifierCatalog
+            .filter((group) => group.category_id != null)
+            .map((group) => [
+              Number(group.category_id),
+              { id: Number(group.category_id), name: group.category_name || "Uncategorized" },
+            ])
+        ).values()
+      ).sort((a, b) => a.name.localeCompare(b.name)),
+    [modifierCatalog]
+  );
+  const modifierSubcategories = useMemo(
+    () =>
+      Array.from(
+        new Map(
+          modifierCatalog
+            .filter(
+              (group) =>
+                group.subcategory_id != null &&
+                (!modifierCategoryId || Number(group.category_id) === Number(modifierCategoryId))
+            )
+            .map((group) => [
+              Number(group.subcategory_id),
+              { id: Number(group.subcategory_id), name: group.subcategory_name || "General" },
+            ])
+        ).values()
+      ).sort((a, b) => a.name.localeCompare(b.name)),
+    [modifierCatalog, modifierCategoryId]
+  );
+  const filteredModifierCatalog = useMemo(() => {
+    const query = modifierSearch.trim().toLowerCase();
+    return modifierCatalog.filter((group) => {
+      if (modifierCategoryId === "__uncategorized" && group.category_id != null) return false;
+      if (
+        modifierCategoryId &&
+        modifierCategoryId !== "__uncategorized" &&
+        Number(group.category_id) !== Number(modifierCategoryId)
+      ) return false;
+      if (modifierSubcategoryId === "__general" && group.subcategory_id != null) return false;
+      if (
+        modifierSubcategoryId &&
+        modifierSubcategoryId !== "__general" &&
+        Number(group.subcategory_id) !== Number(modifierSubcategoryId)
+      ) return false;
+      return !query || `${group.name} ${group.key}`.toLowerCase().includes(query);
+    });
+  }, [modifierCatalog, modifierCategoryId, modifierSubcategoryId, modifierSearch]);
 
   const loadData = async () => {
     const [templatesRes, catalogRes] = await Promise.all([
@@ -310,8 +363,41 @@ export default function AdminHardwarePage() {
                             <div className="mb-1 text-xs font-semibold uppercase tracking-wide text-slate-500">
                               Attach Modifiers
                             </div>
-                            <div className="max-h-40 space-y-1 overflow-auto">
-                              {modifierCatalog.map((group) => {
+                            <div className="mb-2 grid gap-1">
+                              <select
+                                className="rounded border border-slate-200 bg-white px-2 py-1.5 text-xs"
+                                value={modifierCategoryId}
+                                onChange={(e) => {
+                                  setModifierCategoryId(e.target.value);
+                                  setModifierSubcategoryId("");
+                                }}
+                              >
+                                <option value="">All categories</option>
+                                <option value="__uncategorized">Uncategorized</option>
+                                {modifierCategories.map((category) => (
+                                  <option key={category.id} value={category.id}>{category.name}</option>
+                                ))}
+                              </select>
+                              <select
+                                className="rounded border border-slate-200 bg-white px-2 py-1.5 text-xs"
+                                value={modifierSubcategoryId}
+                                onChange={(e) => setModifierSubcategoryId(e.target.value)}
+                              >
+                                <option value="">All subcategories</option>
+                                <option value="__general">General</option>
+                                {modifierSubcategories.map((subcategory) => (
+                                  <option key={subcategory.id} value={subcategory.id}>{subcategory.name}</option>
+                                ))}
+                              </select>
+                              <input
+                                className="rounded border border-slate-200 bg-white px-2 py-1.5 text-xs"
+                                value={modifierSearch}
+                                onChange={(e) => setModifierSearch(e.target.value)}
+                                placeholder="Search modifiers"
+                              />
+                            </div>
+                            <div className="max-h-56 space-y-1 overflow-auto">
+                              {filteredModifierCatalog.map((group) => {
                                 const key = String(group.key || "").trim().toLowerCase();
                                 const checked = attachedKeys.has(key);
                                 return (
@@ -321,7 +407,7 @@ export default function AdminHardwarePage() {
                                       checked={checked}
                                       onChange={(e) => toggleModifierForOption(optionIndex, key, e.target.checked)}
                                     />
-                                    <span>{group.name} ({group.key})</span>
+                                    <span>{group.name} ({group.key}) <span className="text-slate-400">· {group.category_name || "Uncategorized"} / {group.subcategory_name || "General"}</span></span>
                                   </label>
                                 );
                               })}

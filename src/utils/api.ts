@@ -233,6 +233,10 @@ export type ModifierGroup = {
   key: string;
   name: string;
   input_type?: string;
+  category_id?: number | null;
+  subcategory_id?: number | null;
+  category_name?: string;
+  subcategory_name?: string;
   is_required?: boolean;
   /** Any option key or "all". Dynamic — not limited to the legacy graphic_only/graphic_frame values. */
   mode_scope?: string;
@@ -248,6 +252,26 @@ export type ModifierPresetItem = {
   sort_order: number;
   key: string;
   name: string;
+  category_id?: number | null;
+  subcategory_id?: number | null;
+  category_name?: string;
+  subcategory_name?: string;
+};
+
+export type ModifierCategory = {
+  id: number;
+  name: string;
+  created_at?: string;
+  updated_at?: string;
+};
+
+export type ModifierSubcategory = {
+  id: number;
+  category_id: number;
+  name: string;
+  category_name?: string;
+  created_at?: string;
+  updated_at?: string;
 };
 
 export type ModifierPreset = {
@@ -1668,6 +1692,49 @@ export const productsAPI = {
   },
   deleteModifierCatalogGroupAdmin: async (key: string) => {
     return apiCall(`/products/admin/modifier-catalog/${encodeURIComponent(String(key || '').trim())}`, {
+      method: 'DELETE',
+    });
+  },
+  getModifierTaxonomyAdmin: async () => {
+    return apiCall('/products/admin/modifier-taxonomy') as Promise<{
+      categories: ModifierCategory[];
+      subcategories: ModifierSubcategory[];
+    }>;
+  },
+  createModifierCategoryAdmin: async (data: { name: string }) => {
+    return apiCall('/products/admin/modifier-categories', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }) as Promise<{ category: ModifierCategory }>;
+  },
+  updateModifierCategoryAdmin: async (id: number | string, data: { name: string }) => {
+    return apiCall(`/products/admin/modifier-categories/${encodeURIComponent(String(id))}`, {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    }) as Promise<{ category: ModifierCategory }>;
+  },
+  deleteModifierCategoryAdmin: async (id: number | string) => {
+    return apiCall(`/products/admin/modifier-categories/${encodeURIComponent(String(id))}`, {
+      method: 'DELETE',
+    });
+  },
+  createModifierSubcategoryAdmin: async (data: { category_id: number; name: string }) => {
+    return apiCall('/products/admin/modifier-subcategories', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }) as Promise<{ subcategory: ModifierSubcategory }>;
+  },
+  updateModifierSubcategoryAdmin: async (
+    id: number | string,
+    data: { category_id: number; name: string }
+  ) => {
+    return apiCall(`/products/admin/modifier-subcategories/${encodeURIComponent(String(id))}`, {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    }) as Promise<{ subcategory: ModifierSubcategory }>;
+  },
+  deleteModifierSubcategoryAdmin: async (id: number | string) => {
+    return apiCall(`/products/admin/modifier-subcategories/${encodeURIComponent(String(id))}`, {
       method: 'DELETE',
     });
   },

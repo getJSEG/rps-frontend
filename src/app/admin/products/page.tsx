@@ -16,7 +16,7 @@ import {
   type ProductPurchaseOption,
   type ShippingBox,
 } from "../../../utils/api";
-import { FiEdit, FiTrash2, FiChevronUp, FiChevronDown, FiPackage } from "react-icons/fi";
+import { FiEdit, FiTrash2, FiChevronUp, FiChevronDown, FiPackage, FiX } from "react-icons/fi";
 
 type Tab = "products" | "categories" | "subcategories";
 
@@ -691,6 +691,7 @@ function ThemedDropdown({
   onChange,
   className = "",
   disabled = false,
+  searchable = false,
 }: {
   value: string;
   placeholder: string;
@@ -698,8 +699,10 @@ function ThemedDropdown({
   onChange: (value: string) => void;
   className?: string;
   disabled?: boolean;
+  searchable?: boolean;
 }) {
   const [open, setOpen] = useState(false);
+  const [query, setQuery] = useState("");
   const rootRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -712,13 +715,19 @@ function ThemedDropdown({
 
   const hasValue = value !== "";
   const selectedLabel = options.find((opt) => opt.value === value)?.label ?? placeholder;
+  const filteredOptions = searchable && query.trim()
+    ? options.filter((opt) => opt.label.toLowerCase().includes(query.trim().toLowerCase()))
+    : options;
 
   return (
     <div ref={rootRef} className={`relative ${className}`}>
       <button
         type="button"
         onClick={() => {
-          if (!disabled) setOpen((prev) => !prev);
+          if (!disabled) {
+            setOpen((prev) => !prev);
+            setQuery("");
+          }
         }}
         disabled={disabled}
         className={`w-full rounded-lg border border-slate-200 px-3 py-2 text-left text-sm shadow-sm outline-none transition focus:border-sky-400 focus:ring-2 focus:ring-sky-400/25 ${
@@ -739,10 +748,20 @@ function ThemedDropdown({
       </button>
       {open ? (
         <div className="absolute z-40 mt-1 max-h-64 w-full overflow-auto rounded-lg border border-slate-200 bg-white py-1 shadow-lg">
-          {!hasValue && !options.some((opt) => opt.value === "") ? (
-            <div className="px-3 py-2 text-sm text-slate-400">{placeholder}</div>
+          {searchable ? (
+            <div className="sticky top-0 z-10 border-b border-slate-100 bg-white p-2">
+              <input
+                autoFocus
+                type="text"
+                value={query}
+                onChange={(event) => setQuery(event.target.value)}
+                onKeyDown={(event) => event.stopPropagation()}
+                placeholder="Search modifiers..."
+                className="w-full rounded-md border border-slate-200 px-2.5 py-2 text-sm outline-none focus:border-sky-400 focus:ring-2 focus:ring-sky-400/20"
+              />
+            </div>
           ) : null}
-          {options.map((opt) => {
+          {filteredOptions.map((opt) => {
             const isActive = opt.value === value;
             return (
               <button
@@ -760,6 +779,9 @@ function ThemedDropdown({
               </button>
             );
           })}
+          {searchable && filteredOptions.length === 0 ? (
+            <div className="px-3 py-3 text-sm text-slate-500">No matching modifiers.</div>
+          ) : null}
         </div>
       ) : null}
     </div>
@@ -974,6 +996,10 @@ export default function AdminProductsPage() {
   const [prodModifierAssignments, setProdModifierAssignments] = useState<Record<string, ProductModifierAssignment>>({});
   const [prodConditionalRules, setProdConditionalRules] = useState<ConditionalRuleDraft[]>([]);
   const [selectedModifierKey, setSelectedModifierKey] = useState<string>("");
+  const [modifierFilterOpen, setModifierFilterOpen] = useState(false);
+  const [modifierFilterCategoryId, setModifierFilterCategoryId] = useState("");
+  const [modifierFilterSubcategoryId, setModifierFilterSubcategoryId] = useState("");
+  const [filteredModifierKeys, setFilteredModifierKeys] = useState<string[]>([]);
   /** Value from preset dropdown (`presetDropdownOptionValue(id)`), or "" for placeholder. */
   const [selectedPresetDropdownValue, setSelectedPresetDropdownValue] = useState<string>("");
   /** Purchase options (always 2 for hardware products; empty for plain products) */
@@ -1372,6 +1398,46 @@ export default function AdminProductsPage() {
         (prodModifierAssignments[a.key]?.sort_order ?? 0) -
         (prodModifierAssignments[b.key]?.sort_order ?? 0)
     );
+  const modifierFilterCategories = Array.from(
+    new Map(
+      modifierCatalog
+        .filter((group) => group.category_id != null)
+        .map((group) => [
+          Number(group.category_id),
+          { id: Number(group.category_id), name: group.category_name || "Uncategorized" },
+        ])
+    ).values()
+  ).sort((a, b) => a.name.localeCompare(b.name));
+  const modifierFilterSubcategories = Array.from(
+    new Map(
+      modifierCatalog
+        .filter(
+          (group) =>
+            group.subcategory_id != null &&
+            Number(group.category_id) === Number(modifierFilterCategoryId)
+        )
+        .map((group) => [
+          Number(group.subcategory_id),
+          { id: Number(group.subcategory_id), name: group.subcategory_name || "General" },
+        ])
+    ).values()
+  ).sort((a, b) => a.name.localeCompare(b.name));
+  const categoryFilteredModifiers = modifierCatalog.filter((group) => {
+    if (prodModifierAssignments[group.key]) return false;
+    if (!modifierFilterCategoryId) return false;
+    if (
+      modifierFilterCategoryId === "__uncategorized"
+        ? group.category_id != null
+        : Number(group.category_id) !== Number(modifierFilterCategoryId)
+    ) return false;
+    if (
+      modifierFilterSubcategoryId === "__general"
+        ? group.subcategory_id != null
+        : modifierFilterSubcategoryId &&
+          Number(group.subcategory_id) !== Number(modifierFilterSubcategoryId)
+    ) return false;
+    return true;
+  });
   const findModifierGroupById = (id: number | null | undefined) =>
     assignedModifierGroups.find((g) => Number(g.id) === Number(id));
   const findModifierOptionById = (groupId: number | null | undefined, optionId: number | null | undefined) =>
@@ -3097,13 +3163,14 @@ export default function AdminProductsPage() {
                               <ThemedDropdown
                                 key="modifier-group-add"
                                 value={selectedModifierKey}
-                                onChange={(nextKey) => setSelectedModifierKey(nextKey)}
-                                placeholder="Add Modifier"
+                                onChange={setSelectedModifierKey}
+                                placeholder="Select modifier"
+                                searchable
                                 options={modifierCatalog
-                                  .filter((g) => !prodModifierAssignments[g.key])
-                                  .map((g) => ({
-                                    value: g.key,
-                                    label: `${g.name} (${g.key})`,
+                                  .filter((group) => !prodModifierAssignments[group.key])
+                                  .map((group) => ({
+                                    value: group.key,
+                                    label: `${group.name} (${group.key})`,
                                   }))}
                                 className="min-w-[280px] w-full sm:w-auto"
                               />
@@ -3112,17 +3179,134 @@ export default function AdminProductsPage() {
                                 className="rounded bg-slate-900 px-3 py-2 text-xs font-medium text-white disabled:opacity-50"
                                 disabled={!selectedModifierKey}
                                 onClick={() => {
-                                  const group = modifierCatalog.find((g) => g.key === selectedModifierKey);
+                                  const group = modifierCatalog.find((item) => item.key === selectedModifierKey);
                                   if (!group) return;
-                                  setProdModifierAssignments((prev) => ({
-                                    ...prev,
-                                    [group.key]: assignmentFromCatalogGroup(group, Object.keys(prev).length),
+                                  setProdModifierAssignments((previous) => ({
+                                    ...previous,
+                                    [group.key]: assignmentFromCatalogGroup(group, Object.keys(previous).length),
                                   }));
                                   setSelectedModifierKey("");
                                 }}
                               >
                                 Add
                               </button>
+                              <button
+                                type="button"
+                                onClick={() => setModifierFilterOpen((previous) => !previous)}
+                                className={`rounded-lg border px-3 py-2 text-xs font-medium transition ${
+                                  modifierFilterOpen
+                                    ? "border-sky-300 bg-sky-50 text-sky-700"
+                                    : "border-slate-300 bg-white text-slate-700 hover:bg-slate-50"
+                                }`}
+                              >
+                                Filter by category
+                              </button>
+                              {modifierFilterOpen ? (
+                                <div className="w-full rounded-xl border border-sky-100 bg-sky-50/50 p-3 shadow-sm">
+                                  <div className="flex items-center justify-between gap-2">
+                                    <div>
+                                      <p className="text-xs font-semibold uppercase tracking-wide text-sky-800">Browse modifiers</p>
+                                      <p className="mt-0.5 text-[11px] text-slate-500">Choose a category and optionally narrow it by subcategory.</p>
+                                    </div>
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        setModifierFilterOpen(false);
+                                        setFilteredModifierKeys([]);
+                                      }}
+                                      className="flex h-8 w-8 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-500 hover:bg-slate-50 hover:text-slate-800"
+                                      aria-label="Close category filter"
+                                      title="Close"
+                                    >
+                                      <FiX className="h-4 w-4" />
+                                    </button>
+                                  </div>
+                                  <div className="mt-3 grid gap-2 sm:grid-cols-2">
+                                    <ThemedDropdown
+                                      value={modifierFilterCategoryId}
+                                      placeholder="Select category"
+                                      onChange={(value) => {
+                                        setModifierFilterCategoryId(value);
+                                        setModifierFilterSubcategoryId("");
+                                        setFilteredModifierKeys([]);
+                                      }}
+                                      options={[
+                                        { value: "__uncategorized", label: "Uncategorized" },
+                                        ...modifierFilterCategories.map((category) => ({
+                                          value: String(category.id),
+                                          label: category.name,
+                                        })),
+                                      ]}
+                                    />
+                                    <ThemedDropdown
+                                      value={modifierFilterSubcategoryId}
+                                      placeholder="All subcategories"
+                                      disabled={!modifierFilterCategoryId}
+                                      onChange={(value) => {
+                                        setModifierFilterSubcategoryId(value);
+                                        setFilteredModifierKeys([]);
+                                      }}
+                                      options={[
+                                        { value: "__general", label: "General" },
+                                        ...modifierFilterSubcategories.map((subcategory) => ({
+                                          value: String(subcategory.id),
+                                          label: subcategory.name,
+                                        })),
+                                      ]}
+                                    />
+                                  </div>
+                                  <div className="mt-3 max-h-52 overflow-auto rounded-lg border border-slate-200 bg-white p-2">
+                                    {!modifierFilterCategoryId ? (
+                                      <p className="px-2 py-3 text-xs text-slate-500">Select a category to view modifiers.</p>
+                                    ) : categoryFilteredModifiers.length === 0 ? (
+                                      <p className="px-2 py-3 text-xs text-slate-500">No available modifiers in this selection.</p>
+                                    ) : (
+                                      categoryFilteredModifiers.map((group) => (
+                                        <label key={`filtered-${group.key}`} className="flex cursor-pointer items-center gap-2 rounded-lg px-2 py-2 text-xs text-slate-700 hover:bg-slate-50">
+                                          <input
+                                            type="checkbox"
+                                            checked={filteredModifierKeys.includes(group.key)}
+                                            onChange={(event) =>
+                                              setFilteredModifierKeys((previous) =>
+                                                event.target.checked
+                                                  ? [...previous, group.key]
+                                                  : previous.filter((key) => key !== group.key)
+                                              )
+                                            }
+                                          />
+                                          <span>
+                                            {group.name} ({group.key})
+                                            <span className="ml-1 text-slate-400">· {group.subcategory_name || "General"}</span>
+                                          </span>
+                                        </label>
+                                      ))
+                                    )}
+                                  </div>
+                                  <div className="mt-3 flex justify-end">
+                                    <button
+                                      type="button"
+                                      disabled={filteredModifierKeys.length === 0}
+                                      onClick={() => {
+                                        setProdModifierAssignments((previous) => {
+                                          const next = { ...previous };
+                                          let sortOrder = Object.keys(next).length;
+                                          for (const key of filteredModifierKeys) {
+                                            const group = modifierCatalog.find((item) => item.key === key);
+                                            if (group && !next[group.key]) {
+                                              next[group.key] = assignmentFromCatalogGroup(group, sortOrder++);
+                                            }
+                                          }
+                                          return next;
+                                        });
+                                        setFilteredModifierKeys([]);
+                                      }}
+                                      className="rounded-lg bg-slate-900 px-3 py-2 text-xs font-medium text-white disabled:cursor-not-allowed disabled:opacity-40"
+                                    >
+                                      Add Selected ({filteredModifierKeys.length})
+                                    </button>
+                                  </div>
+                                </div>
+                              ) : null}
                             </div>
                             {Object.values(prodModifierAssignments)
                               .sort((a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0))
