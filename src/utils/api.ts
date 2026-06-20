@@ -768,9 +768,7 @@ function packagesForMatchedBoxRule(
   const packages: Array<{ weight: number; length: number; width: number; height: number }> = [];
   let remainingWeight = totalWeight;
   for (let i = 0; i < boxCount; i += 1) {
-    const remainingBoxes = boxCount - i;
-    const idealWeight = remainingWeight / remainingBoxes;
-    const cappedWeight = maxWeight != null ? Math.min(maxWeight, idealWeight) : idealWeight;
+    const cappedWeight = maxWeight != null ? Math.min(maxWeight, remainingWeight) : remainingWeight;
     const weight = Math.max(1, Math.round(cappedWeight * 100) / 100);
     packages.push({
       weight,
