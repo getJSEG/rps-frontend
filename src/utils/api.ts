@@ -293,6 +293,8 @@ export type ProductPurchaseOption = {
   sort_order?: number;
   is_default?: boolean;
   is_active?: boolean;
+  weight_per_item?: number | null;
+  shipping_box_rules?: ProductShippingBoxRule[];
 };
 
 export type HardwareTemplateOptionModifier = {
@@ -300,7 +302,17 @@ export type HardwareTemplateOptionModifier = {
   key: string;
   name?: string;
   is_required?: boolean;
+  price_adjustment_override?: number | null;
   sort_order?: number;
+  options?: Array<{
+    option_id?: number;
+    value: string;
+    label?: string;
+    price_adjustment?: number;
+    price_type?: string;
+    is_default?: boolean;
+    price_adjustment_override?: number | null;
+  }>;
 };
 
 export type HardwareTemplateOption = {
@@ -311,6 +323,8 @@ export type HardwareTemplateOption = {
   base_unit_price?: number;
   modifier_total?: number;
   computed_unit_price?: number;
+  weight_per_item?: number | null;
+  shipping_box_rules?: ProductShippingBoxRule[];
   is_default?: boolean;
   sort_order?: number;
   is_active?: boolean;
@@ -747,6 +761,7 @@ function unitWeightForBoxRuleItem(
     item.shipping_weight ??
       item.shippingWeight ??
       item.weight ??
+      item.pricing_snapshot?.weight ??
       item.pricing_snapshot?.shipping_weight ??
       item.pricing_snapshot?.shippingWeight
   ) ?? 1;
@@ -760,23 +775,22 @@ function packagesForMatchedBoxRule(
   const maxQty = parsePositiveProductNumber(rule.max_quantity_per_box);
   const maxWeight = parsePositiveProductNumber(rule.max_weight_per_box);
   const totalQty = Math.max(1, Math.trunc(qty));
-  const totalWeight = Math.max(1, unitWeight * totalQty);
+  const perItemWeight = Math.max(0.01, Number(unitWeight) || 1);
   const qtyLimit = maxQty != null ? Math.max(1, Math.trunc(maxQty)) : totalQty;
-  const boxesByQty = Math.max(1, Math.ceil(totalQty / qtyLimit));
-  const boxesByWeight = maxWeight != null ? Math.max(1, Math.ceil(totalWeight / maxWeight)) : 1;
-  const boxCount = Math.max(boxesByQty, boxesByWeight);
+  const weightQtyLimit = maxWeight != null ? Math.max(1, Math.floor(maxWeight / perItemWeight)) : totalQty;
+  const perBoxQtyLimit = Math.max(1, Math.min(qtyLimit, weightQtyLimit || 1));
   const packages: Array<{ weight: number; length: number; width: number; height: number }> = [];
-  let remainingWeight = totalWeight;
-  for (let i = 0; i < boxCount; i += 1) {
-    const cappedWeight = maxWeight != null ? Math.min(maxWeight, remainingWeight) : remainingWeight;
-    const weight = Math.max(1, Math.round(cappedWeight * 100) / 100);
+  let remainingQty = totalQty;
+  while (remainingQty > 0) {
+    const boxQty = Math.min(perBoxQtyLimit, remainingQty);
+    const weight = Math.max(1, Math.round(boxQty * perItemWeight * 100) / 100);
     packages.push({
       weight,
       length: Math.max(1, Math.ceil(rule.box.length)),
       width: Math.max(1, Math.ceil(rule.box.width)),
       height: Math.max(1, Math.ceil(rule.box.height)),
     });
-    remainingWeight = Math.max(0, remainingWeight - cappedWeight);
+    remainingQty -= boxQty;
   }
   return packages;
 }
@@ -834,12 +848,7 @@ export function hardwareFedexShippingFromProduct(product: {
   shipping_weight?: unknown;
 } | null | undefined): HardwareFedexShipping | null {
   if (!product || !isHardwareFedexProduct(product)) return null;
-  const length = parsePositiveProductNumber(product.shipping_length);
-  const width = parsePositiveProductNumber(product.shipping_width);
-  const height = parsePositiveProductNumber(product.shipping_height);
-  const weightPerUnit = parsePositiveProductNumber(product.shipping_weight);
-  if (length == null || width == null || height == null || weightPerUnit == null) return null;
-  return { length, width, height, weightPerUnit };
+  return null;
 }
 
 export function fixedPriceFedexShippingFromProduct(product: {
@@ -916,6 +925,8 @@ function hardwareFedexShippingFromCartLikeItem(item: {
   shippingWidth?: unknown;
   shippingHeight?: unknown;
   shippingWeight?: unknown;
+  hardware_weight_per_item?: unknown;
+  hardwareWeightPerItem?: unknown;
   fixed_price_shipping_only?: unknown;
   fixedPriceShippingOnly?: unknown;
   pricing_snapshot?: Record<string, unknown>;
@@ -933,6 +944,16 @@ function hardwareFedexShippingFromCartLikeItem(item: {
     (item as Record<string, unknown>)[camel] ??
     snap[snake] ??
     snap[camel];
+
+  const isHardware = isHardwareFedexProduct({ ...item, ...snap });
+  if (isHardware) {
+    const weightPerUnit = parsePositiveProductNumber(pick("hardware_weight_per_item", "hardwareWeightPerItem"));
+    if (weightPerUnit == null) return null;
+    return { length: 0, width: 0, height: 0, weightPerUnit };
+  }
+
+  const fixedWeight = parsePositiveProductNumber(pick("weight", "weight"));
+  if (fixedWeight != null) return { length: 0, width: 0, height: 0, weightPerUnit: fixedWeight };
 
   const length = parsePositiveProductNumber(pick("shipping_length", "shippingLength"));
   const width = parsePositiveProductNumber(pick("shipping_width", "shippingWidth"));
@@ -1006,6 +1027,8 @@ export function buildFedexPackagesFromShippableCartItems(
       shippingWidth?: unknown;
       shippingHeight?: unknown;
       shippingWeight?: unknown;
+      hardware_weight_per_item?: unknown;
+      hardwareWeightPerItem?: unknown;
       weight_per_sqft?: unknown;
       weightPerSqft?: unknown;
       fixed_price_shipping_only?: unknown;
@@ -1028,8 +1051,14 @@ export function buildFedexPackagesFromShippableCartItems(
     if (!isHardware && hasActiveShippingBoxRules(item)) {
       throw new Error("Shipping box is not configured for this size. Please contact admin.");
     }
+    if (hasHardwareTemplateOnCartLikeItem(item)) {
+      throw new Error("Hardware shipping box is not configured for this option. Please contact admin.");
+    }
+    if (isFixedPriceShippingCartLikeItem(item)) {
+      throw new Error("Fixed price shipping box is not configured for this product. Please contact admin.");
+    }
 
-    if (hw) {
+    if (hw && !hasHardwareTemplateOnCartLikeItem(item)) {
       maxLen = Math.max(maxLen, Math.ceil(hw.length));
       maxWid = Math.max(maxWid, Math.ceil(hw.width));
       maxHt = Math.max(maxHt, Math.ceil(hw.height));
@@ -1158,9 +1187,9 @@ export function fedexEstimatedDeliveryFromCart(items: CartLineShippingInput[]): 
 }
 
 /**
- * One package for FedEx rating on the product page (same rules as checkout cart merge).
- * Hardware: all `shipping_*` from product DB.
- * Standard products: product length/weight + customer-entered width/height.
+ * FedEx rating packages on the product page (same rules as checkout cart merge).
+ * Hardware/fixed: selected shipping box rule + per-item weight.
+ * Area products: product length/weight + customer-entered width/height.
  */
 export function buildFedexPackagesForProductConfigure(options: {
   billableQty: number;
@@ -1171,10 +1200,11 @@ export function buildFedexPackagesForProductConfigure(options: {
   productShipping?: ProductFedexShipping | null;
   shippingBoxRules?: ProductShippingBoxRule[] | null;
   weightPerSqft?: number | string | null;
+  fixedPriceShippingOnly?: boolean;
 }): Array<{ weight: number; length: number; width: number; height: number }> {
-  const { billableQty, widthInches, heightInches, hardwareShipping, productShipping, shippingBoxRules, weightPerSqft } = options;
+  const { billableQty, widthInches, heightInches, hardwareShipping, productShipping, shippingBoxRules, weightPerSqft, fixedPriceShippingOnly } = options;
   const totalQty = Math.max(1, billableQty);
-  const matchedRule = hardwareShipping
+  const matchedRule = hardwareShipping || fixedPriceShippingOnly
     ? firstActiveShippingBoxRuleWithBox(shippingBoxRules)
     : matchingShippingBoxRuleFromRules(shippingBoxRules, widthInches, heightInches);
   if (matchedRule) {
@@ -1186,20 +1216,14 @@ export function buildFedexPackagesForProductConfigure(options: {
       : (productShipping?.weightPerUnit ?? 1);
     return packagesForMatchedBoxRule(matchedRule, totalQty, unitWeight);
   }
-  if (!hardwareShipping && Array.isArray(shippingBoxRules) && shippingBoxRules.some((rule) => rule?.is_active !== false)) {
-    throw new Error("Shipping box is not configured for this size. Please contact admin.");
-  }
-
   if (hardwareShipping) {
-    const wt = Math.round(hardwareShipping.weightPerUnit * totalQty * 100) / 100;
-    return [
-      {
-        weight: Math.max(1, wt),
-        length: Math.max(1, Math.ceil(hardwareShipping.length)),
-        width: Math.max(1, Math.ceil(hardwareShipping.width)),
-        height: Math.max(1, Math.ceil(hardwareShipping.height)),
-      },
-    ];
+    throw new Error("Hardware shipping box is not configured for this option. Please contact admin.");
+  }
+  if (fixedPriceShippingOnly) {
+    throw new Error("Fixed price shipping box is not configured for this product. Please contact admin.");
+  }
+  if (Array.isArray(shippingBoxRules) && shippingBoxRules.some((rule) => rule?.is_active !== false)) {
+    throw new Error("Shipping box is not configured for this size. Please contact admin.");
   }
 
   const w = widthInches || 0;

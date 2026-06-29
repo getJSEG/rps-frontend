@@ -18,8 +18,6 @@ import {
   fedexDeliveryEstimateWithProduction,
   productionTimeBusinessDaysForQuantity,
   buildFedexPackagesForProductConfigure,
-  hardwareFedexShippingFromProduct,
-  fixedPriceFedexShippingFromProduct,
   productFedexShippingFromProduct,
   type FedexRateQuote,
   type FreeShippingPolicy,
@@ -161,6 +159,7 @@ interface Product {
     }>;
   }>;
   hardware_template_id?: number | null;
+  hardware_modifier_overrides?: Record<string, Record<string, Record<string, number>>>;
   weight?: number | string | null;
   weight_per_sqft?: number | string | null;
   length?: number | string | null;
@@ -179,6 +178,8 @@ interface Product {
     unit_price?: number | null;
     price_per_sqft?: number | null;
     min_charge?: number | null;
+    weight_per_item?: number | string | null;
+    shipping_box_rules?: ProductShippingBoxRule[];
     sort_order?: number;
     is_default?: boolean;
   }>;
@@ -430,15 +431,23 @@ function ProductDetailContent() {
   /** True when no width/height input is needed (graphic scenario, fixed-price product, or fixed-price purchase option). */
   const skipDimensionsForPrice = isGraphicScenario || fixedPriceShippingOnly || (hasPurchaseOptions && activePurchaseOptionIsFixed);
 
-  /** FedEx physical box from admin `shipping_*` when product has a hardware template and all dims are set. */
-  const hardwareFedexShipping = useMemo(() => hardwareFedexShippingFromProduct(product), [product]);
-  const fixedPriceFedexShipping = useMemo(() => fixedPriceFedexShippingFromProduct(product), [product]);
-  const adminFedexShipping = hardwareFedexShipping ?? fixedPriceFedexShipping;
+  const hardwareFedexShipping = useMemo(() => {
+    if (!isGraphicScenario || !activePurchaseOption) return null;
+    const weightPerUnit = Number(activePurchaseOption.weight_per_item);
+    if (!Number.isFinite(weightPerUnit) || weightPerUnit <= 0) return null;
+    return { length: 0, width: 0, height: 0, weightPerUnit };
+  }, [isGraphicScenario, activePurchaseOption]);
+  const adminFedexShipping = hardwareFedexShipping;
   /** Standard product FedEx length/weight from product admin; width/height still come from customer input. */
   const productFedexShipping = useMemo(() => productFedexShippingFromProduct(product), [product]);
   const shippingBoxRules = useMemo(
-    () => (Array.isArray(product?.shipping_box_rules) ? product.shipping_box_rules : []),
-    [product]
+    () => {
+      if (hardwareFedexShipping && Array.isArray(activePurchaseOption?.shipping_box_rules)) {
+        return activePurchaseOption.shipping_box_rules;
+      }
+      return Array.isArray(product?.shipping_box_rules) ? product.shipping_box_rules : [];
+    },
+    [hardwareFedexShipping, activePurchaseOption, product?.shipping_box_rules]
   );
   const enteredWidthInches = parseFloat(width) || 0;
   const enteredHeightInches = parseFloat(height) || 0;
@@ -830,6 +839,7 @@ function ProductDetailContent() {
         productShipping: productFedexShipping,
         shippingBoxRules,
         weightPerSqft: product?.weight_per_sqft ?? null,
+        fixedPriceShippingOnly,
       });
     } catch (error) {
       setFedexRates([]);
@@ -1083,6 +1093,15 @@ function ProductDetailContent() {
     if (!selectedValue) return sum;
     const options = Array.isArray(group.options) ? group.options : [];
     const selectedOption = options.find((o) => modifierOptionValue(o) === selectedValue);
+    if (selectedOption && String(selectedOption.price_type || "fixed").toLowerCase() === "percent") {
+      const overrideMap = product?.hardware_modifier_overrides?.[String(effectiveScopeKey || "").trim().toLowerCase()]?.[group.key];
+      const override =
+        overrideMap?.[String(selectedOption.id ?? "")] ??
+        overrideMap?.[modifierOptionValue(selectedOption)];
+      if (Number.isFinite(Number(override))) {
+        return sum + baseUnitBeforeModifiers * (Number(override) / 100);
+      }
+    }
     return sum + resolveModifierAdjustmentAmount(baseUnitBeforeModifiers, selectedOption);
   }, 0);
 
@@ -1293,7 +1312,9 @@ function ProductDetailContent() {
         getProductImageUrl(firstListingRaw ? String(firstListingRaw).trim() : "") || "";
 
       const hardwareCartFields: Record<string, unknown> = {};
-      const shippingBoxRulesForCart = Array.isArray(product?.shipping_box_rules)
+      const shippingBoxRulesForCart = hardwareFedexShipping && Array.isArray(activePurchaseOption?.shipping_box_rules)
+        ? activePurchaseOption.shipping_box_rules
+        : Array.isArray(product?.shipping_box_rules)
         ? product.shipping_box_rules
         : [];
       if (shippingBoxRulesForCart.length > 0) {
@@ -1302,7 +1323,7 @@ function ProductDetailContent() {
         hardwareCartFields.weight_per_sqft = product?.weight_per_sqft ?? null;
         hardwareCartFields.weightPerSqft = product?.weight_per_sqft ?? null;
       }
-      if (adminFedexShipping) {
+      if (hardwareFedexShipping) {
         if (product?.hardware_template_id != null) {
           const hid = Number(product.hardware_template_id);
           if (Number.isFinite(hid)) {
@@ -1310,32 +1331,25 @@ function ProductDetailContent() {
             hardwareCartFields.hardwareTemplateId = hid;
           }
         }
-        if (product?.graphic_scenario_enabled) {
-          hardwareCartFields.graphic_scenario_enabled = true;
-          hardwareCartFields.graphicScenarioEnabled = true;
+        hardwareCartFields.graphic_scenario_enabled = true;
+        hardwareCartFields.graphicScenarioEnabled = true;
+        hardwareCartFields.hardware_weight_per_item = hardwareFedexShipping.weightPerUnit;
+        hardwareCartFields.hardwareWeightPerItem = hardwareFedexShipping.weightPerUnit;
+      } else if (fixedPriceShippingOnly) {
+        hardwareCartFields.fixed_price_shipping_only = true;
+        hardwareCartFields.fixedPriceShippingOnly = true;
+        const fixedWeight = Number(product?.weight);
+        if (Number.isFinite(fixedWeight) && fixedWeight > 0) {
+          hardwareCartFields.weight = fixedWeight;
         }
-        if (fixedPriceShippingOnly) {
-          hardwareCartFields.fixed_price_shipping_only = true;
-          hardwareCartFields.fixedPriceShippingOnly = true;
-        }
-        hardwareCartFields.shipping_length = adminFedexShipping.length;
-        hardwareCartFields.shipping_width = adminFedexShipping.width;
-        hardwareCartFields.shipping_height = adminFedexShipping.height;
-        hardwareCartFields.shipping_weight = adminFedexShipping.weightPerUnit;
       } else if (product?.hardware_template_id != null) {
         const hid = Number(product.hardware_template_id);
         if (Number.isFinite(hid)) {
           hardwareCartFields.hardware_template_id = hid;
           hardwareCartFields.hardwareTemplateId = hid;
         }
-        if (productFedexShipping.length != null) {
-          hardwareCartFields.shipping_length = productFedexShipping.length;
-          hardwareCartFields.shippingLength = productFedexShipping.length;
-        }
-        if (productFedexShipping.weightPerUnit != null) {
-          hardwareCartFields.shipping_weight = productFedexShipping.weightPerUnit;
-          hardwareCartFields.shippingWeight = productFedexShipping.weightPerUnit;
-        }
+        hardwareCartFields.graphic_scenario_enabled = true;
+        hardwareCartFields.graphicScenarioEnabled = true;
       } else {
         if (productFedexShipping.length != null) {
           hardwareCartFields.shipping_length = productFedexShipping.length;
