@@ -357,17 +357,28 @@ export default function Navbar() {
     };
   }, [isUserDropdownOpen, isSearchOpen]);
 
-  // Keep only the first 9 parent categories (preserve API order = "first created").
+  // Keep only the first 7 parent categories (preserve API order = "first created").
   const parentCategories = categories.filter((c) => c.parent_id == null);
-  const navbarParentCategories = parentCategories.slice(0, 9);
+  const navbarParentCategories = parentCategories.slice(0, 7);
+  const categoryVisibilityClasses = [
+    "min-[1080px]:inline-flex",
+    "min-[1160px]:inline-flex",
+    "min-[1240px]:inline-flex",
+    "min-[1320px]:inline-flex",
+    "min-[1400px]:inline-flex",
+    "min-[1480px]:inline-flex",
+    "min-[1560px]:inline-flex",
+  ];
 
   return (
     <>
       <nav
-        className={`fixed top-0 left-0 right-0 nav-bg border-b border-slate-200 shadow-sm z-50 transition-transform duration-300`}
+        className={`fixed top-0 left-0 right-0 nav-bg border-b border-slate-200 shadow-sm z-50 transition-transform duration-300 ${
+          isLoggedIn ? "overflow-visible" : "overflow-hidden"
+        }`}
       >
-        <div className="max-w-full mx-auto px-4 py-2.5">
-          <div className="flex items-center justify-between gap-4">
+        <div className="mx-auto w-full max-w-full px-3 py-2.5 sm:px-4">
+          <div className="flex items-center justify-between gap-3 sm:gap-4">
             {/* Left Section - Logo and White Label */}
             <div className="flex items-center gap-3 shrink-0">
               <Link href="/" className="flex items-center">
@@ -395,13 +406,13 @@ export default function Navbar() {
                   All Products
                 </Link>
               </div>
-              {navbarParentCategories.map((category) => {
+              {navbarParentCategories.map((category, index) => {
                 const categorySlug = category.slug || category.name.toLowerCase().replace(/\s+/g, "-");
                 return (
                   <Link
                     key={category.id}
                     href={`/products/${encodeURIComponent(categorySlug)}`}
-                    className="text-slate-700 hover:text-slate-900 hover:bg-slate-100 text-sm font-normal transition-colors px-2 py-1 rounded-sm whitespace-nowrap"
+                    className={`hidden ${categoryVisibilityClasses[index]} items-center text-slate-700 hover:text-slate-900 hover:bg-slate-100 text-sm font-normal transition-colors px-2 py-1 rounded-sm whitespace-nowrap`}
                   >
                     {category.name}
                   </Link>
@@ -411,31 +422,31 @@ export default function Navbar() {
 
             {/* Right Section - Login Form or User Actions */}
             {!isLoggedIn ? (
-              <div className="flex flex-col items-end gap-1.5 shrink-0">
+              <div className="ml-auto flex flex-none shrink-0 flex-col items-end gap-1.5">
                 {loginError && (
                   <p className="text-red-600 text-xs font-medium" role="alert">
                     {loginError}
                   </p>
                 )}
-                <div className="flex min-w-0 items-center justify-end gap-2">
+                <div className="flex w-full min-w-0 items-center justify-end gap-2">
                 <form
                   onSubmit={(e) => { e.preventDefault(); handleLogin(); }}
-                  className="flex min-w-0 items-center gap-1.5 rounded-sm border border-slate-200 bg-white/90 p-1"
+                  className="flex min-w-0 max-w-full items-center justify-end gap-1.5 rounded-sm border border-slate-200 bg-white/90 p-1"
                 >
                   <input
                     type="email"
                     value={email}
                     onChange={(e) => { setEmail(e.target.value); setLoginError(""); }}
-                    className="hidden xl:block w-44 px-3 py-1.5 bg-slate-50 border border-slate-200 rounded-sm text-slate-700 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-400"
+                    className="hidden w-[clamp(92px,16vw,176px)] min-w-0 flex-none px-2 py-1.5 bg-slate-50 border border-slate-200 rounded-sm text-slate-700 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-400 min-[640px]:block sm:px-3"
                     placeholder="Email"
                   />
-                  <div className="hidden xl:flex items-center gap-2">
-                    <div className="relative">
+                  <div className="hidden w-[clamp(92px,14vw,144px)] min-w-0 flex-none items-center gap-2 min-[500px]:flex">
+                    <div className="relative w-full">
                       <input
                         type={showPassword ? "text" : "password"}
                         value={password}
                         onChange={(e) => { setPassword(e.target.value); setLoginError(""); }}
-                        className="w-36 pl-3 pr-9 py-1.5 bg-slate-50 border border-slate-200 rounded-sm text-slate-700 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-400"
+                        className="w-full pl-3 pr-9 py-1.5 bg-slate-50 border border-slate-200 rounded-sm text-slate-700 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-400"
                         placeholder="Password"
                       />
                       <button
@@ -455,13 +466,13 @@ export default function Navbar() {
                   </div>
                   <button
                     type="submit"
-                    className="bg-[#0B6BCB] hover:bg-blue-700 text-white px-4 py-1.5 rounded-sm text-sm font-semibold transition-colors whitespace-nowrap border border-[#0B6BCB]"
+                    className="bg-[#0B6BCB] hover:bg-blue-700 text-white px-3 py-1.5 rounded-sm text-sm font-semibold transition-colors whitespace-nowrap border border-[#0B6BCB] sm:px-4"
                   >
                     Sign In
                   </button>
                   <a
                     href="/register"
-                    className="bg-red-500 hover:bg-red-600 text-white px-4 py-1.5 rounded-sm text-sm font-semibold transition-colors whitespace-nowrap inline-block text-center border border-red-500"
+                    className="bg-red-500 hover:bg-red-600 text-white px-3 py-1.5 rounded-sm text-sm font-semibold transition-colors whitespace-nowrap inline-block text-center border border-red-500 sm:px-4"
                   >
                     Register
                   </a>
