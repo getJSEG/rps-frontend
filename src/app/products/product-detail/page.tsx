@@ -156,6 +156,7 @@ interface Product {
       price_adjustment?: number;
       price_type?: string;
       is_default?: boolean;
+      sort_order?: number;
     }>;
   }>;
   hardware_template_id?: number | null;
@@ -1889,17 +1890,32 @@ function ProductDetailContent() {
                   ) : null}
                   {activeModifierGroups.map((group) => {
                     const options = Array.isArray(group.options) ? group.options : [];
+                    const displayOptions = options
+                      .map((opt, idx) => ({ opt, idx }))
+                      .sort((a, b) => {
+                        const aSort = Number(a.opt.sort_order);
+                        const bSort = Number(b.opt.sort_order);
+                        const aHasSort = Number.isFinite(aSort);
+                        const bHasSort = Number.isFinite(bSort);
+                        if (aHasSort && bHasSort && aSort !== bSort) return aSort - bSort;
+                        if (aHasSort !== bHasSort) return aHasSort ? -1 : 1;
+                        const aId = Number(a.opt.id);
+                        const bId = Number(b.opt.id);
+                        if (Number.isFinite(aId) && Number.isFinite(bId) && aId !== bId) return aId - bId;
+                        return a.idx - b.idx;
+                      });
                     const selectedValue = String(selectedModifiers[group.key] || "");
                     const isGroupDisabledByRule = disabledModifierGroupKeys.has(group.key);
                     const autoSelectedOptionId = autoSelectedModifierOptionIdsByGroup.get(group.key) ?? null;
                     const selectedOption = options.find((o) => modifierOptionValue(o) === selectedValue);
-                    const selectedLabel = selectedOption
+                    const displayOption = selectedOption || options.find((o) => o.is_default);
+                    const selectedLabel = displayOption
                       ? (() => {
-                          const value = modifierOptionValue(selectedOption);
-                          const label = String(selectedOption.label || "").trim();
-                          return value && value !== label ? `${label} - ${value}` : String(label || value || "Select option");
+                          const value = modifierOptionValue(displayOption);
+                          const label = String(displayOption.label || "").trim();
+                          return value && value !== label ? `${label} - ${value}` : String(label || value);
                         })()
-                      : "Select option";
+                      : String(group.name || "");
                     return (
                       <div key={group.key} className="flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-4">
                         <label className="text-sm font-medium text-gray-700 sm:min-w-[140px]">
@@ -1927,31 +1943,7 @@ function ProductDetailContent() {
                           </button>
                           {openModifierKey === group.key ? (
                             <div className="absolute z-30 mt-1 max-h-64 w-full overflow-auto rounded-lg border border-gray-200 bg-white shadow-lg">
-                              {!group.is_required ? (
-                                <button
-                                  type="button"
-                                  className={`block w-full px-3 py-2 text-left text-sm ${
-                                    autoSelectedOptionId != null
-                                      ? "cursor-not-allowed bg-gray-50 text-gray-400"
-                                      : !selectedValue
-                                      ? "bg-blue-50 text-blue-700"
-                                      : "text-gray-700 hover:bg-gray-50"
-                                  }`}
-                                  disabled={autoSelectedOptionId != null}
-                                  onClick={() => {
-                                    if (autoSelectedOptionId != null) return;
-                                    setSelectedModifiers((prev) => {
-                                      const next = { ...prev };
-                                      delete next[group.key];
-                                      return next;
-                                    });
-                                    setOpenModifierKey(null);
-                                  }}
-                                >
-                                  Select option
-                                </button>
-                              ) : null}
-                              {options.map((opt, idx) => {
+                              {displayOptions.map(({ opt, idx }) => {
                                 const optValue = modifierOptionValue(opt);
                                 const isLockedOutByAutoSelect =
                                   autoSelectedOptionId != null && Number(opt.id || 0) !== autoSelectedOptionId;
