@@ -79,7 +79,7 @@ export default function Sidebar({ onCategoryClick, showAllProductsButton = true 
     }
   }, [selectedCategory, categories]);
 
-  const navigateToCategoryListing = (categorySlug: string, isSubcategory: boolean) => {
+  const navigateToCategoryListing = (categorySlug: string) => {
     if (onCategoryClick) {
       onCategoryClick(categorySlug);
       return;
@@ -89,7 +89,7 @@ export default function Sidebar({ onCategoryClick, showAllProductsButton = true 
 
   const handleCategoryClick = async (categorySlug: string, isSubcategory: boolean) => {
     if (!isSubcategory) {
-      navigateToCategoryListing(categorySlug, false);
+      navigateToCategoryListing(categorySlug);
       return;
     }
 
@@ -105,7 +105,7 @@ export default function Sidebar({ onCategoryClick, showAllProductsButton = true 
       console.error("Error resolving direct product navigation:", e);
     }
 
-    navigateToCategoryListing(categorySlug, true);
+    navigateToCategoryListing(categorySlug);
   };
 
   const handleClearFilter = () => {
@@ -154,31 +154,47 @@ export default function Sidebar({ onCategoryClick, showAllProductsButton = true 
                 const children = getChildren(parent.id);
                 const isOpen = openGroups[parent.id] ?? false;
                 const hasChildren = children.length > 0;
-                const parentSelected = !hasChildren && selectedCategory === parent.slug;
+                const parentSelected = selectedCategory === parent.slug;
 
                 return (
                   <div key={parent.id} className={index > 0 ? "mt-1 pt-1 border-t border-gray-100" : ""}>
                     {hasChildren ? (
                       <>
-                        <button
-                          type="button"
-                          onClick={() => toggleGroup(parent.id)}
-                          className="flex w-full items-center gap-1.5 py-1.5 px-2 text-left text-sm font-normal text-gray-900 rounded-md hover:bg-gray-50/90"
-                          aria-expanded={isOpen}
+                        <div
+                          className={`flex w-full items-center gap-1.5 rounded-md text-sm font-normal transition-colors hover:bg-gray-50/90 ${
+                            parentSelected ? "bg-blue-50/70 text-blue-800 font-medium" : "text-gray-900"
+                          }`}
                         >
-                          <span className="min-w-0 flex-1 truncate">{parent.name}</span>
-                          <span className="shrink-0 text-[10px] font-normal text-gray-400 tabular-nums">
-                            {children.length}
-                          </span>
-                          <svg
-                            className={`h-3.5 w-3.5 shrink-0 text-gray-400 transition-transform duration-150 ${isOpen ? "rotate-180" : ""}`}
-                            fill="none"
-                            stroke="currentColor"
-                            viewBox="0 0 24 24"
+                          <button
+                            type="button"
+                            onClick={() => toggleGroup(parent.id)}
+                            className="min-w-0 flex-1 py-1.5 pl-2 text-left"
+                            aria-expanded={isOpen}
+                            aria-label={`${isOpen ? "Collapse" : "Expand"} ${parent.name}`}
                           >
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                          </svg>
-                        </button>
+                            <span className="block truncate">{parent.name}</span>
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              void handleCategoryClick(parent.slug, false);
+                            }}
+                            className="flex basis-[38%] shrink-0 items-center justify-end gap-1.5 self-stretch py-1.5 pl-2 pr-2 text-gray-400 transition-colors hover:text-gray-600"
+                            aria-label={`View all ${parent.name} products`}
+                          >
+                            <span className="text-[10px] font-normal tabular-nums">
+                              {children.length}
+                            </span>
+                            <svg
+                              className={`h-3.5 w-3.5 shrink-0 transition-transform duration-150 ${isOpen ? "rotate-180" : ""}`}
+                              fill="none"
+                              stroke="currentColor"
+                              viewBox="0 0 24 24"
+                            >
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                            </svg>
+                          </button>
+                        </div>
                         <div
                           className={`grid transition-[grid-template-rows] duration-150 ease-out ${
                             isOpen ? "grid-rows-[1fr]" : "grid-rows-[0fr]"
