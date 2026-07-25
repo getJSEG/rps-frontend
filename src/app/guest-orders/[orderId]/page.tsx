@@ -97,7 +97,7 @@ function canRequestCancellation(status: string | null | undefined): boolean {
     .toLowerCase()
     .trim()
     .replace(/\s+/g, "_");
-  return s === "awaiting_artwork" || s === "on_hold" || s === "awaiting_customer_approval";
+  return s === "processing";
 }
 
 function shouldShowTrackingNumber(order: GuestOrder): boolean {

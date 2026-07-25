@@ -406,7 +406,7 @@ function matchesSearch(order: OrderRow, q: string): boolean {
 function canRequestCancellationStatus(status: string | null | undefined): boolean {
   const c = canonicalOrderStatus(status);
   if (!c) return false;
-  return c === "awaiting_artwork" || c === "on_hold" || c === "awaiting_customer_approval";
+  return c === "processing";
 }
 
 export default function Orders() {
