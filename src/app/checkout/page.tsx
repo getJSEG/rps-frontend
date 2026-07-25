@@ -145,7 +145,38 @@ interface StripeElementsRef {
 async function fetchCartItemsFromApi(): Promise<CartItem[]> {
   try {
     const res = await cartAPI.get();
-    return Array.isArray(res?.cartItems) ? (res.cartItems as CartItem[]) : [];
+    const raw = Array.isArray(res?.cartItems) ? (res.cartItems as Record<string, unknown>[]) : [];
+    return raw.map((it) => {
+      const productName = String(it.productName ?? it.product_name ?? it.name ?? "");
+      const unitPriceRaw = (it as any).unitPrice ?? (it as any).unit_price ?? (it as any).price ?? undefined;
+      const subtotalRaw = (it as any).subtotal ?? (it as any).lineSubtotal ?? (it as any).line_subtotal ?? undefined;
+      const quantityRaw = (it as any).quantity ?? (it as any).qty ?? undefined;
+      const jobsRaw = Array.isArray((it as any).jobs)
+        ? ((it as any).jobs as Record<string, unknown>[]).map((j) => ({
+            jobName: String((j as any).jobName ?? (j as any).job_name ?? ""),
+            quantity: Number((j as any).quantity ?? (j as any).qty ?? 0),
+            unitPrice: Number((j as any).unitPrice ?? (j as any).unit_price ?? (j as any).price ?? 0),
+            lineSubtotal: (j as any).lineSubtotal ?? (j as any).line_subtotal ?? undefined,
+            ...(j as Record<string, unknown>),
+          }))
+        : (it as any).jobs;
+
+      return {
+        ...(it as CartItem),
+        productName,
+        product_name: productName,
+        unitPrice: unitPriceRaw != null ? Number(unitPriceRaw as any) : undefined,
+        unit_price: unitPriceRaw != null ? Number(unitPriceRaw as any) : undefined,
+        subtotal: subtotalRaw != null ? Number(subtotalRaw as any) : undefined,
+        quantity: quantityRaw != null ? Number(quantityRaw as any) : undefined,
+        jobs: jobsRaw as CartItem['jobs'],
+        selection_mode:
+          (it as any).selection_mode ?? (it as any).selectionMode ?? (it as any).pricing_snapshot?.selection_mode ?? (it as any).pricing_snapshot?.selectionMode ?? undefined,
+        selectionMode:
+          (it as any).selectionMode ?? (it as any).selection_mode ?? (it as any).pricing_snapshot?.selectionMode ?? (it as any).pricing_snapshot?.selection_mode ?? undefined,
+        pricing_snapshot: (it as any).pricing_snapshot ?? (it as any).pricingSnapshot ?? undefined,
+      } as CartItem;
+    });
   } catch {
     return [];
   }
