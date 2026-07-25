@@ -167,24 +167,23 @@ export default function Sidebar({ onCategoryClick, showAllProductsButton = true 
                         >
                           <button
                             type="button"
-                            onClick={() => toggleGroup(parent.id)}
-                            className="min-w-0 flex-1 py-1.5 pl-2 text-left"
-                            aria-expanded={isOpen}
-                            aria-label={`${isOpen ? "Collapse" : "Expand"} ${parent.name}`}
+                            onClick={() => {
+                              void handleCategoryClick(parent.slug, false);
+                            }}
+                            className="min-w-0 flex-1 py-1.5 pl-2 text-left text-gray-900 hover:text-blue-600"
+                            aria-label={`View all ${parent.name} products`}
                           >
                             <span className="block truncate">{parent.name}</span>
                           </button>
                           <button
                             type="button"
                             onClick={() => {
-                              void handleCategoryClick(parent.slug, false);
+                              toggleGroup(parent.id);
                             }}
-                            className="flex basis-[38%] shrink-0 items-center justify-end gap-1.5 self-stretch py-1.5 pl-2 pr-2 text-gray-400 transition-colors hover:text-gray-600"
-                            aria-label={`View all ${parent.name} products`}
+                            className="flex h-full basis-1/2 shrink-0 items-center justify-end rounded-r-md pr-3 text-gray-400 transition-colors hover:text-gray-600"
+                            aria-expanded={isOpen}
+                            aria-label={`${isOpen ? "Collapse" : "Expand"} ${parent.name}`}
                           >
-                            <span className="text-[10px] font-normal tabular-nums">
-                              {children.length}
-                            </span>
                             <svg
                               className={`h-3.5 w-3.5 shrink-0 transition-transform duration-150 ${isOpen ? "rotate-180" : ""}`}
                               fill="none"
