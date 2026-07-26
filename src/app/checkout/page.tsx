@@ -471,6 +471,10 @@ export default function CheckoutPage() {
   })();
   const shippingAmountPendingFedex =
     checkoutRequiresFedexQuote && !selectedFedexRate;
+  const showFreeShippingCheckout =
+    !shippingAmountPendingFedex &&
+    shownShipping === 0 &&
+    freeShippingPolicy.freeShippingEnabled;
   const guestTaxExpected = checkoutRequiresFedexQuote && !clientSecret;
   const guestTaxActive = guestTaxExpected && guestBillingSaved;
   const guestTaxPending =
@@ -1305,6 +1309,8 @@ export default function CheckoutPage() {
                       <span className="font-medium text-right">
                         {shippingAmountPendingFedex ? (
                           <span className="text-xs font-normal text-amber-700">Pending</span>
+                        ) : showFreeShippingCheckout ? (
+                          <span className="text-emerald-700">Free Shipping</span>
                         ) : (
                           <span className="text-gray-900">${shownShipping.toFixed(2)}</span>
                         )}

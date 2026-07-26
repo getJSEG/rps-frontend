@@ -573,7 +573,6 @@ function ProductDetailContent() {
   const autoSelectedModifierOptionIdsByGroup = conditionalRuleEvaluation.autoSelectedOptionIdsByGroup;
 
   const missingRequiredModifiers = activeModifierGroups
-    .filter((group) => group.is_required)
     .filter((group) => {
       const selectedValue = String(selectedModifiers[group.key] || "").trim();
       if (!selectedValue) return true;
@@ -904,6 +903,7 @@ function ProductDetailContent() {
     estimateShipForm.streetAddress,
     estimateShipForm.addressLine2,
     addressDefaultsLoaded,
+    fixedPriceShippingOnly,
   ]);
 
   useEffect(() => {
@@ -1140,6 +1140,10 @@ function ProductDetailContent() {
     freeShippingPolicy,
     false
   );
+  const showFreeShippingAppliedPdp =
+    freeShippingPolicy.freeShippingEnabled &&
+    effectiveShippingPdp === 0 &&
+    (freeShippingPolicy.freeShippingThreshold <= 0 || subtotal >= freeShippingPolicy.freeShippingThreshold);
   const activeTaxPercentage = Number(taxEstimate?.taxPercentage ?? 0);
   const taxAmount = Number(taxEstimate?.tax ?? 0);
   const totalWithTax = Number(taxEstimate?.total ?? subtotal + effectiveShippingPdp + taxAmount);
@@ -1741,7 +1745,7 @@ function ProductDetailContent() {
                     ) : !skipDimensionsForPrice ? (
                       <p className="text-sm text-gray-600 mt-1">
                         Size: {widthInches} in × {heightInches} in ({(widthInches / 12).toFixed(2)} ft ×{" "}
-                        {(heightInches / 12).toFixed(2)} ft)
+                                               {(heightInches / 12).toFixed(2)} ft)
                       </p>
                     ) : null}
                     {previewPricing?.minApplied ? (
@@ -1908,14 +1912,14 @@ function ProductDetailContent() {
                     const isGroupDisabledByRule = disabledModifierGroupKeys.has(group.key);
                     const autoSelectedOptionId = autoSelectedModifierOptionIdsByGroup.get(group.key) ?? null;
                     const selectedOption = options.find((o) => modifierOptionValue(o) === selectedValue);
-                    const displayOption = selectedOption || options.find((o) => o.is_default);
-                    const selectedLabel = displayOption
+                    const selectedLabel = selectedOption
                       ? (() => {
-                          const value = modifierOptionValue(displayOption);
-                          const label = String(displayOption.label || "").trim();
+                          const value = modifierOptionValue(selectedOption);
+                          const label = String(selectedOption.label || "").trim();
                           return value && value !== label ? `${label} - ${value}` : String(label || value);
                         })()
                       : String(group.name || "");
+                    const showPlaceholder = !selectedOption;
                     return (
                       <div key={group.key} className="flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-4">
                         <label className="text-sm font-medium text-gray-700 sm:min-w-[140px]">
@@ -1928,17 +1932,17 @@ function ProductDetailContent() {
                         >
                           <button
                             type="button"
-                            className={`flex w-full items-center justify-between rounded-lg border border-gray-300 px-3 py-1.5 text-sm text-left shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 ${
+                            className={`flex w-full items-center justify-between rounded-lg border px-3 py-1.5 text-sm text-left shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 ${
                               isGroupDisabledByRule
-                                ? "cursor-not-allowed bg-gray-50 text-gray-400"
-                                : "bg-white text-black"
+                                ? "cursor-not-allowed bg-gray-50 text-gray-400 border-gray-200"
+                                : "border-gray-300 bg-white text-black"
                             }`}
                             disabled={isGroupDisabledByRule}
                             onClick={() =>
                               setOpenModifierKey((prev) => (prev === group.key ? null : group.key))
                             }
                           >
-                            <span className="truncate">{selectedLabel}</span>
+                            <span className={`truncate ${showPlaceholder ? "text-gray-500" : ""}`}>{selectedLabel}</span>
                             <span className="ml-2 text-gray-500">▾</span>
                           </button>
                           {openModifierKey === group.key ? (
@@ -2230,7 +2234,7 @@ function ProductDetailContent() {
                               ? "Fetching shipping services…"
                               : !shipToAddressReady
                                 ? "Enter postal code and country for Ship to to load FedEx services."
-                                : "Enter height and width to get shipping service."}
+                                : "Please complete details to get shipping service."}
                           </p>
                         )}
                       </div>
@@ -2296,9 +2300,7 @@ function ProductDetailContent() {
                 </span>
               </div>
               {isAuthenticated() &&
-              fedexRawChargePdp > 0 &&
-              effectiveShippingPdp === 0 &&
-              freeShippingPolicy.freeShippingEnabled ? (
+              showFreeShippingAppliedPdp ? (
                 <p className="mb-2 text-xs text-emerald-700">Free shipping applied (order meets threshold).</p>
               ) : null}
               <div className="mb-2 flex justify-between">
@@ -2340,7 +2342,7 @@ function ProductDetailContent() {
               )}
               <button 
                 onClick={handleAddToCart}
-                disabled={addingToCart}
+                disabled={addingToCart || missingRequiredModifiers.length > 0}
                 className="w-full bg-blue-500 hover:bg-blue-700 disabled:bg-blue-400 disabled:cursor-not-allowed text-white font-medium px-6 py-3 rounded-lg transition-colors"
               >
                 {addingToCart ? "Adding to Cart..." : "Add to Cart"}
