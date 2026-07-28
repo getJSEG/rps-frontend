@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import Navbar from "../components/Navbar";
@@ -251,6 +251,31 @@ export default function CheckoutPage() {
   const [guestTaxLoading, setGuestTaxLoading] = useState(false);
   const [guestTaxError, setGuestTaxError] = useState<string | null>(null);
   const lastFedexQuoteKeyRef = useRef("");
+  const fedexRatesRunRef = useRef(0);
+  /** Stable fingerprint so cart reload with same contents does not retrigger FedEx. */
+  const cartFedexFingerprint = useMemo(
+    () =>
+      JSON.stringify(
+        (cartItems as Array<Record<string, unknown>>).map((item) => ({
+          id: item.id ?? item.cart_item_id,
+          quantity: item.quantity,
+          jobs: item.jobs,
+          width: item.width ?? item.width_inches,
+          height: item.height ?? item.height_inches,
+          shipping_length: item.shipping_length ?? item.shippingLength,
+          shipping_width: item.shipping_width ?? item.shippingWidth,
+          shipping_height: item.shipping_height ?? item.shippingHeight,
+          shipping_weight: item.shipping_weight ?? item.shippingWeight,
+          hardware_template_id: item.hardware_template_id ?? item.hardwareTemplateId,
+          hardware_shipping: item.hardware_shipping ?? item.hardwareShipping,
+          shipping_box_rules: item.shipping_box_rules ?? item.shippingBoxRules,
+          weight_per_sqft: item.weight_per_sqft ?? item.weightPerSqft,
+          fixed_price_shipping_only: item.fixed_price_shipping_only ?? item.fixedPriceShippingOnly,
+          pricing_snapshot: item.pricing_snapshot,
+        }))
+      ),
+    [cartItems]
+  );
   const loadCartFromApi = useCallback(async () => {
     const { items, summary } = await fetchCartItemsAndSummary();
     setCartItems(items);
@@ -549,25 +574,36 @@ export default function CheckoutPage() {
       : "";
 
   useEffect(() => {
+    const myRun = ++fedexRatesRunRef.current;
+    let abortController: AbortController | null = null;
+
+    const invalidateRun = () => {
+      if (fedexRatesRunRef.current === myRun) {
+        fedexRatesRunRef.current += 1;
+      }
+      abortController?.abort();
+    };
+
     const resetFedexQuoteState = () => {
       lastFedexQuoteKeyRef.current = "";
       setFedexRates([]);
       setSelectedFedexServiceType("");
       setFedexServiceMenuOpen(false);
       setFedexRatesError(null);
+      setFedexRatesLoading(false);
     };
 
     if (shippingMode === "store_pickup") {
       resetFedexQuoteState();
-      return;
+      return invalidateRun;
     }
     if (loggedInCheckout) {
       resetFedexQuoteState();
-      return;
+      return invalidateRun;
     }
     if (!fedexDestinationReadyEffective || cartItems.length === 0) {
       resetFedexQuoteState();
-      return;
+      return invalidateRun;
     }
 
     const fedexStreetLines: string[] = [];
@@ -606,24 +642,26 @@ export default function CheckoutPage() {
       setFedexRatesError(error instanceof Error ? error.message : "Shipping box is not configured for this size. Please contact admin.");
       setFedexRatesLoading(false);
       lastFedexQuoteKeyRef.current = "";
-      return;
+      return invalidateRun;
     }
     const quoteKey = JSON.stringify({ destination, packages });
+    // Already have rates for this exact destination+packages — clear any stuck loading and skip refetch.
     if (lastFedexQuoteKeyRef.current === quoteKey && fedexRates.length > 0) {
-      return;
+      setFedexRatesLoading(false);
+      return invalidateRun;
     }
-    lastFedexQuoteKeyRef.current = quoteKey;
 
-    let cancelled = false;
-    (async () => {
+    abortController = new AbortController();
+    void (async () => {
       try {
         setFedexRatesLoading(true);
         setFedexRatesError(null);
-        const res = await fedexAPI.getRates(destination, packages);
-        if (cancelled) return;
+        const res = await fedexAPI.getRates(destination, packages, { signal: abortController!.signal });
+        if (fedexRatesRunRef.current !== myRun) return;
         const raw = Array.isArray(res?.rates) ? res.rates : [];
         const list = [...raw].sort((a, b) => (Number(a.totalCharge) || 0) - (Number(b.totalCharge) || 0));
         setFedexRates(list);
+        lastFedexQuoteKeyRef.current = quoteKey;
         if (list.length > 0) {
           setSelectedFedexServiceType((prev) => {
             if (prev && list.some((r) => r.serviceType === prev)) return prev;
@@ -633,19 +671,24 @@ export default function CheckoutPage() {
           setSelectedFedexServiceType("");
         }
       } catch (e) {
-        if (cancelled) return;
+        if (e instanceof DOMException && e.name === "AbortError") return;
+        if (fedexRatesRunRef.current !== myRun) return;
         lastFedexQuoteKeyRef.current = "";
         setFedexRates([]);
         setSelectedFedexServiceType("");
         setFedexServiceMenuOpen(false);
         setFedexRatesError(e instanceof Error ? e.message : "Could not load FedEx rates");
       } finally {
-        if (!cancelled) setFedexRatesLoading(false);
+        if (fedexRatesRunRef.current === myRun && !abortController?.signal.aborted) {
+          setFedexRatesLoading(false);
+        }
       }
     })();
 
     return () => {
-      cancelled = true;
+      invalidateRun();
+      // If this run is superseded before a newer fetch sets loading true, clear stuck spinner.
+      setFedexRatesLoading(false);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps -- omit destinationForFedex object: guest branch is a new object each render; primitives + fedexDep* cover changes
   }, [
@@ -653,7 +696,8 @@ export default function CheckoutPage() {
     loggedInCheckout,
     fedexDestinationReadyEffective,
     guestBillingSaved,
-    cartItems,
+    cartFedexFingerprint,
+    cartItems.length,
     billingForm.streetAddress,
     billingForm.addressLine2,
     destinationForFedex?.postcode,
@@ -662,7 +706,6 @@ export default function CheckoutPage() {
     destinationForFedex?.city,
     fedexDepShipStreet,
     fedexDepShipLine2,
-    fedexRates.length,
   ]);
 
   useEffect(() => {
