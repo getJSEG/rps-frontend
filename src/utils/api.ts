@@ -1843,7 +1843,7 @@ export const productsAPI = {
   },
 };
 
-// Cart API (role-based: user/employee = own cart, admin = all carts)
+// Cart API (logged-in user/admin/employee = own cart; guest = session cart)
 export const cartAPI = {
   get: async () => apiCall('/cart'),
   getSummary: async (): Promise<CartSummary> => apiCall('/cart/summary'),

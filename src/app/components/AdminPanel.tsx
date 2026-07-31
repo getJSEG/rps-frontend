@@ -233,36 +233,19 @@ export default function AdminPanel() {
     setCurrentPage(1);
   }, [searchQuery]);
 
-  // Load all users' cart items from API when admin (backend returns all carts); else fallback to localStorage
+  // Carts are per-user; admin panel lists placed orders only (no global cart merge)
   useEffect(() => {
     if (!accessGranted) return;
 
     const loadCart = async () => {
       try {
-        if (isAuthenticated()) {
-          const res = await cartAPI.get();
-          if (res && res.isAdminView && Array.isArray(res.cartItems)) {
-            setCartItems(res.cartItems);
-          } else if (res && Array.isArray(res.cartItems)) {
-            setCartItems(res.cartItems);
-          } else {
-            const cart = localStorage.getItem("cart");
-            const items = cart ? JSON.parse(cart) : [];
-            setCartItems(Array.isArray(items) ? items : []);
-          }
-        } else {
-          const cart = localStorage.getItem("cart");
-          const items = cart ? JSON.parse(cart) : [];
-          setCartItems(Array.isArray(items) ? items : []);
-        }
+        setCartItems([]);
         const raw = localStorage.getItem("adminCartToOrder");
         const map = raw ? JSON.parse(raw) : {};
         setAdminCartToOrder(map && typeof map === "object" ? map : {});
       } catch (error) {
         console.error("Error loading cart:", error);
-        const cart = localStorage.getItem("cart");
-        const items = cart ? JSON.parse(cart) : [];
-        setCartItems(Array.isArray(items) ? items : []);
+        setCartItems([]);
         setAdminCartToOrder({});
       } finally {
         setCartLoading(false);
@@ -484,7 +467,7 @@ export default function AdminPanel() {
   return (
     <AdminNavbar
       title="Orders"
-      subtitle="Placed orders and items still in customer carts"
+      subtitle="Placed orders"
       searchQuery={searchQuery}
       onSearchChange={setSearchQuery}
     >
