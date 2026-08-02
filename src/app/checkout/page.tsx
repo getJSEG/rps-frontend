@@ -542,6 +542,7 @@ export default function CheckoutPage() {
   const fedexDestinationReady = Boolean(
     destinationForFedex &&
       String(destinationForFedex.postcode || "").trim() &&
+      String(destinationForFedex.city || "").trim() &&
       String(destinationForFedex.country || "").trim()
   );
   const fedexDestinationReadyEffective = loggedInCheckout
@@ -626,7 +627,7 @@ export default function CheckoutPage() {
           ? "US"
           : String(destinationForFedex?.country || "US").trim().toUpperCase(),
       stateOrProvinceCode: String(destinationForFedex?.state || "").trim().toUpperCase() || undefined,
-      city: String(destinationForFedex?.city || "").trim() || undefined,
+      city: String(destinationForFedex?.city || "").trim(),
       ...(fedexStreetLines.length > 0 ? { streetLines: fedexStreetLines } : {}),
     };
 

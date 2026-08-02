@@ -147,14 +147,14 @@ export default function ProductCarousel({ products }: ProductCarouselProps) {
                         <img
                           src={imageSrc}
                           alt={product.name}
-                          className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105"
+                          className="h-full w-full object-contain transition-transform duration-300 group-hover:scale-105"
                         />
                       ) : (
                         <Image
                           src={imageSrc}
                           alt={product.name}
                           fill
-                          className="object-cover transition-transform duration-300 group-hover:scale-105"
+                          className="object-contain transition-transform duration-300 group-hover:scale-105"
                           sizes="(max-width: 640px) 45vw, (max-width: 900px) 30vw, 22vw"
                           unoptimized
                         />
