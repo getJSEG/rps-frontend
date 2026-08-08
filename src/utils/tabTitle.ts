@@ -57,6 +57,8 @@ const EXACT: Record<string, string> = {
   "/estimates": "Estimates",
   "/account-settings": "Account Settings",
   "/change-password": "Change Password",
+  "/delete-account": "Delete Account",
+  "/account-pending-deletion": "Account Pending Deletion",
   "/credit-cards": "Credit cards",
   "/messages": "Messages (unavailable)",
   "/address-book": "Address Book",

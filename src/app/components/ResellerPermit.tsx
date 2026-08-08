@@ -42,6 +42,7 @@ export default function ResellerPermit() {
     { label: "Change Password", href: "/change-password" },
     { label: "Reseller Permit", href: "/reseller-permit", active: true },
     { label: "Your Default Address", href: "/address-book" },
+    { label: "Delete Account", href: "/delete-account" },
   ];
 
   const states = [

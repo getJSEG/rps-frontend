@@ -1463,6 +1463,27 @@ async function apiCall(endpoint: string, options: RequestInit = {}) {
 
         if (isAuthError && (isTokenBasedCall || isAccessTokenRequired)) {
           if (typeof window !== 'undefined') {
+            if (response.status === 403 && dataObj.code === 'ACCOUNT_PENDING_DELETION') {
+              try {
+                const rawUser = localStorage.getItem('user');
+                const user = rawUser ? JSON.parse(rawUser) : {};
+                localStorage.setItem(
+                  'user',
+                  JSON.stringify({
+                    ...user,
+                    pendingDeletion: true,
+                    deletionScheduledAt: dataObj.deletionScheduledAt || user.deletionScheduledAt || null,
+                    deletionRequestedAt: dataObj.deletionRequestedAt || user.deletionRequestedAt || null,
+                  })
+                );
+              } catch {
+                /* ignore */
+              }
+              if (!window.location.pathname.startsWith('/account-pending-deletion')) {
+                window.location.href = '/account-pending-deletion';
+              }
+              throw new Error(errorMessage);
+            }
             localStorage.removeItem('token');
             localStorage.removeItem('isLoggedIn');
             localStorage.removeItem('user');
@@ -1565,6 +1586,23 @@ export const usersAPI = {
       method: 'PUT',
       body: JSON.stringify({ newPassword }),
     });
+  },
+  /** Schedule account deletion (requires password). Caller should log the user out after success. */
+  requestAccountDeletion: async (password: string) => {
+    return apiCall('/users/delete-account', {
+      method: 'POST',
+      body: JSON.stringify({ password }),
+    });
+  },
+  /** Cancel pending deletion and restore full access. */
+  cancelAccountDeletion: async () => {
+    return apiCall('/users/cancel-deletion', {
+      method: 'POST',
+      body: JSON.stringify({}),
+    });
+  },
+  getDeletionStatus: async () => {
+    return apiCall('/users/deletion-status');
   },
 };
 

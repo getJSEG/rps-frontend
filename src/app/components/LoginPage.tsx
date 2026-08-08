@@ -63,6 +63,10 @@ export default function LoginPage() {
         localStorage.removeItem("registeredPassword");
         window.dispatchEvent(new Event("loginStatusChanged"));
         toast.success("Login successful!");
+        if (response.user?.pendingDeletion) {
+          router.push("/account-pending-deletion");
+          return;
+        }
         const role = (response.user?.role || "").toString().toLowerCase();
         if (role === "admin") {
           router.push("/admin/reports");

@@ -59,6 +59,7 @@ export default function ChangePassword() {
     { label: "Account Settings", href: "/account-settings" },
     { label: "Change Password", href: "/change-password", active: true },
     { label: "Your Default Address", href: "/address-book" },
+    { label: "Delete Account", href: "/delete-account" },
   ];
 
   const EyeIcon = ({ show }: { show: boolean }) =>

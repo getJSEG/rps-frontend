@@ -4,6 +4,7 @@ import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import ToastProvider from "./components/ToastProvider";
 import TabTitleSync from "./components/TabTitleSync";
+import PendingDeletionGuard from "./components/PendingDeletionGuard";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -34,6 +35,7 @@ export default function RootLayout({
         <Suspense fallback={null}>
           <TabTitleSync />
         </Suspense>
+        <PendingDeletionGuard />
         {children}
         <ToastProvider />
       </body>

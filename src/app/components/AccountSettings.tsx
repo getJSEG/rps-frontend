@@ -120,6 +120,7 @@ export default function AccountSettings() {
     { label: "Account Settings", href: "/account-settings", active: true },
     { label: "Change Password", href: "/change-password" },
     { label: "Your Default Address", href: "/address-book" },
+    { label: "Delete Account", href: "/delete-account" },
   ];
 
   if (loading) {

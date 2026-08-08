@@ -211,6 +211,7 @@ export default function CreditCards() {
     { label: "Change Password", href: "/change-password" },
     { label: "Credit Cards", href: "/credit-cards", active: true },
     { label: "Your Default Address", href: "/address-book" },
+    { label: "Delete Account", href: "/delete-account" },
   ];
 
   const months = ["", "01", "02", "03", "04", "05", "06", "07", "08", "09", "10", "11", "12"];
