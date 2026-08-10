@@ -2011,6 +2011,13 @@ export const ordersAPI = {
     });
   },
 
+  updateItemStatus: async (orderId: string, itemId: string, status: string) => {
+    return apiCall(`/orders/admin/${orderId}/items/${itemId}/status`, {
+      method: 'PUT',
+      body: JSON.stringify({ status }),
+    });
+  },
+
   refundAdmin: async (id: string) => {
     return apiCall(`/orders/admin/${id}/refund`, {
       method: 'POST',

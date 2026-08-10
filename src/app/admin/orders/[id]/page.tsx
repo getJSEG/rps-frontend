@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback, useRef, type MouseEvent, type ReactNode } from "react";
+import { createPortal } from "react-dom";
 import { useRouter, useParams } from "next/navigation";
 import Image from "next/image";
 import Link from "next/link";
@@ -24,6 +25,8 @@ interface OrderItem {
   quantity: number;
   unit_price: number;
   total_price: number;
+  /** Per-line fulfillment status (admin only; independent of order.status). */
+  status?: string;
   product_image?: string;
   product_material?: string;
   product_description?: string;
@@ -467,6 +470,15 @@ export default function OrderDetails() {
   const [refundModalOpen, setRefundModalOpen] = useState(false);
   const [processingRefund, setProcessingRefund] = useState(false);
   const [expandedModifierLines, setExpandedModifierLines] = useState<Record<string, boolean>>({});
+  const [updatingItemStatusId, setUpdatingItemStatusId] = useState<string | null>(null);
+  const [openItemStatusId, setOpenItemStatusId] = useState<string | null>(null);
+  const [itemStatusMenuPos, setItemStatusMenuPos] = useState<{
+    top: number;
+    left: number;
+    maxHeight: number;
+  } | null>(null);
+  const itemStatusTriggerRef = useRef<HTMLDivElement>(null);
+  const itemStatusMenuRef = useRef<HTMLDivElement>(null);
 
   const fetchOrder = useCallback(async () => {
     if (!orderId) {
@@ -546,6 +558,9 @@ export default function OrderDetails() {
                 quantity: parseInt(String(item.quantity), 10) || 1,
                 unit_price: parseFloat(String(item.unit_price)) || 0,
                 total_price: parseFloat(String(item.total_price)) || 0,
+                status: item.status != null && String(item.status).trim() !== ""
+                  ? String(item.status)
+                  : "awaiting_artwork",
                 product_image: item.product_image ? String(item.product_image) : undefined,
                 product_material: item.product_material ? String(item.product_material) : undefined,
                 product_description: item.product_description ? String(item.product_description) : undefined,
@@ -705,6 +720,35 @@ export default function OrderDetails() {
     return () => document.removeEventListener("mousedown", onDown);
   }, [showStatusDropdown]);
 
+  useEffect(() => {
+    if (!openItemStatusId) return;
+    const onDown = (e: globalThis.MouseEvent) => {
+      const t = e.target as Node;
+      if (itemStatusTriggerRef.current?.contains(t)) return;
+      if (itemStatusMenuRef.current?.contains(t)) return;
+      setOpenItemStatusId(null);
+      setItemStatusMenuPos(null);
+    };
+    const onRepositionOrClose = (e: Event) => {
+      if (itemStatusMenuRef.current && e.target instanceof Node) {
+        if (itemStatusMenuRef.current === e.target || itemStatusMenuRef.current.contains(e.target)) {
+          return;
+        }
+      }
+      setOpenItemStatusId(null);
+      setItemStatusMenuPos(null);
+    };
+    document.addEventListener("mousedown", onDown);
+    window.addEventListener("resize", onRepositionOrClose);
+    // Close when the table (or page) scrolls so fixed menu doesn't float away.
+    window.addEventListener("scroll", onRepositionOrClose, true);
+    return () => {
+      document.removeEventListener("mousedown", onDown);
+      window.removeEventListener("resize", onRepositionOrClose);
+      window.removeEventListener("scroll", onRepositionOrClose, true);
+    };
+  }, [openItemStatusId]);
+
   const statusOptions = ADMIN_ORDER_STATUS_OPTIONS;
 
   const handleStatusUpdate = async (newStatus: string) => {
@@ -720,6 +764,38 @@ export default function OrderDetails() {
       alert("Failed to update status. Please try again.");
     } finally {
       setUpdatingStatus(false);
+    }
+  };
+
+  const handleItemStatusUpdate = async (itemId: string, newStatus: string) => {
+    if (!order) return;
+    const current = order.items.find((it) => String(it.id) === String(itemId))?.status;
+    if (String(current || "").toLowerCase() === String(newStatus).toLowerCase()) {
+      setOpenItemStatusId(null);
+      setItemStatusMenuPos(null);
+      return;
+    }
+    setOpenItemStatusId(null);
+    setItemStatusMenuPos(null);
+    setUpdatingItemStatusId(itemId);
+    try {
+      const response = await ordersAPI.updateItemStatus(order.id, itemId, newStatus);
+      const nextStatus =
+        response?.item?.status != null ? String(response.item.status) : newStatus;
+      setOrder((prev) =>
+        prev
+          ? {
+              ...prev,
+              items: prev.items.map((it) =>
+                String(it.id) === String(itemId) ? { ...it, status: nextStatus } : it
+              ),
+            }
+          : null
+      );
+    } catch {
+      alert("Failed to update item status. Please try again.");
+    } finally {
+      setUpdatingItemStatusId(null);
     }
   };
 
@@ -916,6 +992,10 @@ export default function OrderDetails() {
   const canRefundFromAdmin = normalizedStatus === "awaiting_refund";
   const savedTrackingId = order.order_tracking_id?.trim() || "";
   const trackingDirty = trackingInput.trim() !== savedTrackingId;
+  const openItemForStatus = openItemStatusId
+    ? order.items.find((it) => String(it.id) === String(openItemStatusId))
+    : null;
+  const openItemStatusValue = openItemForStatus?.status || "awaiting_artwork";
   /* Legacy FedEx shipment flow, kept commented while admin uses manual tracking entry.
   const isPaid = String(order.payment_status || "").toLowerCase() === "paid";
   const canCreateFedex =
@@ -966,7 +1046,10 @@ export default function OrderDetails() {
                 <>
                   <button
                     type="button"
-                    onClick={() => setShowStatusDropdown(!showStatusDropdown)}
+                    onClick={() => {
+                      setOpenItemStatusId(null);
+                      setShowStatusDropdown(!showStatusDropdown);
+                    }}
                     disabled={updatingStatus}
                     className={`inline-flex items-center gap-2 rounded-xl px-4 py-2.5 text-sm font-semibold shadow-sm ring-1 transition ${getStatusStyles(
                       order.status
@@ -1462,12 +1545,13 @@ export default function OrderDetails() {
               {order.items.length === 0 ? (
                 <p className="p-8 text-center text-sm text-slate-500">No line items.</p>
               ) : (
-                <table className="w-full min-w-[1040px] border-collapse text-left text-sm">
+                <table className="w-full min-w-[1180px] border-collapse text-left text-sm">
                   <thead>
                     <tr className="border-b border-slate-200 bg-white text-[11px] font-bold uppercase tracking-wide text-slate-500">
                       <th className="px-3 py-3 pl-5"> </th>
                       <th className="px-3 py-3">Product</th>
                       <th className="px-3 py-3">Job</th>
+                      <th className="px-3 py-3 whitespace-nowrap">Status</th>
                       <th className="px-3 py-3 whitespace-nowrap">Download</th>
                       <th className="px-3 py-3 whitespace-nowrap">Size (W×H)</th>
                       <th className="px-3 py-3">SKU</th>
@@ -1488,6 +1572,8 @@ export default function OrderDetails() {
                         selectedMods.length > 2 && !modifiersOpen
                           ? selectedMods.slice(0, 2)
                           : selectedMods;
+                      const itemStatus = item.status || "awaiting_artwork";
+                      const itemStatusUpdating = updatingItemStatusId === lineKey;
                       return (
                       <tr key={item.id} className="border-b border-slate-100 align-top hover:bg-slate-50/50">
                         <td className="px-3 py-3 pl-5">{renderThumb(item)}</td>
@@ -1529,6 +1615,69 @@ export default function OrderDetails() {
                               {modifiersOpen ? "Show less" : `Show ${selectedMods.length - 2} more`}
                             </button>
                           ) : null}
+                        </td>
+                        <td className="px-3 py-3 align-top">
+                          <div
+                            className="relative"
+                            ref={openItemStatusId === lineKey ? itemStatusTriggerRef : undefined}
+                          >
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                setShowStatusDropdown(false);
+                                if (openItemStatusId === lineKey) {
+                                  setOpenItemStatusId(null);
+                                  setItemStatusMenuPos(null);
+                                  return;
+                                }
+                                const rect = (e.currentTarget as HTMLButtonElement).getBoundingClientRect();
+                                const menuWidth = 208;
+                                const gap = 6;
+                                const edge = 8;
+                                const preferredMax = 288; // ~max-h-72
+                                const spaceBelow = window.innerHeight - rect.bottom - edge;
+                                const spaceAbove = rect.top - edge;
+                                const openUp = spaceBelow < 220 && spaceAbove > spaceBelow;
+                                const maxHeight = Math.max(
+                                  140,
+                                  Math.min(preferredMax, openUp ? spaceAbove - gap : spaceBelow - gap)
+                                );
+                                const left = Math.min(
+                                  rect.left,
+                                  Math.max(edge, window.innerWidth - menuWidth - edge)
+                                );
+                                const top = openUp
+                                  ? Math.max(edge, rect.top - gap - maxHeight)
+                                  : rect.bottom + gap;
+                                setItemStatusMenuPos({ top, left, maxHeight });
+                                setOpenItemStatusId(lineKey);
+                              }}
+                              disabled={itemStatusUpdating}
+                              className={`inline-flex max-w-[11.5rem] items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-semibold shadow-sm ring-1 transition ${getStatusStyles(
+                                itemStatus
+                              )} ${itemStatusUpdating ? "opacity-60" : ""}`}
+                              aria-label={`Status for ${item.product_name}`}
+                              aria-expanded={openItemStatusId === lineKey}
+                            >
+                              <span className="truncate">
+                                {itemStatusUpdating ? "Updating…" : formatStatus(itemStatus)}
+                              </span>
+                              <svg
+                                className="h-3.5 w-3.5 shrink-0 opacity-70"
+                                fill="none"
+                                stroke="currentColor"
+                                viewBox="0 0 24 24"
+                                aria-hidden
+                              >
+                                <path
+                                  strokeLinecap="round"
+                                  strokeLinejoin="round"
+                                  strokeWidth={2}
+                                  d="M19 9l-7 7-7-7"
+                                />
+                              </svg>
+                            </button>
+                          </div>
                         </td>
                         <td className="px-3 py-3 align-top text-slate-700">
                           <JobArtworkDownloadCell item={item} />
@@ -1591,6 +1740,51 @@ export default function OrderDetails() {
           </button>
         </div>
       </div>
+      {typeof document !== "undefined" &&
+      openItemStatusId &&
+      itemStatusMenuPos &&
+      openItemForStatus
+        ? createPortal(
+            <div
+              ref={itemStatusMenuRef}
+              style={{
+                top: itemStatusMenuPos.top,
+                left: itemStatusMenuPos.left,
+                maxHeight: itemStatusMenuPos.maxHeight,
+              }}
+              className="fixed z-[200] w-52 overflow-y-auto rounded-xl border border-slate-200 bg-white py-1 shadow-xl"
+            >
+              {!statusOptions.some((o) => o.value === openItemStatusValue) ? (
+                <button
+                  type="button"
+                  onClick={() => handleItemStatusUpdate(openItemStatusId, openItemStatusValue)}
+                  className="w-full px-3 py-2 text-left text-xs font-medium text-slate-700 hover:bg-slate-50"
+                >
+                  {formatStatus(openItemStatusValue)}
+                </button>
+              ) : null}
+              {statusOptions.map((option) => {
+                const selected =
+                  String(option.value).toLowerCase() === String(openItemStatusValue).toLowerCase();
+                return (
+                  <button
+                    key={option.value}
+                    type="button"
+                    onClick={() => handleItemStatusUpdate(openItemStatusId, option.value)}
+                    className={`w-full px-3 py-2 text-left text-xs ${
+                      selected
+                        ? "bg-slate-50 font-semibold text-slate-900"
+                        : "text-slate-700 hover:bg-slate-50"
+                    }`}
+                  >
+                    {option.label}
+                  </button>
+                );
+              })}
+            </div>,
+            document.body
+          )
+        : null}
     </AdminNavbar>
   );
 }
