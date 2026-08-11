@@ -10,6 +10,7 @@ import {
 } from "./orders/OrderLineArtworkControls";
 import { isAuthenticated } from "../../utils/roles";
 import {
+  canCancelOrderItem,
   canonicalOrderStatus,
   customerOrderProgressFirstStepLabel,
   customerOrderProgressKind,
@@ -45,6 +46,8 @@ type OrderItem = {
   quantity?: number | null;
   unit_price?: number | string | null;
   total_price?: number | string | null;
+  /** Per-line fulfillment status (same values as order status). */
+  status?: string | null;
   image_url?: string | null;
   width_inches?: number | string | null;
   height_inches?: number | string | null;
@@ -183,7 +186,7 @@ function statusBadgeClass(status: string | null | undefined): string {
   const c = canonicalOrderStatus(status);
   if (c === "completed") return "bg-emerald-100 text-emerald-800";
   if (c === "shipped") return "bg-violet-100 text-violet-800";
-  if (c === "printing" || c === "trimming" || c === "reprint") return "bg-blue-100 text-blue-800";
+  if (c === "printing" || c === "trimming" || c === "reprint" || c === "processing") return "bg-blue-100 text-blue-800";
   if (
     c === "pending_payment" ||
     c === "awaiting_artwork" ||
@@ -406,7 +409,7 @@ function matchesSearch(order: OrderRow, q: string): boolean {
 function canRequestCancellationStatus(status: string | null | undefined): boolean {
   const c = canonicalOrderStatus(status);
   if (!c) return false;
-  return c === "processing";
+  return c === "processing" || c === "awaiting_artwork";
 }
 
 export default function Orders() {
@@ -927,6 +930,10 @@ export default function Orders() {
                                 <tr className="border-b border-gray-200 bg-white text-[11px] font-bold uppercase tracking-wide text-slate-500">
                                   <th className="whitespace-nowrap px-3 py-3 pl-4"> </th>
                                   <th className="px-3 py-3">Product</th>
+                                  <th className="whitespace-nowrap px-3 py-3">Status</th>
+                                  {items.length > 1 ? (
+                                    <th className="whitespace-nowrap px-3 py-3">Action</th>
+                                  ) : null}
                                   <th className="whitespace-nowrap px-3 py-3">Download</th>
                                   <th className="whitespace-nowrap px-3 py-3 text-right">Qty</th>
                                   <th className="whitespace-nowrap px-3 py-3 text-right">Price</th>
@@ -987,6 +994,28 @@ export default function Orders() {
                                           </button>
                                         ) : null}
                                       </td>
+                                      <td className="px-3 py-3 align-top">
+                                        <span
+                                          className={`inline-flex max-w-[11rem] rounded-full px-2.5 py-0.5 text-xs font-medium ${statusBadgeClass(
+                                            it.status || "awaiting_artwork"
+                                          )}`}
+                                        >
+                                          {formatStatus(it.status || "awaiting_artwork")}
+                                        </span>
+                                      </td>
+                                      {items.length > 1 ? (
+                                        <td className="px-3 py-3 align-top">
+                                          {canCancelOrderItem(it.status || "awaiting_artwork", items.length) ? (
+                                            <button
+                                              type="button"
+                                              className="inline-flex items-center rounded-lg border border-rose-200 bg-rose-50 px-2.5 py-1.5 text-xs font-semibold text-rose-800 shadow-sm transition hover:bg-rose-100"
+                                              title="Cancel this item"
+                                            >
+                                              Cancel item
+                                            </button>
+                                          ) : null}
+                                        </td>
+                                      ) : null}
                                       <td className="px-3 py-3 align-top text-slate-700">
                                         <OrderLineArtworkDownloadCell item={it} />
                                       </td>

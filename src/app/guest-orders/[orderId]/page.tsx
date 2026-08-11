@@ -12,6 +12,7 @@ import {
 } from "../../components/artwork-review/openUploadReviewSession";
 import { ordersAPI } from "../../../utils/api";
 import {
+  canCancelOrderItem,
   canonicalOrderStatus,
   customerOrderStatusDescription,
   customerOrderStatusTitle,
@@ -30,6 +31,8 @@ type OrderItem = {
   quantity?: number | string | null;
   unit_price?: number | string | null;
   total_price?: number | string | null;
+  /** Per-line fulfillment status (same values as order status). */
+  status?: string | null;
   width_inches?: number | string | null;
   height_inches?: number | string | null;
   image_url?: string | null;
@@ -93,15 +96,29 @@ function money(v: unknown): string {
 }
 
 function canRequestCancellation(status: string | null | undefined): boolean {
-  const s = String(status || "")
-    .toLowerCase()
-    .trim()
-    .replace(/\s+/g, "_");
-  return s === "processing";
+  const c = canonicalOrderStatus(status);
+  return c === "processing" || c === "awaiting_artwork";
 }
 
 function shouldShowTrackingNumber(order: GuestOrder): boolean {
   return canonicalOrderStatus(order.status) === "shipped" && !!order.order_tracking_id?.trim();
+}
+
+function itemStatusBadgeClass(status: string | null | undefined): string {
+  const c = canonicalOrderStatus(status);
+  if (c === "completed") return "bg-emerald-100 text-emerald-800";
+  if (c === "shipped") return "bg-violet-100 text-violet-800";
+  if (c === "printing" || c === "trimming" || c === "reprint" || c === "processing")
+    return "bg-blue-100 text-blue-800";
+  if (
+    c === "pending_payment" ||
+    c === "awaiting_artwork" ||
+    c === "awaiting_customer_approval"
+  )
+    return "bg-amber-100 text-amber-900";
+  if (c === "on_hold" || c === "cancelled") return "bg-orange-100 text-orange-900";
+  if (c === "awaiting_refund" || c === "refunded") return "bg-red-100 text-red-800";
+  return "bg-slate-100 text-slate-800";
 }
 
 function lineSelectedModifiers(item: OrderItem): Array<{
@@ -452,63 +469,95 @@ function GuestOrderTrackInner() {
                         id: item.id,
                         customer_artwork_url: item.customer_artwork_url,
                       });
+                    const showCancelItem = canCancelOrderItem(
+                      item.status || "awaiting_artwork",
+                      order.items?.length ?? 0
+                    );
                     return (
                     <div
                       key={`${item.id ?? idx}`}
-                      className="grid grid-cols-1 gap-3 rounded-md border border-gray-100 p-3 sm:grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] sm:items-center sm:gap-x-4"
+                      className="rounded-md border border-gray-100 p-3"
                     >
-                      <div className="min-w-0 sm:justify-self-start">
-                        <p className="font-medium text-gray-900">{item.product_name || "Item"}</p>
-                        {optionLabel ? (
-                          <p className="text-xs font-medium text-sky-700">{optionLabel}</p>
-                        ) : null}
-                        {item.job_name && <p className="text-xs text-gray-500">Job: {item.job_name}</p>}
-                        <p className="text-xs text-gray-500">Qty: {item.quantity ?? "—"}</p>
-                        {selectedMods.length > 0 ? (
-                          <ul className="mt-1 space-y-0.5 text-xs text-gray-500">
-                            {visibleModifiers.map((m, mIdx) => (
-                              <li key={`${item.id ?? idx}-mod-${mIdx}`}>
-                                {m.group_name}: {m.option_label}
-                              </li>
-                            ))}
-                          </ul>
-                        ) : null}
-                        {selectedMods.length > 2 ? (
-                          <button
-                            type="button"
-                            onClick={() => toggleModifierLine(lineKey)}
-                            className="mt-1 inline-flex items-center gap-1 text-xs font-medium text-[#0B6BCB] hover:text-[#0959a8]"
+                      <div className="flex items-start justify-between gap-3">
+                        <p className="min-w-0 font-medium text-gray-900">
+                          {item.product_name || "Item"}
+                        </p>
+                        <div className="flex shrink-0 flex-col items-end gap-1.5">
+                          <span
+                            className={`inline-flex max-w-full rounded-full px-2.5 py-0.5 text-xs font-medium ${itemStatusBadgeClass(
+                              item.status || "awaiting_artwork"
+                            )}`}
                           >
-                            <span aria-hidden>{modifiersOpen ? "▴" : "▾"}</span>
-                            {modifiersOpen ? "Show less" : `Show ${selectedMods.length - 2} more`}
-                          </button>
-                        ) : null}
+                            {customerOrderStatusTitle(item.status || "awaiting_artwork")}
+                          </span>
+                          {showCancelItem ? (
+                            <button
+                              type="button"
+                              className="inline-flex items-center rounded-lg border border-rose-200 bg-rose-50 px-2.5 py-1.5 text-xs font-semibold text-rose-800 shadow-sm transition hover:bg-rose-100"
+                              title="Cancel this item"
+                            >
+                              Cancel item
+                            </button>
+                          ) : null}
+                        </div>
                       </div>
-                      <div className="flex flex-col items-center justify-center justify-self-center gap-2 sm:min-w-[10rem] sm:px-2">
-                        {showRowUpload ? (
-                          <button
-                            type="button"
-                            onClick={() => {
-                              if (itemIdNum == null) return;
-                              startGuestUploadForOrderItem(itemIdNum);
-                            }}
-                            disabled={uploadBusyItemId != null}
-                            className="whitespace-nowrap rounded-lg bg-emerald-600 px-3 py-2 text-xs font-semibold text-white shadow-sm hover:bg-emerald-700 disabled:opacity-60 sm:text-sm"
-                          >
-                            {uploadBusyItemId === itemIdNum ? "Opening…" : "Upload artwork"}
-                          </button>
-                        ) : (
-                          <OrderLineArtworkDownloadCell
-                            item={{
-                              id: item.id,
-                              image_url: item.image_url,
-                              customer_artwork_url: item.customer_artwork_url,
-                            }}
-                          />
-                        )}
-                      </div>
-                      <div className="flex w-full justify-end sm:w-auto sm:justify-self-end">
-                        <p className="text-sm font-semibold text-gray-900 tabular-nums">${money(item.total_price)}</p>
+                      <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] sm:items-center sm:gap-x-4">
+                        <div className="min-w-0 sm:justify-self-start">
+                          {optionLabel ? (
+                            <p className="text-xs font-medium text-sky-700">{optionLabel}</p>
+                          ) : null}
+                          {item.job_name ? (
+                            <p className="text-xs text-gray-500">Job: {item.job_name}</p>
+                          ) : null}
+                          <p className="text-xs text-gray-500">Qty: {item.quantity ?? "—"}</p>
+                          {selectedMods.length > 0 ? (
+                            <ul className="mt-1 space-y-0.5 text-xs text-gray-500">
+                              {visibleModifiers.map((m, mIdx) => (
+                                <li key={`${item.id ?? idx}-mod-${mIdx}`}>
+                                  {m.group_name}: {m.option_label}
+                                </li>
+                              ))}
+                            </ul>
+                          ) : null}
+                          {selectedMods.length > 2 ? (
+                            <button
+                              type="button"
+                              onClick={() => toggleModifierLine(lineKey)}
+                              className="mt-1 inline-flex items-center gap-1 text-xs font-medium text-[#0B6BCB] hover:text-[#0959a8]"
+                            >
+                              <span aria-hidden>{modifiersOpen ? "▴" : "▾"}</span>
+                              {modifiersOpen ? "Show less" : `Show ${selectedMods.length - 2} more`}
+                            </button>
+                          ) : null}
+                        </div>
+                        <div className="flex flex-col items-center justify-center justify-self-center gap-2 sm:min-w-[10rem] sm:px-2">
+                          {showRowUpload ? (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                if (itemIdNum == null) return;
+                                startGuestUploadForOrderItem(itemIdNum);
+                              }}
+                              disabled={uploadBusyItemId != null}
+                              className="whitespace-nowrap rounded-lg bg-emerald-600 px-3 py-2 text-xs font-semibold text-white shadow-sm hover:bg-emerald-700 disabled:opacity-60 sm:text-sm"
+                            >
+                              {uploadBusyItemId === itemIdNum ? "Opening…" : "Upload artwork"}
+                            </button>
+                          ) : (
+                            <OrderLineArtworkDownloadCell
+                              item={{
+                                id: item.id,
+                                image_url: item.image_url,
+                                customer_artwork_url: item.customer_artwork_url,
+                              }}
+                            />
+                          )}
+                        </div>
+                        <div className="flex w-full justify-end sm:w-auto sm:justify-self-end">
+                          <p className="text-sm font-semibold text-gray-900 tabular-nums">
+                            ${money(item.total_price)}
+                          </p>
+                        </div>
                       </div>
                     </div>
                     );

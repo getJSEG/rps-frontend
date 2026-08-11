@@ -114,6 +114,21 @@ export function isRefundLikeStatus(status: string | null | undefined): boolean {
   return REFUND_LIKE.has(c);
 }
 
+/** Item statuses where a per-line Cancel item control may be shown (UI; no refund yet). */
+const ITEM_CANCEL_ALLOWED = new Set(["awaiting_artwork", "on_hold", "processing"]);
+
+/**
+ * Show Cancel item only when the line is in an allowed status and the order has
+ * more than one line (single-item orders use the main order cancel/refund flow).
+ */
+export function canCancelOrderItem(
+  status: string | null | undefined,
+  orderItemCount?: number | null
+): boolean {
+  if (orderItemCount != null && Number(orderItemCount) <= 1) return false;
+  return ITEM_CANCEL_ALLOWED.has(canonicalOrderStatus(status));
+}
+
 /** When set, step 1 of the customer progress bar shows this label instead of "Pre-production". */
 const FIRST_STEP_DYNAMIC_LABEL_STATUSES = new Set([
   "awaiting_artwork",
