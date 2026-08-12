@@ -7,10 +7,8 @@ import { usersAPI } from "../../utils/api";
 import { toast } from "react-toastify";
 
 /*
- * Previously this page used an email verification flow:
- * - authAPI.sendResetCode(email) then step "code"
- * - authAPI.resetPasswordWithCode(email, code, newPassword)
- * That flow is disabled here; password updates use PUT /users/password while logged in.
+ * This page updates the password of an already signed-in user via PUT /users/password.
+ * Users who cannot sign in go through /forgot-password instead, which emails a reset link.
  */
 
 export default function ChangePassword() {
