@@ -335,10 +335,16 @@ export default function Navbar() {
     localStorage.removeItem("userRole");
     setIsLoggedIn(false);
     setUserName("");
-    // Dispatch custom event to notify other components
+    setIsUserDropdownOpen(false);
     window.dispatchEvent(new Event("loginStatusChanged"));
-    // Redirect to home page
-    router.push("/");
+    // Show toast before navigation so it mounts; ToastContainer lives in the root layout.
+    toast.success("Logged out successfully.", { autoClose: 3000 });
+    if (typeof window !== "undefined" && window.location.pathname !== "/") {
+      // Brief delay so the toast is painted before the route change.
+      window.setTimeout(() => {
+        router.push("/");
+      }, 50);
+    }
   };
 
   // Close dropdown when clicking outside

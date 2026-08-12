@@ -5,6 +5,7 @@ import Link from "next/link";
 import Image from "next/image";
 import { ReactNode } from "react";
 import { FiLogOut } from "react-icons/fi";
+import { toast } from "react-toastify";
 
 interface AdminNavbarProps {
   children: ReactNode;
@@ -93,7 +94,10 @@ export default function AdminNavbar({
     localStorage.removeItem("user");
     localStorage.removeItem("userRole");
     window.dispatchEvent(new Event("loginStatusChanged"));
-    router.push("/");
+    toast.success("Logged out successfully.", { autoClose: 3000 });
+    window.setTimeout(() => {
+      router.push("/");
+    }, 50);
   };
 
   return (
