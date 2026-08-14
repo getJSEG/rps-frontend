@@ -121,6 +121,10 @@ export type FreeShippingPolicy = {
   freeShippingThreshold: number;
 };
 
+export type AppSettings = {
+  emailNotificationsEnabled: boolean;
+};
+
 export type ShippingRatesResponse = {
   rates: ShippingRates;
   methods?: ShippingMethod[];
@@ -1905,6 +1909,12 @@ export const shippingRatesAPI = {
     data: { name?: string; price?: number; isActive?: boolean }
   ) => apiCall(`/shipping-rates/admin/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
   deleteAdminMethod: async (id: number | string) => apiCall(`/shipping-rates/admin/${id}`, { method: 'DELETE' }),
+};
+
+export const appSettingsAPI = {
+  get: async (): Promise<AppSettings> => apiCall('/settings'),
+  update: async (payload: AppSettings): Promise<AppSettings> =>
+    apiCall('/settings', { method: 'PUT', body: JSON.stringify(payload) }),
 };
 
 export const shippingBoxesAPI = {
