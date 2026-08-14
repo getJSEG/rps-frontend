@@ -76,6 +76,7 @@ export default function RefundsPage() {
   const [filter, setFilter] = useState<RefundFilter>("all");
   /** When set, shows centered refund confirmation modal for that order id. */
   const [refundModalOrderId, setRefundModalOrderId] = useState<string | null>(null);
+  const [awaitingRefundModalOrderId, setAwaitingRefundModalOrderId] = useState<string | null>(null);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -153,6 +154,7 @@ export default function RefundsPage() {
       const response = await ordersAPI.updateStatus(orderId, "awaiting_refund");
       const nextStatus = String(response?.order?.status || "awaiting_refund");
       updateOrderStatusLocally(orderId, nextStatus);
+      setAwaitingRefundModalOrderId(null);
     } catch (e) {
       const msg = e instanceof Error ? e.message : "Failed to update status";
       alert(msg);
@@ -348,7 +350,7 @@ export default function RefundsPage() {
                         {s === "cancellation_requested" && (
                           <button
                             type="button"
-                            onClick={() => handleMarkAwaitingRefund(order.id)}
+                            onClick={() => setAwaitingRefundModalOrderId(order.id)}
                             disabled={isBusy}
                             className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-1.5 text-xs font-semibold text-amber-800 hover:bg-amber-100 disabled:opacity-50"
                           >
@@ -374,6 +376,48 @@ export default function RefundsPage() {
           </table>
         </div>
       </div>
+
+      {awaitingRefundModalOrderId && (
+        <div
+          className="fixed inset-0 z-[100] flex items-center justify-center bg-black/40 p-4"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="awaiting-refund-list-modal-title"
+          onClick={() => {
+            if (!busyOrderId) setAwaitingRefundModalOrderId(null);
+          }}
+        >
+          <div
+            className="w-full max-w-md rounded-2xl border border-slate-200 bg-white p-6 shadow-xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h2 id="awaiting-refund-list-modal-title" className="text-lg font-bold text-slate-900">
+              Mark awaiting refund?
+            </h2>
+            <p className="mt-2 text-sm text-slate-600">
+              Are you sure you want to mark this order as awaiting refund?
+            </p>
+            <div className="mt-6 flex flex-wrap justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setAwaitingRefundModalOrderId(null)}
+                disabled={busyOrderId === awaitingRefundModalOrderId}
+                className="rounded-xl px-4 py-2.5 text-sm font-semibold text-slate-600 hover:bg-slate-100 disabled:opacity-50"
+              >
+                No
+              </button>
+              <button
+                type="button"
+                onClick={() => void handleMarkAwaitingRefund(awaitingRefundModalOrderId)}
+                disabled={busyOrderId === awaitingRefundModalOrderId}
+                className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-2.5 text-sm font-semibold text-amber-800 hover:bg-amber-100 disabled:opacity-50"
+              >
+                {busyOrderId === awaitingRefundModalOrderId ? "Updating…" : "Yes, mark awaiting refund"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {refundModalOrderId && (
         <div

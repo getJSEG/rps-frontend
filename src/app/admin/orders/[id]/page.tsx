@@ -13,7 +13,9 @@ import AdminNavbar from "../../../components/AdminNavbar";
 import { canAccessAdminPanel, isAuthenticated, getUserRole } from "../../../../utils/roles";
 import {
   ADMIN_ORDER_STATUS_OPTIONS,
+  adminItemStatusOptionsFor,
   adminOrderStatusLabel,
+  canonicalOrderStatus,
   isOrderStatusLocked,
 } from "../../../../utils/orderStatuses";
 
@@ -27,6 +29,7 @@ interface OrderItem {
   total_price: number;
   /** Per-line fulfillment status (admin only; independent of order.status). */
   status?: string;
+  refund_amount?: number;
   product_image?: string;
   product_material?: string;
   product_description?: string;
@@ -115,6 +118,8 @@ interface Order {
   tax_name?: string | null;
   tax_percentage?: number;
   tax_amount?: number;
+  refund_amount?: number;
+  refunded_at?: string | null;
   /** Optional carrier / shipment ID (DB: order_tracking_id). */
   order_tracking_id?: string | null;
   carrier?: string | null;
@@ -146,6 +151,12 @@ function guestPhoneDisplay(g: GuestCheckoutShape | null): string | undefined {
 
 function formatMoney(n: number) {
   return (Number.isFinite(n) ? n : 0).toFixed(2);
+}
+
+function itemRefundAmountWithTax(itemTotal: number, taxPercentage: number) {
+  const line = Math.round((Number(itemTotal) || 0) * 100) / 100;
+  const tax = Math.round(line * ((Number(taxPercentage) || 0) / 100) * 100) / 100;
+  return { line, tax, total: Math.round((line + tax) * 100) / 100 };
 }
 
 // Kept for the commented tracking-link display below.
@@ -469,9 +480,12 @@ export default function OrderDetails() {
   const [deleteOrderModalOpen, setDeleteOrderModalOpen] = useState(false);
   const [refundModalOpen, setRefundModalOpen] = useState(false);
   const [processingRefund, setProcessingRefund] = useState(false);
+  const [refundItemModal, setRefundItemModal] = useState<OrderItem | null>(null);
+  const [processingItemRefund, setProcessingItemRefund] = useState(false);
   const [expandedModifierLines, setExpandedModifierLines] = useState<Record<string, boolean>>({});
   const [updatingItemStatusId, setUpdatingItemStatusId] = useState<string | null>(null);
   const [openItemStatusId, setOpenItemStatusId] = useState<string | null>(null);
+  const [pendingAwaitingRefundItemId, setPendingAwaitingRefundItemId] = useState<string | null>(null);
   const [itemStatusMenuPos, setItemStatusMenuPos] = useState<{
     top: number;
     left: number;
@@ -561,6 +575,10 @@ export default function OrderDetails() {
                 status: item.status != null && String(item.status).trim() !== ""
                   ? String(item.status)
                   : "awaiting_artwork",
+                refund_amount:
+                  item.refund_amount != null && item.refund_amount !== ""
+                    ? parseFloat(String(item.refund_amount)) || 0
+                    : undefined,
                 product_image: item.product_image ? String(item.product_image) : undefined,
                 product_material: item.product_material ? String(item.product_material) : undefined,
                 product_description: item.product_description ? String(item.product_description) : undefined,
@@ -619,6 +637,11 @@ export default function OrderDetails() {
           d.tax_amount != null && d.tax_amount !== ""
             ? parseFloat(String(d.tax_amount)) || 0
             : 0,
+        refund_amount:
+          d.refund_amount != null && d.refund_amount !== ""
+            ? parseFloat(String(d.refund_amount)) || 0
+            : 0,
+        refunded_at: d.refunded_at != null ? String(d.refunded_at) : null,
         order_tracking_id:
           d.order_tracking_id != null && String(d.order_tracking_id).trim() !== ""
             ? String(d.order_tracking_id)
@@ -819,7 +842,18 @@ export default function OrderDetails() {
       setProcessingRefund(true);
       const response = await ordersAPI.refundAdmin(order.id);
       if (response?.order?.status) {
-        setOrder((prev) => (prev ? { ...prev, status: String(response.order.status) } : null));
+        setOrder((prev) =>
+          prev
+            ? {
+                ...prev,
+                status: String(response.order.status),
+                refund_amount:
+                  response.order.refund_amount != null
+                    ? parseFloat(String(response.order.refund_amount)) || prev.refund_amount
+                    : prev.refund_amount,
+              }
+            : null
+        );
       } else {
         setOrder((prev) => (prev ? { ...prev, status: "refunded" } : null));
       }
@@ -829,6 +863,54 @@ export default function OrderDetails() {
       alert(msg);
     } finally {
       setProcessingRefund(false);
+    }
+  };
+
+  const confirmRefundItem = async () => {
+    if (!order || !refundItemModal) return;
+    try {
+      setProcessingItemRefund(true);
+      const response = await ordersAPI.refundItemAdmin(order.id, String(refundItemModal.id));
+      const d = (response?.order || {}) as Record<string, unknown>;
+      const itemsFromApi = Array.isArray(d.items) ? (d.items as Record<string, unknown>[]) : null;
+      const refundFromApi =
+        response?.refund?.amount != null ? parseFloat(String(response.refund.amount)) : null;
+      setOrder((prev) => {
+        if (!prev) return prev;
+        return {
+          ...prev,
+          refund_amount:
+            d.refund_amount != null ? parseFloat(String(d.refund_amount)) || 0 : prev.refund_amount,
+          items: prev.items.map((it) => {
+            const fromApi = itemsFromApi?.find((row) => String(row.id) === String(it.id));
+            if (fromApi) {
+              return {
+                ...it,
+                status: fromApi.status != null ? String(fromApi.status) : it.status,
+                refund_amount:
+                  fromApi.refund_amount != null
+                    ? parseFloat(String(fromApi.refund_amount)) || 0
+                    : it.refund_amount,
+              };
+            }
+            if (String(it.id) === String(refundItemModal.id)) {
+              const preview = itemRefundAmountWithTax(it.total_price, prev.tax_percentage ?? 0);
+              return {
+                ...it,
+                status: "refunded",
+                refund_amount: refundFromApi ?? preview.total,
+              };
+            }
+            return it;
+          }),
+        };
+      });
+      setRefundItemModal(null);
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : "Failed to refund item";
+      alert(msg);
+    } finally {
+      setProcessingItemRefund(false);
     }
   };
 
@@ -961,6 +1043,8 @@ export default function OrderDetails() {
   const linesSubtotal = order.items.reduce((s, i) => s + (Number.isFinite(i.total_price) ? i.total_price : 0), 0);
   const totalCharged = order.total_amount;
   const shipStored = Number(order.shipping_charge ?? 0);
+  const refundedAmount = Number(order.refund_amount ?? 0);
+  const netPaid = Math.max(0, Math.round((totalCharged - refundedAmount) * 100) / 100);
   const delta = Math.abs(linesSubtotal + shipStored - totalCharged);
   const guest = parseGuest(order.guest_checkout);
 
@@ -990,6 +1074,9 @@ export default function OrderDetails() {
     .trim()
     .replace(/\s+/g, "_");
   const canRefundFromAdmin = normalizedStatus === "awaiting_refund";
+  const itemRefundPreview = refundItemModal
+    ? itemRefundAmountWithTax(refundItemModal.total_price, order.tax_percentage ?? 0)
+    : null;
   const savedTrackingId = order.order_tracking_id?.trim() || "";
   const trackingDirty = trackingInput.trim() !== savedTrackingId;
   const openItemForStatus = openItemStatusId
@@ -1344,6 +1431,108 @@ export default function OrderDetails() {
           </div>
         )}
 
+        {refundItemModal && (
+          <div
+            className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="refund-item-modal-title"
+            onClick={() => {
+              if (!processingItemRefund) setRefundItemModal(null);
+            }}
+          >
+            <div
+              className="w-full max-w-md rounded-2xl border border-slate-200 bg-white p-6 shadow-xl"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <h2 id="refund-item-modal-title" className="text-lg font-bold text-slate-900">
+                Refund this item?
+              </h2>
+              <p className="mt-2 text-sm text-slate-600">
+                Refund ${formatMoney(itemRefundPreview?.total ?? 0)} for{" "}
+                <span className="font-semibold">{refundItemModal.product_name}</span> via Stripe
+                (${formatMoney(itemRefundPreview?.line ?? 0)} item
+                {Number(order.tax_percentage) > 0
+                  ? ` + $${formatMoney(itemRefundPreview?.tax ?? 0)} tax at ${formatMoney(
+                      Number(order.tax_percentage)
+                    )}%`
+                  : ""}
+                ). Original order totals are left unchanged. This cannot
+                be undone.
+              </p>
+              <div className="mt-6 flex flex-wrap justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={() => setRefundItemModal(null)}
+                  disabled={processingItemRefund}
+                  className="rounded-xl px-4 py-2.5 text-sm font-semibold text-slate-600 hover:bg-slate-100 disabled:opacity-50"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={confirmRefundItem}
+                  disabled={processingItemRefund}
+                  className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-2.5 text-sm font-semibold text-emerald-800 hover:bg-emerald-100 disabled:opacity-50"
+                >
+                  {processingItemRefund ? "Processing…" : "Yes, refund item"}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {pendingAwaitingRefundItemId && (
+          <div
+            className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="awaiting-refund-item-modal-title"
+            onClick={() => {
+              if (!updatingItemStatusId) setPendingAwaitingRefundItemId(null);
+            }}
+          >
+            <div
+              className="w-full max-w-md rounded-2xl border border-slate-200 bg-white p-6 shadow-xl"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <h2 id="awaiting-refund-item-modal-title" className="text-lg font-bold text-slate-900">
+                Mark awaiting refund?
+              </h2>
+              <p className="mt-2 text-sm text-slate-600">
+                Are you sure you want to mark{" "}
+                <span className="font-semibold">
+                  {order.items.find((it) => String(it.id) === String(pendingAwaitingRefundItemId))
+                    ?.product_name || "this item"}
+                </span>{" "}
+                as awaiting refund?
+              </p>
+              <div className="mt-6 flex flex-wrap justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={() => setPendingAwaitingRefundItemId(null)}
+                  disabled={updatingItemStatusId != null}
+                  className="rounded-xl px-4 py-2.5 text-sm font-semibold text-slate-600 hover:bg-slate-100 disabled:opacity-50"
+                >
+                  No
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    const itemId = pendingAwaitingRefundItemId;
+                    setPendingAwaitingRefundItemId(null);
+                    void handleItemStatusUpdate(itemId, "awaiting_refund");
+                  }}
+                  disabled={updatingItemStatusId != null}
+                  className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-2.5 text-sm font-semibold text-amber-800 hover:bg-amber-100 disabled:opacity-50"
+                >
+                  Yes, mark awaiting refund
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* Top summary — dense, all key facts */}
         <div className="overflow-hidden rounded-2xl border border-slate-800/20 bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 text-white shadow-xl shadow-slate-900/25">
           <div className="grid gap-px bg-slate-700/50 sm:grid-cols-2 lg:grid-cols-3">
@@ -1367,6 +1556,16 @@ export default function OrderDetails() {
               <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400">Amounts</p>
               <p className="mt-1 text-3xl font-bold tracking-tight">${formatMoney(totalCharged)}</p>
               <p className="mt-2 text-xs text-slate-400">Order total (stored)</p>
+              {refundedAmount > 0 ? (
+                <>
+                  <p className="mt-1 text-sm font-medium text-rose-300">
+                    Refunded ${formatMoney(refundedAmount)}
+                  </p>
+                  <p className="mt-1 text-sm font-semibold text-emerald-300">
+                    Net paid ${formatMoney(netPaid)}
+                  </p>
+                </>
+              ) : null}
               <p className="mt-1 text-sm text-slate-300">Lines sum ${formatMoney(linesSubtotal)}</p>
               {(order.shipping_method || shipStored > 0) && (
                 <p className="mt-1 text-sm text-slate-300">
@@ -1468,6 +1667,12 @@ export default function OrderDetails() {
               <DetailCell label="Payment method" value={formatPaymentMethod(order.payment_method)} />
               <DetailCell label="Payment status" value={dash(order.payment_status)} />
               <DetailCell label="Total amount" value={`$${formatMoney(order.total_amount)}`} />
+              {refundedAmount > 0 ? (
+                <>
+                  <DetailCell label="Refunded" value={`$${formatMoney(refundedAmount)}`} />
+                  <DetailCell label="Net paid" value={`$${formatMoney(netPaid)}`} />
+                </>
+              ) : null}
               <DetailCell label="Subtotal" value={`$${formatMoney(order.subtotal_amount ?? linesSubtotal)}`} />
               <DetailCell label="Shipping service" value={dash(order.shipping_method)} />
               {/* Carrier estimated delivery / charge details hidden for generic tracking-only admin view.
@@ -1574,6 +1779,10 @@ export default function OrderDetails() {
                           : selectedMods;
                       const itemStatus = item.status || "awaiting_artwork";
                       const itemStatusUpdating = updatingItemStatusId === lineKey;
+                      const itemStatusLocked = isOrderStatusLocked(itemStatus);
+                      const canRefundItem =
+                        canonicalOrderStatus(itemStatus) === "awaiting_refund";
+                      const itemRefundedAmt = Number(item.refund_amount ?? 0);
                       return (
                       <tr key={item.id} className="border-b border-slate-100 align-top hover:bg-slate-50/50">
                         <td className="px-3 py-3 pl-5">{renderThumb(item)}</td>
@@ -1621,6 +1830,16 @@ export default function OrderDetails() {
                             className="relative"
                             ref={openItemStatusId === lineKey ? itemStatusTriggerRef : undefined}
                           >
+                            {itemStatusLocked ? (
+                              <div
+                                className={`inline-flex max-w-[11.5rem] items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-semibold shadow-sm ring-1 ${getStatusStyles(
+                                  itemStatus
+                                )}`}
+                                title="Refunded items cannot be moved to another status."
+                              >
+                                <span className="truncate">{formatStatus(itemStatus)}</span>
+                              </div>
+                            ) : (
                             <button
                               type="button"
                               onClick={(e) => {
@@ -1677,6 +1896,22 @@ export default function OrderDetails() {
                                 />
                               </svg>
                             </button>
+                            )}
+                            {itemRefundedAmt > 0 ? (
+                              <p className="mt-1 text-[11px] font-medium text-rose-700">
+                                Refunded ${formatMoney(itemRefundedAmt)}
+                              </p>
+                            ) : null}
+                            {canRefundItem ? (
+                              <button
+                                type="button"
+                                onClick={() => setRefundItemModal(item)}
+                                disabled={processingItemRefund}
+                                className="mt-1.5 inline-flex items-center rounded-lg border border-emerald-200 bg-emerald-50 px-2.5 py-1.5 text-xs font-semibold text-emerald-800 shadow-sm hover:bg-emerald-100 disabled:opacity-50"
+                              >
+                                Refund item
+                              </button>
+                            ) : null}
                           </div>
                         </td>
                         <td className="px-3 py-3 align-top text-slate-700">
@@ -1727,6 +1962,16 @@ export default function OrderDetails() {
             <p className="text-base font-bold text-slate-900">
               Order total <span className="ml-2">${formatMoney(totalCharged)}</span>
             </p>
+            {refundedAmount > 0 ? (
+              <>
+                <p className="text-sm font-semibold text-rose-700">
+                  Refunded <span className="ml-2">${formatMoney(refundedAmount)}</span>
+                </p>
+                <p className="text-base font-bold text-slate-900">
+                  Net paid <span className="ml-2">${formatMoney(netPaid)}</span>
+                </p>
+              </>
+            ) : null}
           </div>
         </div>
 
@@ -1754,23 +1999,25 @@ export default function OrderDetails() {
               }}
               className="fixed z-[200] w-52 overflow-y-auto rounded-xl border border-slate-200 bg-white py-1 shadow-xl"
             >
-              {!statusOptions.some((o) => o.value === openItemStatusValue) ? (
-                <button
-                  type="button"
-                  onClick={() => handleItemStatusUpdate(openItemStatusId, openItemStatusValue)}
-                  className="w-full px-3 py-2 text-left text-xs font-medium text-slate-700 hover:bg-slate-50"
-                >
-                  {formatStatus(openItemStatusValue)}
-                </button>
-              ) : null}
-              {statusOptions.map((option) => {
+              {adminItemStatusOptionsFor(openItemStatusValue).map((option) => {
                 const selected =
                   String(option.value).toLowerCase() === String(openItemStatusValue).toLowerCase();
                 return (
                   <button
                     key={option.value}
                     type="button"
-                    onClick={() => handleItemStatusUpdate(openItemStatusId, option.value)}
+                    onClick={() => {
+                      if (
+                        option.value === "awaiting_refund" &&
+                        canonicalOrderStatus(openItemStatusValue) !== "awaiting_refund"
+                      ) {
+                        setPendingAwaitingRefundItemId(openItemStatusId);
+                        setOpenItemStatusId(null);
+                        setItemStatusMenuPos(null);
+                        return;
+                      }
+                      handleItemStatusUpdate(openItemStatusId, option.value);
+                    }}
                     className={`w-full px-3 py-2 text-left text-xs ${
                       selected
                         ? "bg-slate-50 font-semibold text-slate-900"

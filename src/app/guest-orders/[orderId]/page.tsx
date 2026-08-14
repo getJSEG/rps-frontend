@@ -22,7 +22,10 @@ import {
   orderItemNeedsCustomerArtworkUpload,
   type UploadApprovalOrderRow,
 } from "../../../utils/uploadApprovalPending";
-import { OrderLineArtworkDownloadCell } from "../../components/orders/OrderLineArtworkControls";
+import {
+  OrderLineArtworkDownloadCell,
+  OrderLineThumbnail,
+} from "../../components/orders/OrderLineArtworkControls";
 
 type OrderItem = {
   id?: number;
@@ -33,6 +36,7 @@ type OrderItem = {
   total_price?: number | string | null;
   /** Per-line fulfillment status (same values as order status). */
   status?: string | null;
+  refund_amount?: number | string | null;
   width_inches?: number | string | null;
   height_inches?: number | string | null;
   image_url?: string | null;
@@ -80,6 +84,8 @@ type GuestOrder = {
   tax_amount?: number | string | null;
   tax_percentage?: number | string | null;
   tax_name?: string | null;
+  refund_amount?: number | string | null;
+  refunded_at?: string | null;
   items?: OrderItem[] | null;
   order_tracking_id?: string | null;
   carrier?: string | null;
@@ -117,7 +123,7 @@ function itemStatusBadgeClass(status: string | null | undefined): string {
   )
     return "bg-amber-100 text-amber-900";
   if (c === "on_hold" || c === "cancelled") return "bg-orange-100 text-orange-900";
-  if (c === "awaiting_refund" || c === "refunded") return "bg-red-100 text-red-800";
+  if (c === "awaiting_refund" || c === "refunded" || c === "cancellation_requested") return "bg-red-100 text-red-800";
   return "bg-slate-100 text-slate-800";
 }
 
@@ -174,6 +180,8 @@ function GuestOrderTrackInner() {
   const [expandedModifierLines, setExpandedModifierLines] = useState<Record<string, boolean>>({});
   /** Which order line is opening the upload flow (prevents double navigation). */
   const [uploadBusyItemId, setUploadBusyItemId] = useState<number | null>(null);
+  const [itemCancelBusyId, setItemCancelBusyId] = useState<number | null>(null);
+  const [confirmItemCancelId, setConfirmItemCancelId] = useState<number | null>(null);
 
   const [trackingUrl, setTrackingUrl] = useState("");
 
@@ -269,6 +277,22 @@ function GuestOrderTrackInner() {
     } finally {
       setCancelBusy(false);
       setConfirmCancelOpen(false);
+    }
+  };
+
+  const submitItemCancellationRequest = async (itemId: number) => {
+    if (!orderId || !token) return;
+    setItemCancelBusyId(itemId);
+    setCancelMsg(null);
+    try {
+      await ordersAPI.requestGuestItemCancellation(orderId, itemId, token);
+      setCancelMsg("Item cancellation requested.");
+      setConfirmItemCancelId(null);
+      await loadOrder();
+    } catch (e: unknown) {
+      setCancelMsg(e instanceof Error ? e.message : "Failed to request item cancellation.");
+    } finally {
+      setItemCancelBusyId(null);
     }
   };
 
@@ -468,20 +492,32 @@ function GuestOrderTrackInner() {
                       orderItemNeedsCustomerArtworkUpload(order.status, {
                         id: item.id,
                         customer_artwork_url: item.customer_artwork_url,
+                        status: item.status,
                       });
-                    const showCancelItem = canCancelOrderItem(
-                      item.status || "awaiting_artwork",
-                      order.items?.length ?? 0
-                    );
+                    const showCancelItem =
+                      itemIdNum != null &&
+                      canCancelOrderItem(item.status || "awaiting_artwork", {
+                        orderStatus: order.status,
+                        items: order.items,
+                      });
                     return (
                     <div
                       key={`${item.id ?? idx}`}
                       className="rounded-md border border-gray-100 p-3"
                     >
                       <div className="flex items-start justify-between gap-3">
-                        <p className="min-w-0 font-medium text-gray-900">
-                          {item.product_name || "Item"}
-                        </p>
+                        <div className="flex min-w-0 items-start gap-3">
+                          <OrderLineThumbnail
+                            item={{
+                              id: item.id,
+                              image_url: item.image_url,
+                              product_name: item.product_name,
+                            }}
+                          />
+                          <p className="min-w-0 font-medium text-gray-900">
+                            {item.product_name || "Item"}
+                          </p>
+                        </div>
                         <div className="flex shrink-0 flex-col items-end gap-1.5">
                           <span
                             className={`inline-flex max-w-full rounded-full px-2.5 py-0.5 text-xs font-medium ${itemStatusBadgeClass(
@@ -490,13 +526,24 @@ function GuestOrderTrackInner() {
                           >
                             {customerOrderStatusTitle(item.status || "awaiting_artwork")}
                           </span>
-                          {showCancelItem ? (
+                          {Number(item.refund_amount) > 0 ? (
+                            <p className="text-[11px] font-medium text-rose-700">
+                              Refunded ${money(item.refund_amount)}
+                            </p>
+                          ) : null}
+                          {showCancelItem && itemIdNum != null ? (
                             <button
                               type="button"
-                              className="inline-flex items-center rounded-lg border border-rose-200 bg-rose-50 px-2.5 py-1.5 text-xs font-semibold text-rose-800 shadow-sm transition hover:bg-rose-100"
+                              onClick={() =>
+                                setConfirmItemCancelId((prev) =>
+                                  prev === itemIdNum ? null : itemIdNum
+                                )
+                              }
+                              disabled={itemCancelBusyId != null}
+                              className="inline-flex items-center rounded-lg border border-rose-200 bg-rose-50 px-2.5 py-1.5 text-xs font-semibold text-rose-800 shadow-sm transition hover:bg-rose-100 disabled:opacity-60"
                               title="Cancel this item"
                             >
-                              Cancel item
+                              {itemCancelBusyId === itemIdNum ? "Requesting…" : "Cancel item"}
                             </button>
                           ) : null}
                         </div>
@@ -585,6 +632,28 @@ function GuestOrderTrackInner() {
                   <span>Total</span>
                   <span>${money(order.total_amount)}</span>
                 </div>
+                {Number(order.refund_amount) > 0 ? (
+                  <>
+                    <div className="flex justify-between text-sm font-semibold text-rose-700">
+                      <span>Refunded</span>
+                      <span>${money(order.refund_amount)}</span>
+                    </div>
+                    <div className="flex justify-between text-base font-bold text-gray-900">
+                      <span>Net paid</span>
+                      <span>
+                        $
+                        {money(
+                          Math.max(
+                            0,
+                            Math.round(
+                              (Number(order.total_amount) - Number(order.refund_amount)) * 100
+                            ) / 100
+                          )
+                        )}
+                      </span>
+                    </div>
+                  </>
+                ) : null}
               </div>
             </div>
 
@@ -632,6 +701,37 @@ function GuestOrderTrackInner() {
           </div>
         </div>
       )}
+      {confirmItemCancelId != null ? (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
+          onClick={() => setConfirmItemCancelId(null)}
+        >
+          <div
+            className="w-full max-w-sm rounded-xl border border-gray-200 bg-white p-4 shadow-lg"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <p className="text-sm text-gray-700">Request cancellation for this item?</p>
+            <div className="mt-4 flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setConfirmItemCancelId(null)}
+                disabled={itemCancelBusyId != null}
+                className="rounded-md px-3 py-2 text-sm font-medium text-gray-600 hover:bg-gray-100 disabled:opacity-60"
+              >
+                No
+              </button>
+              <button
+                type="button"
+                onClick={() => void submitItemCancellationRequest(confirmItemCancelId)}
+                disabled={itemCancelBusyId != null}
+                className="rounded-md border border-rose-200 bg-rose-50 px-3 py-2 text-sm font-semibold text-rose-800 hover:bg-rose-100 disabled:opacity-60"
+              >
+                {itemCancelBusyId === confirmItemCancelId ? "Requesting..." : "Yes, request"}
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }

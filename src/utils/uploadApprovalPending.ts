@@ -1,4 +1,4 @@
-import { canonicalOrderStatus } from "./orderStatuses";
+import { canonicalOrderStatus, isInactiveOrderItemStatus } from "./orderStatuses";
 
 export type UploadApprovalOrderItem = {
   id?: number | null;
@@ -12,6 +12,7 @@ export type UploadApprovalOrderItem = {
   graphic_scenario_enabled?: boolean | null;
   product_graphic_scenario_enabled?: boolean | null;
   customer_artwork_url?: string | null;
+  status?: string | null;
 };
 
 export type UploadApprovalOrderRow = {
@@ -81,9 +82,10 @@ function orderNeedsUploadOrApproval(status: string | null | undefined): boolean 
  */
 export function orderItemNeedsCustomerArtworkUpload(
   orderStatus: string | null | undefined,
-  item: Pick<UploadApprovalOrderItem, "id" | "customer_artwork_url">
+  item: Pick<UploadApprovalOrderItem, "id" | "customer_artwork_url" | "status">
 ): boolean {
   if (!orderNeedsUploadOrApproval(orderStatus)) return false;
+  if (isInactiveOrderItemStatus(item.status)) return false;
   const itemId = item.id != null && Number.isFinite(Number(item.id)) ? Number(item.id) : null;
   if (itemId == null || itemId <= 0) return false;
   const url = item.customer_artwork_url != null ? String(item.customer_artwork_url).trim() : "";
@@ -116,6 +118,7 @@ function buildJobsFromOrders(orders: UploadApprovalOrderRow[], onlyPending: bool
       continue;
     }
     items.forEach((it, idx) => {
+      if (isInactiveOrderItemStatus(it.status)) return;
       const url = it.customer_artwork_url != null ? String(it.customer_artwork_url).trim() : "";
       const hasArtwork = Boolean(url);
       if (onlyPending && hasArtwork) return;

@@ -11,6 +11,7 @@ import {
 import { isAuthenticated } from "../../utils/roles";
 import {
   canCancelOrderItem,
+  canShowItemCancelColumn,
   canonicalOrderStatus,
   customerOrderProgressFirstStepLabel,
   customerOrderProgressKind,
@@ -48,6 +49,7 @@ type OrderItem = {
   total_price?: number | string | null;
   /** Per-line fulfillment status (same values as order status). */
   status?: string | null;
+  refund_amount?: number | string | null;
   image_url?: string | null;
   width_inches?: number | string | null;
   height_inches?: number | string | null;
@@ -113,6 +115,8 @@ type OrderRow = {
   tax_name?: string | null;
   tax_percentage?: number | string | null;
   tax_amount?: number | string | null;
+  refund_amount?: number | string | null;
+  refunded_at?: string | null;
   order_tracking_id?: string | null;
   carrier?: string | null;
   carrier_service_type?: string | null;
@@ -194,7 +198,7 @@ function statusBadgeClass(status: string | null | undefined): string {
   )
     return "bg-amber-100 text-amber-900";
   if (c === "on_hold" || c === "cancelled") return "bg-orange-100 text-orange-900";
-  if (c === "awaiting_refund" || c === "refunded") return "bg-red-100 text-red-800";
+  if (c === "awaiting_refund" || c === "refunded" || c === "cancellation_requested") return "bg-red-100 text-red-800";
   return "bg-slate-100 text-slate-800";
 }
 
@@ -425,6 +429,11 @@ export default function Orders() {
   const [expandedModifierLines, setExpandedModifierLines] = useState<Record<string, boolean>>({});
   const [requestingCancellationId, setRequestingCancellationId] = useState<number | null>(null);
   const [confirmCancellationId, setConfirmCancellationId] = useState<number | null>(null);
+  const [requestingItemCancelKey, setRequestingItemCancelKey] = useState<string | null>(null);
+  const [confirmItemCancel, setConfirmItemCancel] = useState<{
+    orderId: number;
+    itemId: number;
+  } | null>(null);
 
   useEffect(() => {
     setLoggedIn(isAuthenticated());
@@ -543,6 +552,35 @@ export default function Orders() {
       alert(msg);
     } finally {
       setRequestingCancellationId(null);
+    }
+  };
+
+  const requestItemCancellation = async (orderId: number, itemId: number) => {
+    const key = `${orderId}-${itemId}`;
+    try {
+      setRequestingItemCancelKey(key);
+      const response = await ordersAPI.requestItemCancellation(String(orderId), String(itemId));
+      const nextStatus = String(response?.item?.status || "cancellation_requested");
+      setOrders((prev) =>
+        prev.map((row) =>
+          row.id === orderId
+            ? {
+                ...row,
+                items: Array.isArray(row.items)
+                  ? row.items.map((it) =>
+                      Number(it.id) === itemId ? { ...it, status: nextStatus } : it
+                    )
+                  : row.items,
+              }
+            : row
+        )
+      );
+      setConfirmItemCancel(null);
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : "Failed to request item cancellation";
+      alert(msg);
+    } finally {
+      setRequestingItemCancelKey(null);
     }
   };
 
@@ -725,6 +763,7 @@ export default function Orders() {
               const shippingMethodLabel = order.shipping_method?.trim() || null;
               const isStorePickup = String(order.shipping_mode || "").toLowerCase() === "store_pickup";
               const canRequestCancellation = canRequestCancellationStatus(order.status);
+              const showItemCancelColumn = canShowItemCancelColumn(order.status, items);
               const showTrackingNumber =
                 canonicalOrderStatus(order.status) === "shipped" && !!order.order_tracking_id?.trim();
 
@@ -956,7 +995,7 @@ export default function Orders() {
                                   <th className="whitespace-nowrap px-3 py-3 pl-4"> </th>
                                   <th className="px-3 py-3">Product</th>
                                   <th className="whitespace-nowrap px-3 py-3">Status</th>
-                                  {items.length > 1 ? (
+                                  {showItemCancelColumn ? (
                                     <th className="whitespace-nowrap px-3 py-3">Action</th>
                                   ) : null}
                                   <th className="whitespace-nowrap px-3 py-3">Download</th>
@@ -976,6 +1015,11 @@ export default function Orders() {
                                     selectedMods.length > 2 && !modifiersOpen
                                       ? selectedMods.slice(0, 2)
                                       : selectedMods;
+                                  const itemCancelKey = `${order.id}-${it.id}`;
+                                  const showCancelItem = canCancelOrderItem(it.status || "awaiting_artwork", {
+                                    orderStatus: order.status,
+                                    items,
+                                  });
                                   return (
                                     <tr
                                       key={lineKey}
@@ -1027,16 +1071,31 @@ export default function Orders() {
                                         >
                                           {formatStatus(it.status || "awaiting_artwork")}
                                         </span>
+                                        {Number(it.refund_amount) > 0 ? (
+                                          <p className="mt-1 text-[11px] font-medium text-rose-700">
+                                            Refunded ${formatMoney(it.refund_amount)}
+                                          </p>
+                                        ) : null}
                                       </td>
-                                      {items.length > 1 ? (
+                                      {showItemCancelColumn ? (
                                         <td className="px-3 py-3 align-top">
-                                          {canCancelOrderItem(it.status || "awaiting_artwork", items.length) ? (
+                                          {showCancelItem && it.id != null ? (
                                             <button
                                               type="button"
-                                              className="inline-flex items-center rounded-lg border border-rose-200 bg-rose-50 px-2.5 py-1.5 text-xs font-semibold text-rose-800 shadow-sm transition hover:bg-rose-100"
+                                              onClick={() =>
+                                                setConfirmItemCancel((prev) =>
+                                                  prev?.orderId === order.id && prev.itemId === Number(it.id)
+                                                    ? null
+                                                    : { orderId: order.id, itemId: Number(it.id) }
+                                                )
+                                              }
+                                              disabled={requestingItemCancelKey === itemCancelKey}
+                                              className="inline-flex items-center rounded-lg border border-rose-200 bg-rose-50 px-2.5 py-1.5 text-xs font-semibold text-rose-800 shadow-sm transition hover:bg-rose-100 disabled:opacity-50"
                                               title="Cancel this item"
                                             >
-                                              Cancel item
+                                              {requestingItemCancelKey === itemCancelKey
+                                                ? "Requesting…"
+                                                : "Cancel item"}
                                             </button>
                                           ) : null}
                                         </td>
@@ -1084,6 +1143,29 @@ export default function Orders() {
                             <span>Order total</span>
                             <span>${formatMoney(order.total_amount)}</span>
                           </div>
+                          {Number(order.refund_amount) > 0 ? (
+                            <>
+                              <div className="flex justify-between text-sm font-semibold text-rose-700">
+                                <span>Refunded</span>
+                                <span>${formatMoney(order.refund_amount)}</span>
+                              </div>
+                              <div className="flex justify-between text-base font-bold text-gray-900">
+                                <span>Net paid</span>
+                                <span>
+                                  $
+                                  {formatMoney(
+                                    Math.max(
+                                      0,
+                                      Math.round(
+                                        (Number(order.total_amount) - Number(order.refund_amount)) *
+                                          100
+                                      ) / 100
+                                    )
+                                  )}
+                                </span>
+                              </div>
+                            </>
+                          ) : null}
                         </div>
                       </div>
                     </div>
@@ -1094,6 +1176,42 @@ export default function Orders() {
           </ul>
         )}
       </div>
+      {confirmItemCancel ? (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
+          onClick={() => setConfirmItemCancel(null)}
+        >
+          <div
+            className="w-full max-w-sm rounded-xl border border-gray-200 bg-white p-4 shadow-lg"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <p className="text-sm text-gray-700">Request cancellation for this item?</p>
+            <div className="mt-4 flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setConfirmItemCancel(null)}
+                disabled={requestingItemCancelKey != null}
+                className="rounded-md px-3 py-2 text-sm font-medium text-gray-600 hover:bg-gray-100 disabled:opacity-60"
+              >
+                No
+              </button>
+              <button
+                type="button"
+                onClick={() =>
+                  requestItemCancellation(confirmItemCancel.orderId, confirmItemCancel.itemId)
+                }
+                disabled={requestingItemCancelKey != null}
+                className="rounded-md border border-rose-200 bg-rose-50 px-3 py-2 text-sm font-semibold text-rose-800 hover:bg-rose-100 disabled:opacity-60"
+              >
+                {requestingItemCancelKey ===
+                `${confirmItemCancel.orderId}-${confirmItemCancel.itemId}`
+                  ? "Requesting..."
+                  : "Yes, request"}
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }
