@@ -1504,14 +1504,14 @@ async function apiCall(endpoint: string, options: RequestInit = {}) {
         (error?.message && typeof error.message === 'string' && error.message.toLowerCase().includes('network'));
 
       if (isNetworkError) {
-        const baseUrl = API_BASE_URL.replace(/\/api\/?$/, '') || 'http://localhost:5000';
+        const baseUrl = API_BASE_URL.replace(/\/api\/?$/, '') || 'http://localhost:8080';
         console.error(
           'API unreachable. Is the backend running? Expected base URL:',
           baseUrl,
-          '\nStart backend: cd backend && npm run dev'
+          '\nStart backend: cd rps-backend && npm run dev'
         );
         throw new Error(
-          `Cannot connect to the API. Start the backend: cd backend && npm run dev (expected: ${baseUrl})`
+          `Cannot connect to the API. Start the backend: cd rps-backend && npm run dev (expected: ${baseUrl})`
         );
       }
 
@@ -1553,18 +1553,18 @@ export const authAPI = {
   getProfile: async () => {
     return apiCall('/auth/profile');
   },
-  /** Send 6-digit code to email for password reset */
-  sendResetCode: async (email: string) => {
-    return apiCall('/auth/send-reset-code', {
+  /** Request a password reset link by email. Always resolves with a generic message. */
+  forgotPassword: async (email: string) => {
+    return apiCall('/auth/forgot-password', {
       method: 'POST',
       body: JSON.stringify({ email: email.trim() }),
     });
   },
-  /** Reset password with email + code from email */
-  resetPasswordWithCode: async (email: string, code: string, newPassword: string) => {
+  /** Consume a single-use reset token from the emailed link */
+  resetPassword: async (token: string, newPassword: string) => {
     return apiCall('/auth/reset-password', {
       method: 'POST',
-      body: JSON.stringify({ email: email.trim(), code: code.trim(), newPassword }),
+      body: JSON.stringify({ token, newPassword }),
     });
   },
 };

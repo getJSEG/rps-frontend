@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useCallback } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { ordersAPI, cartAPI } from "../../utils/api";
@@ -477,34 +477,38 @@ export default function Orders() {
     }
   }, [placedOrderId, authReady, loggedIn]);
 
-  useEffect(() => {
-    if (!authReady) return;
+  const loadOrders = useCallback(async () => {
     if (!loggedIn) {
       setLoading(false);
       setOrders([]);
+      setError(null);
       return;
     }
-    let cancelled = false;
-    (async () => {
-      setLoading(true);
-      setError(null);
-      try {
-        const res = (await ordersAPI.getAll({ limit: LIST_LIMIT, page: 1 })) as { orders?: OrderRow[] };
-        const list = Array.isArray(res?.orders) ? res.orders : [];
-        if (!cancelled) setOrders(list);
-      } catch (e: unknown) {
-        if (!cancelled) {
-          setError(e instanceof Error ? e.message : "Could not load orders");
-          setOrders([]);
-        }
-      } finally {
-        if (!cancelled) setLoading(false);
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [authReady, loggedIn]);
+    setLoading(true);
+    setError(null);
+    try {
+      const res = (await ordersAPI.getAll({ limit: LIST_LIMIT, page: 1 })) as { orders?: OrderRow[] };
+      const list = Array.isArray(res?.orders) ? res.orders : [];
+      setOrders(list);
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : "Could not load orders");
+      setOrders([]);
+    } finally {
+      setLoading(false);
+    }
+  }, [loggedIn]);
+
+  useEffect(() => {
+    if (!authReady) return;
+    void loadOrders();
+  }, [authReady, loadOrders]);
+
+  const isApiOfflineError = Boolean(
+    error &&
+      (error.includes("Cannot connect to the API") ||
+        error.toLowerCase().includes("failed to fetch") ||
+        error.toLowerCase().includes("network"))
+  );
 
   const filteredOrders = useMemo(() => {
     return orders.filter((o) => matchesFilter(o, filterOption) && matchesSearch(o, searchQuery));
@@ -663,7 +667,28 @@ export default function Orders() {
           </div>
         ) : error ? (
           <div className="bg-white border border-red-200 p-8 text-center rounded-lg">
-            <p className="text-red-700">{error}</p>
+            {isApiOfflineError ? (
+              <>
+                <p className="text-red-700 font-medium mb-2">Backend is not reachable</p>
+                <p className="text-sm text-gray-600 mb-1">
+                  The email link opened correctly. Orders load from the API at{" "}
+                  <code className="text-xs bg-gray-100 px-1 rounded">http://localhost:8080</code>.
+                </p>
+                <p className="text-sm text-gray-600 mb-4">
+                  In a terminal run:{" "}
+                  <code className="text-xs bg-gray-100 px-1 rounded">cd rps-backend && npm run dev</code>
+                </p>
+                <button
+                  type="button"
+                  onClick={() => void loadOrders()}
+                  className="inline-flex items-center justify-center rounded-md bg-[#0B6BCB] px-4 py-2 text-sm font-medium text-white hover:bg-[#0959a8]"
+                >
+                  Retry
+                </button>
+              </>
+            ) : (
+              <p className="text-red-700">{error}</p>
+            )}
           </div>
         ) : filteredOrders.length === 0 ? (
           <div className="bg-white border border-gray-200 p-8 text-center rounded-lg shadow-sm">
