@@ -17,6 +17,7 @@ import {
   customerOrderStatusDescription,
   customerOrderStatusTitle,
 } from "../../../utils/orderStatuses";
+import { couponLineLabel } from "../../../utils/couponLabel";
 import {
   buildPendingUploadJobsFromOrders,
   orderItemNeedsCustomerArtworkUpload,
@@ -84,6 +85,10 @@ type GuestOrder = {
   tax_amount?: number | string | null;
   tax_percentage?: number | string | null;
   tax_name?: string | null;
+  coupon_code?: string | null;
+  coupon_discount_amount?: number | string | null;
+  coupon_discount_type?: string | null;
+  coupon_discount_value?: number | string | null;
   refund_amount?: number | string | null;
   refunded_at?: string | null;
   items?: OrderItem[] | null;
@@ -614,8 +619,20 @@ function GuestOrderTrackInner() {
               <div className="mt-4 max-w-xs space-y-1 text-sm">
                 <div className="flex justify-between text-gray-600">
                   <span>Subtotal</span>
-                  <span>${money(order.subtotal_amount)}</span>
+                  <span>
+                    $
+                    {money(
+                      Number(order.subtotal_amount) +
+                        (Number(order.coupon_discount_amount) > 0 ? Number(order.coupon_discount_amount) : 0)
+                    )}
+                  </span>
                 </div>
+                {Number(order.coupon_discount_amount) > 0 ? (
+                  <div className="flex justify-between text-emerald-700">
+                    <span>{couponLineLabel(order)}</span>
+                    <span>-${money(order.coupon_discount_amount)}</span>
+                  </div>
+                ) : null}
                 <div className="flex justify-between text-gray-600">
                   <span>
                     Shipping{order.shipping_method?.trim() ? ` (${order.shipping_method})` : ""}

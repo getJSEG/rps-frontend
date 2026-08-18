@@ -14,8 +14,10 @@ import {
   shippingRatesAPI,
   fedexAPI,
   taxesAPI,
+  couponsAPI,
   effectiveOrderShipping,
   mergedShippingFromCartItems,
+  orderQualifiesForFreeShipping,
   cartShippableLinesAllFedexQuoted,
   fedexEstimatedDeliveryFromCart,
   fedexDeliveryEstimateWithProduction,
@@ -29,6 +31,7 @@ import {
   type TaxEstimateResponse,
 } from "../../utils/api";
 import { isAuthenticated } from "../../utils/roles";
+import { couponOfferLabel } from "../../utils/couponLabel";
 
 interface Address {
   id: number;
@@ -250,6 +253,15 @@ export default function CheckoutPage() {
   const [guestTaxEstimate, setGuestTaxEstimate] = useState<TaxEstimateResponse | null>(null);
   const [guestTaxLoading, setGuestTaxLoading] = useState(false);
   const [guestTaxError, setGuestTaxError] = useState<string | null>(null);
+  const [couponInput, setCouponInput] = useState("");
+  const [appliedCoupon, setAppliedCoupon] = useState<{
+    code: string;
+    discountAmount: number;
+    discountType: string;
+    discountValue: number;
+  } | null>(null);
+  const [couponError, setCouponError] = useState<string | null>(null);
+  const [couponApplying, setCouponApplying] = useState(false);
   const lastFedexQuoteKeyRef = useRef("");
   const fedexRatesRunRef = useRef(0);
   /** Stable fingerprint so cart reload with same contents does not retrigger FedEx. */
@@ -461,19 +473,24 @@ export default function CheckoutPage() {
   }, [clientSecret, stripePublishableKey]);
 
   const subtotal = cartItems.reduce((sum, i) => sum + checkoutItemLineSubtotal(i), 0);
+  const couponDiscount = roundMoney2(appliedCoupon?.discountAmount || 0);
   const shippingMode =
     cartItems.length > 0 && cartItems.every((i) => String(i.shippingMode || "").toLowerCase() === "store_pickup")
       ? "store_pickup"
       : "blind_drop_ship";
   const storePickupOrder = shippingMode === "store_pickup";
+  const loggedInCheckout = isAuthenticated();
+  const productSubtotal = clientSecret && orderSummary
+    ? Number(orderSummary.subtotal)
+    : roundMoney2(Math.max(0, (orderSummary?.subtotal ?? subtotal) - couponDiscount));
+  const displaySubtotal = roundMoney2(productSubtotal + couponDiscount);
   const shipping = effectiveOrderShipping(
     mergedShippingFromCartItems(cartItems, shippingMethods, shippingRates, storePickupOrder),
-    subtotal,
+    productSubtotal,
     freeShippingPolicy,
     storePickupOrder
   );
-  const loggedInCheckout = isAuthenticated();
-  const shownSubtotal = orderSummary?.subtotal ?? subtotal;
+  const shownSubtotal = productSubtotal;
   const checkoutRequiresFedexQuote = !loggedInCheckout && shippingMode !== "store_pickup" && cartItems.length > 0;
   const loggedInMissingFedexQuote =
     loggedInCheckout &&
@@ -491,7 +508,8 @@ export default function CheckoutPage() {
   const guestCheckoutReady = guestEmailOk && guestAddressOk;
   const shownShipping = (() => {
     if (clientSecret && orderSummary) return orderSummary.shipping;
-    if (!checkoutRequiresFedexQuote) return orderSummary?.shipping ?? shipping;
+    if (!checkoutRequiresFedexQuote) return shipping;
+    if (orderQualifiesForFreeShipping(productSubtotal, freeShippingPolicy, storePickupOrder)) return 0;
     return selectedFedexRate ? Number(selectedFedexRate.totalCharge) || 0 : 0;
   })();
   const shippingAmountPendingFedex =
@@ -754,6 +772,40 @@ export default function CheckoutPage() {
     billingForm.postcode,
   ]);
 
+  const applyCoupon = async () => {
+    if (clientSecret) return;
+    const code = couponInput.trim();
+    if (!code) {
+      setCouponError("Enter a coupon code.");
+      return;
+    }
+    setCouponApplying(true);
+    setCouponError(null);
+    try {
+      const original = roundMoney2(orderSummary?.subtotal ?? subtotal);
+      const res = await couponsAPI.preview({ code, subtotal: original });
+      setAppliedCoupon({
+        code: res.code,
+        discountAmount: Number(res.discountAmount) || 0,
+        discountType: String(res.discountType || ""),
+        discountValue: Number(res.discountValue) || 0,
+      });
+      setCouponInput(res.code);
+    } catch (e) {
+      setAppliedCoupon(null);
+      setCouponError(e instanceof Error ? e.message : "This coupon could not be applied.");
+    } finally {
+      setCouponApplying(false);
+    }
+  };
+
+  const removeCoupon = () => {
+    if (clientSecret) return;
+    setAppliedCoupon(null);
+    setCouponError(null);
+    setCouponInput("");
+  };
+
   const handlePlaceOrder = async () => {
     if (!canProceedToPayment) return;
     if (loggedInMissingFedexQuote) {
@@ -819,9 +871,12 @@ export default function CheckoutPage() {
             undefined,
             shipAddrId != null && billAddrId != null
               ? { shippingAddressId: Number(shipAddrId), billingAddressId: Number(billAddrId) }
-              : undefined
+              : undefined,
+            appliedCoupon?.code
           )
-        : await ordersAPI.createPaymentIntent(items, {
+        : await ordersAPI.createPaymentIntent(
+            items,
+            {
             email: guestEmail.trim(),
             fullName: guestFullName.trim() || undefined,
             phone: guestPhone.trim() || undefined,
@@ -833,7 +888,10 @@ export default function CheckoutPage() {
               postcode: billingForm.postcode.trim(),
               country: billingForm.country || "United States",
             },
-          }) as {
+          },
+            undefined,
+            appliedCoupon?.code
+          ) as {
             orderId: number;
             orderNumber?: string;
             clientSecret: string | null;
@@ -845,6 +903,8 @@ export default function CheckoutPage() {
             taxName?: string | null;
             taxPercentage?: number;
             total?: number;
+            couponCode?: string | null;
+            couponDiscountAmount?: number;
           };
       if (
         Number.isFinite(Number(res.subtotal)) &&
@@ -860,6 +920,8 @@ export default function CheckoutPage() {
           taxName: res.taxName ?? null,
           taxPercentage: Number(res.taxPercentage),
           total: Number(res.total),
+          couponCode: res.couponCode ?? appliedCoupon?.code ?? null,
+          couponDiscountAmount: Number(res.couponDiscountAmount ?? appliedCoupon?.discountAmount ?? 0),
         });
       }
       const guestToken = !loggedInCheckout ? String(res.guestTrackingToken || "").trim() : "";
@@ -1265,11 +1327,79 @@ export default function CheckoutPage() {
                     );
                   })}
                 </div>
+                {!clientSecret ? (
+                  <div className="mb-4">
+                    {appliedCoupon ? (
+                      <div className="flex items-center justify-between gap-2 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2.5 text-sm">
+                        <p className="min-w-0 text-emerald-800">
+                          <span className="font-medium">Coupon applied</span>
+                          {" · "}
+                          <span className="font-semibold font-mono">{appliedCoupon.code}</span>
+                        </p>
+                        <button
+                          type="button"
+                          onClick={removeCoupon}
+                          className="shrink-0 rounded-md px-2 py-1 text-xs font-semibold text-emerald-800 transition hover:bg-emerald-100"
+                        >
+                          Remove
+                        </button>
+                      </div>
+                    ) : (
+                      <div className="flex overflow-hidden rounded-lg border border-gray-300 bg-white shadow-sm focus-within:border-blue-500 focus-within:ring-2 focus-within:ring-blue-500/20">
+                        <div className="relative min-w-0 flex-1">
+                          <span className="pointer-events-none absolute inset-y-0 left-3 flex items-center text-gray-400" aria-hidden>
+                            <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 5v2m0 4v2m0 4v2M5 5a2 2 0 00-2 2v3a2 2 0 110 4v3a2 2 0 002 2h14a2 2 0 002-2v-3a2 2 0 110-4V7a2 2 0 00-2-2H5z" />
+                            </svg>
+                          </span>
+                          <input
+                            type="text"
+                            value={couponInput}
+                            onChange={(e) => {
+                              setCouponInput(e.target.value.toUpperCase());
+                              setCouponError(null);
+                            }}
+                            onKeyDown={(e) => {
+                              if (e.key === "Enter") {
+                                e.preventDefault();
+                                void applyCoupon();
+                              }
+                            }}
+                            placeholder="Coupon code"
+                            className="w-full border-0 bg-transparent py-2.5 pl-10 pr-3 text-sm font-medium uppercase tracking-wide text-gray-900 placeholder:font-normal placeholder:tracking-normal placeholder:normal-case placeholder:text-gray-400 focus:outline-none focus:ring-0"
+                            autoComplete="off"
+                          />
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => void applyCoupon()}
+                          disabled={couponApplying || !couponInput.trim()}
+                          className="shrink-0 bg-blue-500 px-4 text-sm font-semibold text-white transition hover:bg-blue-600 disabled:cursor-not-allowed disabled:bg-blue-300"
+                        >
+                          {couponApplying ? "Applying…" : "Apply"}
+                        </button>
+                      </div>
+                    )}
+                    {couponError ? <p className="mt-1.5 text-xs text-rose-600">{couponError}</p> : null}
+                  </div>
+                ) : null}
                 <div className="space-y-2 mb-4">
                   <div className="flex justify-between text-gray-700">
                     <span>Subtotal:</span>
-                    <span>${shownSubtotal.toFixed(2)}</span>
+                    <span>${displaySubtotal.toFixed(2)}</span>
                   </div>
+                  {couponDiscount > 0 ? (
+                    <div className="flex justify-between text-emerald-700">
+                      <span>
+                        Coupon
+                        {appliedCoupon?.code ? (
+                          <span className="font-semibold font-mono text-[13px]"> ({couponOfferLabel(appliedCoupon)})</span>
+                        ) : null}
+                        :
+                      </span>
+                      <span>-${couponDiscount.toFixed(2)}</span>
+                    </div>
+                  ) : null}
                   {checkoutRequiresFedexQuote && (
                     <div className="rounded-md border border-gray-200 bg-gray-50 p-3 text-sm">
                       <div className="mb-2 flex items-center justify-between gap-2">
