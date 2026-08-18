@@ -19,6 +19,7 @@ import {
   customerOrderStatusTitle,
   isRefundLikeStatus,
 } from "../../utils/orderStatuses";
+import { couponOfferLabel } from "../../utils/couponLabel";
 
 const LIST_LIMIT = 15;
 
@@ -115,6 +116,10 @@ type OrderRow = {
   tax_name?: string | null;
   tax_percentage?: number | string | null;
   tax_amount?: number | string | null;
+  coupon_code?: string | null;
+  coupon_discount_amount?: number | string | null;
+  coupon_discount_type?: string | null;
+  coupon_discount_value?: number | string | null;
   refund_amount?: number | string | null;
   refunded_at?: string | null;
   order_tracking_id?: string | null;
@@ -743,7 +748,10 @@ export default function Orders() {
               const shippingChargeNum = Number(order.shipping_charge ?? 0);
               const orderTax = Number(order.tax_amount ?? 0);
               const orderTaxPct = Number(order.tax_percentage ?? 0);
-              const orderSubtotal = Number(order.subtotal_amount ?? subtotal);
+              const couponAmt = Number(order.coupon_discount_amount ?? 0);
+              const couponOffer = couponOfferLabel(order);
+              const discountedSubtotal = Number(order.subtotal_amount ?? subtotal);
+              const orderSubtotal = Math.round((discountedSubtotal + (couponAmt > 0 ? couponAmt : 0)) * 100) / 100;
               const isOpen = !!expanded[order.id];
               const whenPlaced = order.created_at
                 ? new Date(order.created_at).toLocaleString(undefined, {
@@ -1127,6 +1135,17 @@ export default function Orders() {
                             <span>Items subtotal</span>
                             <span>${formatMoney(orderSubtotal)}</span>
                           </div>
+                          {couponAmt > 0 && (
+                            <div className="flex justify-between text-emerald-700">
+                              <span>
+                                Coupon
+                                {couponOffer ? (
+                                  <span className="font-semibold font-mono text-[13px]"> ({couponOffer})</span>
+                                ) : null}
+                              </span>
+                              <span>-${formatMoney(couponAmt)}</span>
+                            </div>
+                          )}
                           {shippingChargeNum > 0 && (
                             <div className="flex justify-between text-gray-600">
                               <span>Shipping</span>

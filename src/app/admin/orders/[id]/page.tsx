@@ -18,6 +18,7 @@ import {
   canonicalOrderStatus,
   isOrderStatusLocked,
 } from "../../../../utils/orderStatuses";
+import { couponLineLabel, couponOfferLabel } from "../../../../utils/couponLabel";
 
 interface OrderItem {
   id: string;
@@ -27,6 +28,7 @@ interface OrderItem {
   quantity: number;
   unit_price: number;
   total_price: number;
+  discount_amount?: number;
   /** Per-line fulfillment status (admin only; independent of order.status). */
   status?: string;
   refund_amount?: number;
@@ -118,6 +120,10 @@ interface Order {
   tax_name?: string | null;
   tax_percentage?: number;
   tax_amount?: number;
+  coupon_code?: string | null;
+  coupon_discount_amount?: number;
+  coupon_discount_type?: string | null;
+  coupon_discount_value?: number | null;
   refund_amount?: number;
   refunded_at?: string | null;
   /** Optional carrier / shipment ID (DB: order_tracking_id). */
@@ -572,6 +578,10 @@ export default function OrderDetails() {
                 quantity: parseInt(String(item.quantity), 10) || 1,
                 unit_price: parseFloat(String(item.unit_price)) || 0,
                 total_price: parseFloat(String(item.total_price)) || 0,
+                discount_amount:
+                  item.discount_amount != null && item.discount_amount !== ""
+                    ? parseFloat(String(item.discount_amount)) || 0
+                    : undefined,
                 status: item.status != null && String(item.status).trim() !== ""
                   ? String(item.status)
                   : "awaiting_artwork",
@@ -637,6 +647,19 @@ export default function OrderDetails() {
           d.tax_amount != null && d.tax_amount !== ""
             ? parseFloat(String(d.tax_amount)) || 0
             : 0,
+        coupon_code: d.coupon_code != null && String(d.coupon_code).trim() !== "" ? String(d.coupon_code) : null,
+        coupon_discount_amount:
+          d.coupon_discount_amount != null && d.coupon_discount_amount !== ""
+            ? parseFloat(String(d.coupon_discount_amount)) || 0
+            : 0,
+        coupon_discount_type:
+          d.coupon_discount_type != null && String(d.coupon_discount_type).trim() !== ""
+            ? String(d.coupon_discount_type)
+            : null,
+        coupon_discount_value:
+          d.coupon_discount_value != null && d.coupon_discount_value !== ""
+            ? parseFloat(String(d.coupon_discount_value)) || 0
+            : null,
         refund_amount:
           d.refund_amount != null && d.refund_amount !== ""
             ? parseFloat(String(d.refund_amount)) || 0
@@ -1041,6 +1064,9 @@ export default function OrderDetails() {
   }
 
   const linesSubtotal = order.items.reduce((s, i) => s + (Number.isFinite(i.total_price) ? i.total_price : 0), 0);
+  const couponDiscount = Number(order.coupon_discount_amount ?? 0);
+  const couponOffer = couponOfferLabel(order);
+  const originalSubtotal = Math.round(((order.subtotal_amount ?? linesSubtotal) + (couponDiscount > 0 ? couponDiscount : 0)) * 100) / 100;
   const totalCharged = order.total_amount;
   const shipStored = Number(order.shipping_charge ?? 0);
   const refundedAmount = Number(order.refund_amount ?? 0);
@@ -1673,7 +1699,13 @@ export default function OrderDetails() {
                   <DetailCell label="Net paid" value={`$${formatMoney(netPaid)}`} />
                 </>
               ) : null}
-              <DetailCell label="Subtotal" value={`$${formatMoney(order.subtotal_amount ?? linesSubtotal)}`} />
+              <DetailCell label="Subtotal" value={`$${formatMoney(originalSubtotal)}`} />
+              {couponDiscount > 0 ? (
+                <DetailCell
+                  label={couponLineLabel(order)}
+                  value={`-$${formatMoney(couponDiscount)}`}
+                />
+              ) : null}
               <DetailCell label="Shipping service" value={dash(order.shipping_method)} />
               {/* Carrier estimated delivery / charge details hidden for generic tracking-only admin view.
               <DetailCell label="Estimated delivery" value={dash(order.shipping_estimated_delivery)} />
@@ -1930,7 +1962,14 @@ export default function OrderDetails() {
                         <td className="px-3 py-3 text-slate-600">{dash(item.product_material)}</td>
                         <td className="px-3 py-3 text-right tabular-nums">{item.quantity}</td>
                         <td className="px-3 py-3 text-right tabular-nums">${formatMoney(item.unit_price)}</td>
-                        <td className="px-3 py-3 pr-5 text-right font-semibold tabular-nums text-slate-900">${formatMoney(item.total_price)}</td>
+                        <td className="px-3 py-3 pr-5 text-right font-semibold tabular-nums text-slate-900">
+                          ${formatMoney(item.total_price)}
+                          {Number(item.discount_amount) > 0 ? (
+                            <p className="mt-1 text-[11px] font-medium text-emerald-700">
+                              Discount -${formatMoney(item.discount_amount || 0)}
+                            </p>
+                          ) : null}
+                        </td>
                       </tr>
                       );
                     })}
@@ -1944,6 +1983,15 @@ export default function OrderDetails() {
             <p className="text-sm text-slate-600">
               Sum of lines <span className="font-semibold text-slate-900">${formatMoney(linesSubtotal)}</span>
             </p>
+            {couponDiscount > 0 ? (
+              <p className="text-sm text-emerald-700">
+                Coupon
+                {couponOffer ? (
+                  <span className="font-semibold font-mono text-[13px]"> ({couponOffer})</span>
+                ) : null}{" "}
+                <span className="font-semibold">-${formatMoney(couponDiscount)}</span>
+              </p>
+            ) : null}
             {(order.shipping_method || shipStored > 0) && (
               <p className="text-sm text-slate-600">
                 Shipping ({dash(order.shipping_method)}){" "}

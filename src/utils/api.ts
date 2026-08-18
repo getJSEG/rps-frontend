@@ -34,7 +34,11 @@ function isCartApiEndpoint(endpoint: string): boolean {
 
 /** Guest checkout must send X-Guest-Session-Id so the server can clear the guest cart after order. */
 function needsGuestSessionHeader(endpoint: string): boolean {
-  return isCartApiEndpoint(endpoint) || endpoint === '/orders/create-payment-intent';
+  return (
+    isCartApiEndpoint(endpoint) ||
+    endpoint === '/orders/create-payment-intent' ||
+    endpoint === '/coupons/preview'
+  );
 }
 
 /** Get backend base URL (no /api) for image URLs - works in browser */
@@ -393,6 +397,28 @@ export type CartSummary = {
   taxName: string | null;
   taxPercentage: number;
   total: number;
+  couponCode?: string | null;
+  couponDiscountAmount?: number;
+};
+
+export type Coupon = {
+  id: number;
+  code: string;
+  discountType: "percent" | "fixed" | string;
+  discountValue: number;
+  isActive: boolean;
+  expiresOn?: string | null;
+  expired?: boolean;
+  createdAt?: string;
+  updatedAt?: string;
+};
+
+export type CouponPreview = {
+  code: string;
+  discountType: string;
+  discountValue: number;
+  discountAmount: number;
+  discountedSubtotal: number;
 };
 
 export type FedexRateQuote = {
@@ -1949,6 +1975,30 @@ export const taxesAPI = {
     apiCall('/taxes/estimate', { method: 'POST', body: JSON.stringify(data) }),
 };
 
+export const couponsAPI = {
+  preview: async (data: { code: string; subtotal: number }): Promise<CouponPreview> =>
+    apiCall('/coupons/preview', { method: 'POST', body: JSON.stringify(data) }),
+  getAdmin: async (): Promise<{ coupons: Coupon[] }> => apiCall('/coupons/admin'),
+  createAdmin: async (data: {
+    code: string;
+    discountType: "percent" | "fixed";
+    discountValue: number;
+    isActive?: boolean;
+    expiresOn?: string | null;
+  }) => apiCall('/coupons/admin', { method: 'POST', body: JSON.stringify(data) }) as Promise<{ coupon: Coupon }>,
+  updateAdmin: async (
+    id: number | string,
+    data: Partial<{
+      code: string;
+      discountType: "percent" | "fixed";
+      discountValue: number;
+      isActive: boolean;
+      expiresOn: string | null;
+    }>
+  ) => apiCall(`/coupons/admin/${id}`, { method: 'PUT', body: JSON.stringify(data) }) as Promise<{ coupon: Coupon }>,
+  deleteAdmin: async (id: number | string) => apiCall(`/coupons/admin/${id}`, { method: 'DELETE' }),
+};
+
 export const artworksAPI = {
   upload: async (file: File, metadata: ArtworkUploadPayload) => {
     const token = typeof window !== "undefined" ? localStorage.getItem("token") : null;
@@ -2094,7 +2144,8 @@ export const ordersAPI = {
   createPaymentIntent: async (
     cartItems: Record<string, unknown>[],
     guestCheckout?: Record<string, unknown>,
-    addressIds?: { shippingAddressId?: number; billingAddressId?: number }
+    addressIds?: { shippingAddressId?: number; billingAddressId?: number },
+    couponCode?: string
   ) => {
     const body: Record<string, unknown> = { cartItems };
     if (guestCheckout && typeof guestCheckout === 'object') {
@@ -2106,6 +2157,8 @@ export const ordersAPI = {
     if (addressIds?.billingAddressId != null) {
       body.billingAddressId = addressIds.billingAddressId;
     }
+    const code = String(couponCode || '').trim();
+    if (code) body.couponCode = code;
     return apiCall('/orders/create-payment-intent', {
       method: 'POST',
       body: JSON.stringify(body),
