@@ -1277,9 +1277,9 @@ export default function CheckoutPage() {
                         {fedexRatesLoading ? (
                           <span className="w-20 shrink-0" aria-hidden>
                             <span className="sr-only">Loading shipping services</span>
-                            <div className="pdp-fedex-rates-indeterminate-track">
-                              <div className="pdp-fedex-rates-indeterminate-bar" />
-                            </div>
+                            <span className="pdp-fedex-rates-indeterminate-track">
+                              <span className="pdp-fedex-rates-indeterminate-bar" />
+                            </span>
                           </span>
                         ) : null}
                       </div>

@@ -133,6 +133,7 @@ body {
 }
 
 .pdp-fedex-rates-indeterminate-track {
+  display: block;
   height: 3px;
   width: 100%;
   border-radius: 9999px;
@@ -141,6 +142,7 @@ body {
 }
 
 .pdp-fedex-rates-indeterminate-bar {
+  display: block;
   height: 100%;
   width: 38%;
   border-radius: 9999px;

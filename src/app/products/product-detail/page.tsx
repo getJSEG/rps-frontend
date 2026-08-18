@@ -2245,9 +2245,9 @@ function ProductDetailContent() {
                           {fedexRatesLoading && fedexRates.length === 0 ? (
                             <span className="ml-auto block w-20 pt-1" aria-hidden>
                               <span className="sr-only">Fetching shipping services</span>
-                              <div className="pdp-fedex-rates-indeterminate-track">
-                                <div className="pdp-fedex-rates-indeterminate-bar" />
-                              </div>
+                              <span className="pdp-fedex-rates-indeterminate-track">
+                                <span className="pdp-fedex-rates-indeterminate-bar" />
+                              </span>
                             </span>
                           ) : selectedFedexRatePdp ? (
                             `$${Number(selectedFedexRatePdp.totalCharge).toFixed(2)}`
@@ -2288,9 +2288,9 @@ function ProductDetailContent() {
                     fedexRatesLoading && fedexRates.length === 0 ? (
                       <span className="inline-block w-20 align-middle" aria-hidden>
                         <span className="sr-only">Fetching shipping services</span>
-                        <div className="pdp-fedex-rates-indeterminate-track">
-                          <div className="pdp-fedex-rates-indeterminate-bar" />
-                        </div>
+                        <span className="pdp-fedex-rates-indeterminate-track">
+                          <span className="pdp-fedex-rates-indeterminate-bar" />
+                        </span>
                       </span>
                     ) : (
                       `$${effectiveShippingPdp.toFixed(2)}`
@@ -2312,9 +2312,9 @@ function ProductDetailContent() {
                   {taxEstimateLoading ? (
                     <span className="inline-block w-16 align-middle" aria-hidden>
                       <span className="sr-only">Calculating tax</span>
-                      <div className="pdp-fedex-rates-indeterminate-track">
-                        <div className="pdp-fedex-rates-indeterminate-bar" />
-                      </div>
+                      <span className="pdp-fedex-rates-indeterminate-track">
+                        <span className="pdp-fedex-rates-indeterminate-bar" />
+                      </span>
                     </span>
                   ) : (
                     `$${taxAmount.toFixed(2)}`
