@@ -2040,6 +2040,25 @@ export const ordersAPI = {
     });
   },
 
+  requestItemCancellation: async (orderId: string, itemId: string) => {
+    return apiCall(`/orders/${orderId}/items/${itemId}/request-cancellation`, {
+      method: 'POST',
+    });
+  },
+
+  requestGuestItemCancellation: async (orderId: string | number, itemId: string | number, token: string) => {
+    const q = new URLSearchParams({ token: String(token || '') }).toString();
+    return apiCall(`/orders/guest/${orderId}/items/${itemId}/request-cancellation?${q}`, {
+      method: 'POST',
+    });
+  },
+
+  refundItemAdmin: async (orderId: string, itemId: string) => {
+    return apiCall(`/orders/admin/${orderId}/items/${itemId}/refund`, {
+      method: 'POST',
+    });
+  },
+
   getGuestById: async (id: string | number, token: string) => {
     const q = new URLSearchParams({ token: String(token || '') }).toString();
     return apiCall(`/orders/guest/${id}?${q}`);

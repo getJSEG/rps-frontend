@@ -16,8 +16,37 @@ export const ADMIN_ORDER_STATUS_OPTIONS: { value: string; label: string }[] = [
   { value: "cancelled", label: "Cancelled" },
 ];
 
+/** Line-item status picker includes the refund flow statuses used on the item, not the whole order. */
+export const ADMIN_ITEM_STATUS_OPTIONS: { value: string; label: string }[] = [
+  ...ADMIN_ORDER_STATUS_OPTIONS,
+  { value: "cancellation_requested", label: "Cancellation requested" },
+  { value: "awaiting_refund", label: "Awaiting refund" },
+  { value: "refunded", label: "Refunded" },
+];
+
+/** After a line cancellation/refund request, only these statuses stay available. */
+export const ADMIN_ITEM_REFUND_FLOW_OPTIONS: { value: string; label: string }[] = [
+  { value: "cancellation_requested", label: "Cancellation requested" },
+  { value: "awaiting_refund", label: "Awaiting refund" },
+  { value: "refunded", label: "Refunded" },
+];
+
+const ITEM_REFUND_FLOW = new Set(["cancellation_requested", "awaiting_refund", "refunded"]);
+
+export function isItemRefundFlowStatus(status: string | null | undefined): boolean {
+  return ITEM_REFUND_FLOW.has(canonicalOrderStatus(status));
+}
+
+export function adminItemStatusOptionsFor(status: string | null | undefined): {
+  value: string;
+  label: string;
+}[] {
+  if (isItemRefundFlowStatus(status)) return ADMIN_ITEM_REFUND_FLOW_OPTIONS;
+  return ADMIN_ITEM_STATUS_OPTIONS;
+}
+
 const ADMIN_LABELS: Record<string, string> = Object.fromEntries(
-  ADMIN_ORDER_STATUS_OPTIONS.map((o) => [o.value, o.label])
+  ADMIN_ITEM_STATUS_OPTIONS.map((o) => [o.value, o.label])
 );
 
 /** Map legacy DB values to the current pipeline for labels / progress / descriptions. */
@@ -114,19 +143,65 @@ export function isRefundLikeStatus(status: string | null | undefined): boolean {
   return REFUND_LIKE.has(c);
 }
 
-/** Item statuses where a per-line Cancel item control may be shown (UI; no refund yet). */
+/** Item statuses where a per-line Cancel item control may be shown. */
 const ITEM_CANCEL_ALLOWED = new Set(["awaiting_artwork", "on_hold", "processing"]);
 
+const ITEM_INACTIVE_STATUSES = new Set([
+  "cancellation_requested",
+  "awaiting_refund",
+  "refunded",
+  "cancelled",
+]);
+
+const WHOLE_ORDER_CANCEL_FLOW = new Set([
+  "cancellation_requested",
+  "awaiting_refund",
+  "refunded",
+  "cancelled",
+]);
+
+export function isInactiveOrderItemStatus(status: string | null | undefined): boolean {
+  return ITEM_INACTIVE_STATUSES.has(canonicalOrderStatus(status));
+}
+
+export function isWholeOrderCancelFlow(status: string | null | undefined): boolean {
+  return WHOLE_ORDER_CANCEL_FLOW.has(canonicalOrderStatus(status));
+}
+
+export function countActiveOrderItems(
+  items: Array<{ status?: string | null } | null | undefined> | null | undefined
+): number {
+  if (!Array.isArray(items)) return 0;
+  return items.filter((it) => it && !isInactiveOrderItemStatus(it.status)).length;
+}
+
+export function canShowItemCancelColumn(
+  orderStatus: string | null | undefined,
+  items: Array<{ status?: string | null } | null | undefined> | null | undefined
+): boolean {
+  if (isWholeOrderCancelFlow(orderStatus)) return false;
+  return countActiveOrderItems(items) > 1;
+}
+
 /**
- * Show Cancel item only when the line is in an allowed status and the order has
- * more than one line (single-item orders use the main order cancel/refund flow).
+ * Show Cancel item only when the line is in an allowed status, the order is not in
+ * the whole-order cancel/refund flow, and more than one active line remains.
  */
 export function canCancelOrderItem(
-  status: string | null | undefined,
-  orderItemCount?: number | null
+  itemStatus: string | null | undefined,
+  options?: {
+    orderStatus?: string | null;
+    items?: Array<{ status?: string | null } | null | undefined> | null;
+    activeCount?: number | null;
+  }
 ): boolean {
-  if (orderItemCount != null && Number(orderItemCount) <= 1) return false;
-  return ITEM_CANCEL_ALLOWED.has(canonicalOrderStatus(status));
+  if (isWholeOrderCancelFlow(options?.orderStatus)) return false;
+  const active =
+    options?.activeCount != null
+      ? Number(options.activeCount)
+      : countActiveOrderItems(options?.items);
+  if (Number.isFinite(active) && active <= 1) return false;
+  return ITEM_CANCEL_ALLOWED.has(canonicalOrderStatus(itemStatus));
 }
 
 /** When set, step 1 of the customer progress bar shows this label instead of "Pre-production". */
