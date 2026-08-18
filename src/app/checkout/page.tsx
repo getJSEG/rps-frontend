@@ -206,6 +206,128 @@ function roundMoney2(n: number): number {
   return Math.round(x * 100) / 100;
 }
 
+type GuestAddressForm = {
+  streetAddress: string;
+  addressLine2: string;
+  city: string;
+  state: string;
+  postcode: string;
+  country: string;
+};
+
+const EMPTY_GUEST_ADDRESS: GuestAddressForm = {
+  streetAddress: "",
+  addressLine2: "",
+  city: "",
+  state: "",
+  postcode: "",
+  country: "United States",
+};
+
+function guestAddressComplete(form: GuestAddressForm): boolean {
+  return (
+    !!form.streetAddress.trim() &&
+    !!form.city.trim() &&
+    !!form.state.trim() &&
+    !!form.postcode.trim()
+  );
+}
+
+function guestAddressPayload(form: GuestAddressForm) {
+  return {
+    streetAddress: form.streetAddress.trim(),
+    addressLine2: form.addressLine2.trim() || undefined,
+    city: form.city.trim(),
+    state: form.state.trim(),
+    postcode: form.postcode.trim(),
+    country: form.country.trim() || "United States",
+  };
+}
+
+function GuestAddressLines({ form }: { form: GuestAddressForm }) {
+  return (
+    <>
+      <p>{form.streetAddress.trim()}</p>
+      {form.addressLine2.trim() ? <p>{form.addressLine2.trim()}</p> : null}
+      <p>
+        {form.city.trim()}, {form.state.trim()} {form.postcode.trim()}
+      </p>
+      <p>{form.country.trim() || "United States"}</p>
+    </>
+  );
+}
+
+function GuestAddressFields({
+  form,
+  onChange,
+  autoCompletePrefix,
+}: {
+  form: GuestAddressForm;
+  onChange: (name: keyof GuestAddressForm, value: string) => void;
+  autoCompletePrefix?: string;
+}) {
+  const prefix = autoCompletePrefix ? `${autoCompletePrefix} ` : "";
+  const inputClass = "w-full px-3 py-2 border border-gray-300 rounded-md text-sm";
+  return (
+    <>
+      <input
+        type="text"
+        placeholder="Street address *"
+        value={form.streetAddress}
+        onChange={(e) => onChange("streetAddress", e.target.value)}
+        className={inputClass}
+        autoComplete={`${prefix}street-address`.trim()}
+      />
+      <input
+        type="text"
+        placeholder="Apartment, suite, etc. (optional)"
+        value={form.addressLine2}
+        onChange={(e) => onChange("addressLine2", e.target.value)}
+        className={inputClass}
+      />
+      <div className="grid grid-cols-2 gap-2">
+        <input
+          type="text"
+          placeholder="City *"
+          value={form.city}
+          onChange={(e) => onChange("city", e.target.value)}
+          className={inputClass}
+          autoComplete={`${prefix}address-level2`.trim()}
+        />
+        <select
+          value={form.state}
+          onChange={(e) => onChange("state", e.target.value)}
+          className={inputClass}
+          autoComplete={`${prefix}address-level1`.trim()}
+        >
+          <option value="">State *</option>
+          {US_STATE_CODES.map((s) => (
+            <option key={s} value={s}>
+              {s}
+            </option>
+          ))}
+        </select>
+      </div>
+      <input
+        type="text"
+        placeholder="ZIP / Postcode *"
+        value={form.postcode}
+        onChange={(e) => onChange("postcode", e.target.value)}
+        className={inputClass}
+        autoComplete={`${prefix}postal-code`.trim()}
+      />
+      <input
+        type="text"
+        placeholder="Country"
+        value={form.country}
+        onChange={(e) => onChange("country", e.target.value)}
+        className={inputClass}
+        autoComplete={`${prefix}country-name`.trim()}
+      />
+    </>
+  );
+}
+
 export default function CheckoutPage() {
   const router = useRouter();
   const [cartItems, setCartItems] = useState<CartItem[]>([]);
@@ -224,14 +346,9 @@ export default function CheckoutPage() {
   const [addressLoading, setAddressLoading] = useState(false);
   const [profile, setProfile] = useState<{ fullName?: string; telephone?: string } | null>(null);
   const [showAddBilling, setShowAddBilling] = useState(false);
-  const [billingForm, setBillingForm] = useState({
-    streetAddress: "",
-    addressLine2: "",
-    city: "",
-    state: "",
-    postcode: "",
-    country: "United States",
-  });
+  const [billingForm, setBillingForm] = useState<GuestAddressForm>(EMPTY_GUEST_ADDRESS);
+  const [guestBillingToForm, setGuestBillingToForm] = useState<GuestAddressForm>(EMPTY_GUEST_ADDRESS);
+  const [billingSameAsShipping, setBillingSameAsShipping] = useState(false);
   const [guestEmail, setGuestEmail] = useState("");
   const [guestFullName, setGuestFullName] = useState("");
   const [guestPhone, setGuestPhone] = useState("");
@@ -392,6 +509,23 @@ export default function CheckoutPage() {
     setBillingForm((prev) => ({ ...prev, [name]: value }));
   };
 
+  const updateGuestShippingField = (name: keyof GuestAddressForm, value: string) => {
+    setBillingForm((prev) => {
+      const next = { ...prev, [name]: value };
+      if (billingSameAsShipping) setGuestBillingToForm(next);
+      return next;
+    });
+  };
+
+  const updateGuestBillingToField = (name: keyof GuestAddressForm, value: string) => {
+    setGuestBillingToForm((prev) => ({ ...prev, [name]: value }));
+  };
+
+  const onBillingSameAsShippingChange = (checked: boolean) => {
+    setBillingSameAsShipping(checked);
+    if (checked) setGuestBillingToForm({ ...billingForm });
+  };
+
   const handleAddBillingAddress = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!billingForm.streetAddress.trim() || !billingForm.city.trim() || !billingForm.state.trim() || !billingForm.postcode.trim()) return;
@@ -420,14 +554,17 @@ export default function CheckoutPage() {
   const saveGuestBilling = () => {
     setGuestSaveError(null);
     const emailOk = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(guestEmail.trim());
-    const addrOk =
-      !!billingForm.streetAddress.trim() &&
-      !!billingForm.city.trim() &&
-      !!billingForm.state.trim() &&
-      !!billingForm.postcode.trim();
+    const addrOk = guestAddressComplete(billingForm);
     if (!emailOk || !addrOk) {
       setGuestSaveError("Enter a valid email and full address (street, city, state, ZIP) before saving.");
       return;
+    }
+    if (!billingSameAsShipping && !guestAddressComplete(guestBillingToForm)) {
+      setGuestSaveError("Enter a valid billing address (street, city, state, ZIP), or check Same as shipping address.");
+      return;
+    }
+    if (billingSameAsShipping) {
+      setGuestBillingToForm({ ...billingForm });
     }
     setGuestBillingSaved(true);
   };
@@ -880,14 +1017,8 @@ export default function CheckoutPage() {
             email: guestEmail.trim(),
             fullName: guestFullName.trim() || undefined,
             phone: guestPhone.trim() || undefined,
-            shippingAddress: {
-              streetAddress: billingForm.streetAddress.trim(),
-              addressLine2: billingForm.addressLine2.trim() || undefined,
-              city: billingForm.city.trim(),
-              state: billingForm.state.trim(),
-              postcode: billingForm.postcode.trim(),
-              country: billingForm.country || "United States",
-            },
+            shippingAddress: guestAddressPayload(billingForm),
+            billingAddress: guestAddressPayload(billingSameAsShipping ? billingForm : guestBillingToForm),
           },
             undefined,
             appliedCoupon?.code
@@ -1100,19 +1231,25 @@ export default function CheckoutPage() {
                     <p className="text-gray-500 text-sm">Loading addresses...</p>
                   ) : !isAuthenticated() ? (
                     guestBillingSaved ? (
-                      <div className="p-4 bg-gray-50 rounded-lg border border-gray-200 text-gray-800 text-sm">
-                        <div className="space-y-1 border-b border-gray-200 pb-3">
-                          {guestFullName.trim() ? <p className="font-medium">{guestFullName.trim()}</p> : null}
-                          {guestPhone.trim() ? <p>Tel: {guestPhone.trim()}</p> : null}
-                          <p>{guestEmail.trim()}</p>
+                      <div className="space-y-4">
+                        <div className="p-4 bg-gray-50 rounded-lg border border-gray-200 text-gray-800 text-sm">
+                          <div className="space-y-1 border-b border-gray-200 pb-3">
+                            {guestFullName.trim() ? <p className="font-medium">{guestFullName.trim()}</p> : null}
+                            {guestPhone.trim() ? <p>Tel: {guestPhone.trim()}</p> : null}
+                            <p>{guestEmail.trim()}</p>
+                          </div>
+                          <div className="space-y-1 pt-3">
+                            <GuestAddressLines form={billingForm} />
+                          </div>
                         </div>
-                        <div className="space-y-1 pt-3">
-                          <p>{billingForm.streetAddress.trim()}</p>
-                          {billingForm.addressLine2.trim() ? <p>{billingForm.addressLine2.trim()}</p> : null}
-                          <p>
-                            {billingForm.city.trim()}, {billingForm.state.trim()} {billingForm.postcode.trim()}
-                          </p>
-                          <p>{billingForm.country.trim() || "United States"}</p>
+                        <div>
+                          <h2 className="text-lg font-bold text-gray-900 mb-3">Billing Address</h2>
+                          <div className="p-4 bg-gray-50 rounded-lg border border-gray-200 text-gray-800 text-sm space-y-1">
+                            {billingSameAsShipping ? (
+                              <p className="text-gray-500 italic mb-1">Same as shipping address</p>
+                            ) : null}
+                            <GuestAddressLines form={billingSameAsShipping ? billingForm : guestBillingToForm} />
+                          </div>
                         </div>
                       </div>
                     ) : (
@@ -1144,60 +1281,29 @@ export default function CheckoutPage() {
                           className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm"
                           autoComplete="tel"
                         />
-                        <input
-                          type="text"
-                          placeholder="Street address *"
-                          value={billingForm.streetAddress}
-                          onChange={(e) => setBillingForm((p) => ({ ...p, streetAddress: e.target.value }))}
-                          className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm"
-                          autoComplete="street-address"
-                        />
-                        <input
-                          type="text"
-                          placeholder="Apartment, suite, etc. (optional)"
-                          value={billingForm.addressLine2}
-                          onChange={(e) => setBillingForm((p) => ({ ...p, addressLine2: e.target.value }))}
-                          className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm"
-                        />
-                        <div className="grid grid-cols-2 gap-2">
+                        <GuestAddressFields form={billingForm} onChange={updateGuestShippingField} />
+                        <div className="flex items-center gap-2 pt-1">
                           <input
-                            type="text"
-                            placeholder="City *"
-                            value={billingForm.city}
-                            onChange={(e) => setBillingForm((p) => ({ ...p, city: e.target.value }))}
-                            className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm"
-                            autoComplete="address-level2"
+                            type="checkbox"
+                            id="billingSameAsShipping"
+                            checked={billingSameAsShipping}
+                            onChange={(e) => onBillingSameAsShippingChange(e.target.checked)}
+                            className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
                           />
-                          <select
-                            value={billingForm.state}
-                            onChange={(e) => setBillingForm((p) => ({ ...p, state: e.target.value }))}
-                            className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm"
-                            autoComplete="address-level1"
-                          >
-                            <option value="">State *</option>
-                            {US_STATE_CODES.map((s) => (
-                              <option key={s} value={s}>
-                                {s}
-                              </option>
-                            ))}
-                          </select>
+                          <label htmlFor="billingSameAsShipping" className="text-sm font-medium text-gray-700">
+                            Same as shipping address
+                          </label>
                         </div>
-                        <input
-                          type="text"
-                          placeholder="ZIP / Postcode *"
-                          value={billingForm.postcode}
-                          onChange={(e) => setBillingForm((p) => ({ ...p, postcode: e.target.value }))}
-                          className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm"
-                          autoComplete="postal-code"
-                        />
-                        <input
-                          type="text"
-                          placeholder="Country"
-                          value={billingForm.country}
-                          onChange={(e) => setBillingForm((p) => ({ ...p, country: e.target.value }))}
-                          className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm"
-                          autoComplete="country-name"
-                        />
+                        {!billingSameAsShipping ? (
+                          <div className="space-y-3 border-t border-gray-200 pt-3">
+                            <h3 className="text-sm font-bold text-gray-900">Billing Address</h3>
+                            <GuestAddressFields
+                              form={guestBillingToForm}
+                              onChange={updateGuestBillingToField}
+                              autoCompletePrefix="billing"
+                            />
+                          </div>
+                        ) : null}
                         {guestSaveError ? <p className="text-sm text-red-600">{guestSaveError}</p> : null}
                         <button
                           type="button"
@@ -1407,9 +1513,9 @@ export default function CheckoutPage() {
                         {fedexRatesLoading ? (
                           <span className="w-20 shrink-0" aria-hidden>
                             <span className="sr-only">Loading shipping services</span>
-                            <div className="pdp-fedex-rates-indeterminate-track">
-                              <div className="pdp-fedex-rates-indeterminate-bar" />
-                            </div>
+                            <span className="pdp-fedex-rates-indeterminate-track">
+                              <span className="pdp-fedex-rates-indeterminate-bar" />
+                            </span>
                           </span>
                         ) : null}
                       </div>
