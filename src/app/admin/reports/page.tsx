@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import AdminNavbar from "../../components/AdminNavbar";
 import { reportsAPI, type AdminDashboardResponse } from "../../../utils/api";
@@ -8,6 +8,11 @@ import { adminOrderStatusLabel } from "../../../utils/orderStatuses";
 import { canAccessAdminPanel, isAuthenticated } from "../../../utils/roles";
 
 type LoadingState = "idle" | "loading" | "ready" | "error";
+
+const DATE_FIELD_CLASS =
+  "w-full min-w-[11.5rem] rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 shadow-sm outline-none transition focus:border-slate-900 focus:ring-2 focus:ring-slate-900/10";
+
+const WEEKDAYS = ["Su", "Mo", "Tu", "We", "Th", "Fr", "Sa"];
 
 function currency(value: number): string {
   return new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(value || 0);
@@ -18,6 +23,167 @@ function toDateInputValue(d: Date): string {
   const month = `${d.getMonth() + 1}`.padStart(2, "0");
   const day = `${d.getDate()}`.padStart(2, "0");
   return `${year}-${month}-${day}`;
+}
+
+function pad2(n: number) {
+  return String(n).padStart(2, "0");
+}
+
+function toIsoDate(year: number, monthIndex: number, day: number) {
+  return `${year}-${pad2(monthIndex + 1)}-${pad2(day)}`;
+}
+
+function parseIsoDate(value: string) {
+  const match = value.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (!match) return null;
+  const year = Number(match[1]);
+  const month = Number(match[2]) - 1;
+  const day = Number(match[3]);
+  if (!Number.isFinite(year) || !Number.isFinite(month) || !Number.isFinite(day)) return null;
+  return { year, month, day };
+}
+
+function formatFilterDate(value: string) {
+  if (!value) return "Select date";
+  const d = new Date(`${value}T00:00:00`);
+  if (Number.isNaN(d.getTime())) return value;
+  return d.toLocaleDateString(undefined, { dateStyle: "medium" });
+}
+
+function ReportDatePicker({
+  value,
+  onChange,
+  label,
+}: {
+  value: string;
+  onChange: (next: string) => void;
+  label: string;
+}) {
+  const [open, setOpen] = useState(false);
+  const wrapRef = useRef<HTMLDivElement | null>(null);
+  const selected = parseIsoDate(value);
+  const today = new Date();
+  const [viewYear, setViewYear] = useState(selected?.year ?? today.getFullYear());
+  const [viewMonth, setViewMonth] = useState(selected?.month ?? today.getMonth());
+
+  useEffect(() => {
+    if (!open) return;
+    if (selected) {
+      setViewYear(selected.year);
+      setViewMonth(selected.month);
+    }
+    const onDoc = (e: MouseEvent) => {
+      if (!wrapRef.current?.contains(e.target as Node)) setOpen(false);
+    };
+    document.addEventListener("mousedown", onDoc);
+    return () => document.removeEventListener("mousedown", onDoc);
+  }, [open, selected?.year, selected?.month]);
+
+  const days = useMemo(() => {
+    const first = new Date(viewYear, viewMonth, 1);
+    const startPad = first.getDay();
+    const lastDay = new Date(viewYear, viewMonth + 1, 0).getDate();
+    const cells: Array<{ day: number; iso: string } | null> = [];
+    for (let i = 0; i < startPad; i += 1) cells.push(null);
+    for (let day = 1; day <= lastDay; day += 1) {
+      cells.push({ day, iso: toIsoDate(viewYear, viewMonth, day) });
+    }
+    return cells;
+  }, [viewYear, viewMonth]);
+
+  const monthLabel = new Date(viewYear, viewMonth, 1).toLocaleString(undefined, {
+    month: "long",
+    year: "numeric",
+  });
+
+  return (
+    <div ref={wrapRef} className="relative min-w-0">
+      <p className="mb-1.5 text-xs font-semibold uppercase tracking-wide text-slate-500">{label}</p>
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        className={`${DATE_FIELD_CLASS} flex items-center justify-between gap-2 text-left`}
+        aria-haspopup="dialog"
+        aria-expanded={open}
+        aria-label={label}
+      >
+        <span className={value ? "text-slate-900" : "text-slate-400"}>{formatFilterDate(value)}</span>
+        <svg className="h-4 w-4 shrink-0 text-slate-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" aria-hidden>
+          <rect x="3" y="5" width="18" height="16" rx="2" strokeWidth="1.8" />
+          <path d="M3 9h18M8 3v4M16 3v4" strokeWidth="1.8" strokeLinecap="round" />
+        </svg>
+      </button>
+      {open ? (
+        <div className="absolute z-40 mt-1 w-[17.5rem] rounded-xl border border-slate-200 bg-white p-3 shadow-lg">
+          <div className="mb-2 flex items-center justify-between">
+            <button
+              type="button"
+              className="rounded-md px-2 py-1 text-slate-600 hover:bg-slate-50"
+              onClick={() => {
+                if (viewMonth === 0) {
+                  setViewMonth(11);
+                  setViewYear((y) => y - 1);
+                } else {
+                  setViewMonth((m) => m - 1);
+                }
+              }}
+              aria-label="Previous month"
+            >
+              ‹
+            </button>
+            <p className="text-sm font-semibold text-slate-900">{monthLabel}</p>
+            <button
+              type="button"
+              className="rounded-md px-2 py-1 text-slate-600 hover:bg-slate-50"
+              onClick={() => {
+                if (viewMonth === 11) {
+                  setViewMonth(0);
+                  setViewYear((y) => y + 1);
+                } else {
+                  setViewMonth((m) => m + 1);
+                }
+              }}
+              aria-label="Next month"
+            >
+              ›
+            </button>
+          </div>
+          <div className="grid grid-cols-7 gap-1 text-center text-[11px] font-medium text-slate-400">
+            {WEEKDAYS.map((d) => (
+              <span key={d}>{d}</span>
+            ))}
+          </div>
+          <div className="mt-1 grid grid-cols-7 gap-1">
+            {days.map((cell, idx) => {
+              if (!cell) return <span key={`e-${idx}`} />;
+              const isSelected = cell.iso === value;
+              const isToday =
+                cell.iso === toIsoDate(today.getFullYear(), today.getMonth(), today.getDate());
+              return (
+                <button
+                  key={cell.iso}
+                  type="button"
+                  onClick={() => {
+                    onChange(cell.iso);
+                    setOpen(false);
+                  }}
+                  className={`h-8 rounded-md text-xs ${
+                    isSelected
+                      ? "bg-slate-900 font-semibold text-white"
+                      : isToday
+                        ? "border border-slate-300 text-slate-900 hover:bg-slate-50"
+                        : "text-slate-700 hover:bg-slate-50"
+                  }`}
+                >
+                  {cell.day}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      ) : null}
+    </div>
+  );
 }
 
 function RevenueLineChart({ points }: { points: { bucket: string; revenue: number }[] }) {
@@ -179,25 +345,9 @@ export default function AdminReportsPage() {
             </div>
           </div>
 
-          <div className="mt-4 flex flex-col flex-wrap gap-3 sm:flex-row sm:items-center">
-            <label className="text-sm text-slate-600">
-              From{" "}
-              <input
-                type="date"
-                value={fromDate}
-                onChange={(e) => setFromDate(e.target.value)}
-                className="ml-2 rounded-md border border-slate-300 px-2 py-1 text-sm"
-              />
-            </label>
-            <label className="text-sm text-slate-600">
-              To{" "}
-              <input
-                type="date"
-                value={toDate}
-                onChange={(e) => setToDate(e.target.value)}
-                className="ml-2 rounded-md border border-slate-300 px-2 py-1 text-sm"
-              />
-            </label>
+          <div className="mt-4 flex flex-col flex-wrap gap-3 sm:flex-row sm:items-end">
+            <ReportDatePicker label="From" value={fromDate} onChange={setFromDate} />
+            <ReportDatePicker label="To" value={toDate} onChange={setToDate} />
           </div>
         </section>
 
@@ -224,24 +374,68 @@ export default function AdminReportsPage() {
           </div>
         </section>
 
-        <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-          <h3 className="text-lg font-semibold text-slate-900">Registered vs Guest Orders</h3>
-          <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-            <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
-              <p className="text-xs uppercase tracking-wide text-slate-500">Registered completed</p>
-              <p className="mt-1 text-xl font-semibold text-slate-900">{data?.summary.registeredCompletedOrders || 0}</p>
+        <section className="grid items-stretch gap-4 xl:grid-cols-2">
+          <div className="flex h-full flex-col rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+            <h3 className="text-lg font-semibold text-slate-900">Registered vs Guest Orders</h3>
+            <div className="mt-4 grid flex-1 grid-cols-2 gap-3 content-start">
+              <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
+                <p className="text-xs uppercase tracking-wide text-slate-500">Registered completed</p>
+                <p className="mt-1 text-xl font-semibold text-slate-900">{data?.summary.registeredCompletedOrders || 0}</p>
+              </div>
+              <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
+                <p className="text-xs uppercase tracking-wide text-slate-500">Registered in progress</p>
+                <p className="mt-1 text-xl font-semibold text-slate-900">{data?.summary.registeredInProgressOrders || 0}</p>
+              </div>
+              <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
+                <p className="text-xs uppercase tracking-wide text-slate-500">Guest completed</p>
+                <p className="mt-1 text-xl font-semibold text-slate-900">{data?.summary.guestCompletedOrders || 0}</p>
+              </div>
+              <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
+                <p className="text-xs uppercase tracking-wide text-slate-500">Guest in progress</p>
+                <p className="mt-1 text-xl font-semibold text-slate-900">{data?.summary.guestInProgressOrders || 0}</p>
+              </div>
             </div>
-            <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
-              <p className="text-xs uppercase tracking-wide text-slate-500">Registered in progress</p>
-              <p className="mt-1 text-xl font-semibold text-slate-900">{data?.summary.registeredInProgressOrders || 0}</p>
-            </div>
-            <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
-              <p className="text-xs uppercase tracking-wide text-slate-500">Guest completed</p>
-              <p className="mt-1 text-xl font-semibold text-slate-900">{data?.summary.guestCompletedOrders || 0}</p>
-            </div>
-            <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
-              <p className="text-xs uppercase tracking-wide text-slate-500">Guest in progress</p>
-              <p className="mt-1 text-xl font-semibold text-slate-900">{data?.summary.guestInProgressOrders || 0}</p>
+          </div>
+
+          <div className="flex h-full flex-col rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+            <h3 className="text-lg font-semibold text-slate-900">Coupon usage</h3>
+            <div className="mt-4 min-h-0 flex-1">
+              {(data?.couponUsage || []).length === 0 ? (
+                <div className="flex h-full min-h-[140px] items-center justify-center rounded-xl border border-dashed border-slate-300 bg-slate-50/80 px-4 py-8 text-center text-sm text-slate-500">
+                  No coupon usage in the selected date range.
+                </div>
+              ) : (
+                <div className="coupon-usage-scroll max-h-[11.25rem] overflow-y-auto overflow-x-auto pr-1 [scrollbar-width:thin] [scrollbar-color:#cbd5e1_transparent] [&::-webkit-scrollbar]:w-1.5 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-slate-300 hover:[&::-webkit-scrollbar-thumb]:bg-slate-400 [&::-webkit-scrollbar-button]:hidden">
+                  <table className="w-full text-sm">
+                    <thead className="sticky top-0 z-10 bg-white">
+                      <tr className="border-b border-slate-200 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
+                        <th className="bg-white py-2.5 pr-3">Coupon</th>
+                        <th className="bg-white py-2.5 pr-3">Times used</th>
+                        <th className="bg-white py-2.5 pr-2 text-right">
+                          <span className="inline-block min-w-[7.5rem] text-center">Discount given</span>
+                        </th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {(data?.couponUsage || []).map((row) => (
+                        <tr key={row.couponCode} className="border-b border-slate-100 last:border-b-0">
+                          <td className="py-3 pr-3">
+                            <span className="inline-flex rounded-md bg-slate-100 px-2 py-0.5 font-mono text-sm font-semibold text-slate-900">
+                              {row.couponCode}
+                            </span>
+                          </td>
+                          <td className="py-3 pr-3 font-semibold text-slate-800">{row.timesUsed}</td>
+                          <td className="py-3 pr-2 text-right">
+                            <span className="inline-block min-w-[7.5rem] text-center font-semibold text-emerald-700">
+                              {currency(row.discountGiven)}
+                            </span>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
             </div>
           </div>
         </section>

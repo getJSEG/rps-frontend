@@ -632,6 +632,12 @@ export type AdminDashboardRecentOrder = {
   date: string;
 };
 
+export type AdminDashboardCouponUsage = {
+  couponCode: string;
+  timesUsed: number;
+  discountGiven: number;
+};
+
 export type AdminDashboardResponse = {
   filters: {
     range: ReportsDateRange;
@@ -647,6 +653,7 @@ export type AdminDashboardResponse = {
   ordersOverview: AdminDashboardOrdersOverview;
   topProducts: AdminDashboardTopProduct[];
   recentOrders: AdminDashboardRecentOrder[];
+  couponUsage?: AdminDashboardCouponUsage[];
 };
 
 const DEFAULT_SHIPPING_RATES: ShippingRates = { ground: 120.07, express: 0, overnight: 0 };
