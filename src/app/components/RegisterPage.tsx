@@ -4,7 +4,6 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "react-toastify";
 import { authAPI } from "../../utils/api";
-import { normalizeUsStateForStorage } from "../../utils/usState";
 
 export default function RegisterPage() {
   const router = useRouter();
@@ -164,16 +163,14 @@ export default function RegisterPage() {
         streetAddress: payload.streetAddress,
         addressLine2: payload.addressLine2 || undefined,
         city: payload.city,
-        state: normalizeUsStateForStorage(payload.state),
+        state: payload.state,
         postcode: payload.postcode,
         telephone: payload.telephone,
         shippingSameAsBilling: payload.shippingSameAsBilling,
         shippingStreetAddress: payload.shippingSameAsBilling ? payload.streetAddress : payload.shippingStreetAddress,
         shippingAddressLine2: payload.shippingSameAsBilling ? (payload.addressLine2 || undefined) : (payload.shippingAddressLine2 || undefined),
         shippingCity: payload.shippingSameAsBilling ? payload.city : payload.shippingCity,
-        shippingState: normalizeUsStateForStorage(
-          payload.shippingSameAsBilling ? payload.state : payload.shippingState
-        ),
+        shippingState: payload.shippingSameAsBilling ? payload.state : payload.shippingState,
         shippingPostcode: payload.shippingSameAsBilling ? payload.postcode : payload.shippingPostcode,
         shippingCountry: payload.shippingCountry,
         shippingTelephone: payload.shippingSameAsBilling ? payload.telephone : payload.shippingTelephone,

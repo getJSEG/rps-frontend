@@ -65,7 +65,7 @@ function readStoredPdpShipEstimate(): {
       streetAddress: String(p.streetAddress ?? p.street_address ?? ""),
       addressLine2: String(p.addressLine2 ?? p.address_line2 ?? ""),
       city: String(p.city ?? ""),
-      state: toUsStateCode(String(p.state ?? "")) || String(p.state ?? ""),
+      state: String(p.state ?? ""),
       postcode,
       country: String(p.country ?? "United States"),
     };
@@ -697,7 +697,7 @@ function ProductDetailContent() {
             streetAddress: ship.street_address || prev.streetAddress,
             addressLine2: ship.address_line2 || prev.addressLine2,
             city: ship.city || prev.city,
-            state: toUsStateCode(ship.state || prev.state) || ship.state || prev.state,
+            state: ship.state || prev.state,
             postcode: ship.postcode || prev.postcode,
             country: ship.country || prev.country,
           }));
@@ -734,7 +734,7 @@ function ProductDetailContent() {
           streetAddress: estimateShipForm.streetAddress,
           addressLine2: estimateShipForm.addressLine2,
           city: estimateShipForm.city,
-          state: toUsStateCode(estimateShipForm.state) || estimateShipForm.state,
+          state: estimateShipForm.state,
           postcode: estimateShipForm.postcode,
           country: estimateShipForm.country,
         })
@@ -2133,7 +2133,7 @@ function ProductDetailContent() {
                         />
                         <select
                           name="state"
-                          value={estimateShipForm.state}
+                          value={toUsStateCode(estimateShipForm.state) || estimateShipForm.state}
                           onChange={handleEstimateShipFormChange}
                           className="rounded-md border border-gray-300 px-3 py-2 text-sm text-gray-900"
                         >

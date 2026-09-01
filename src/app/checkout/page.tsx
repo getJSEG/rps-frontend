@@ -32,7 +32,7 @@ import {
 } from "../../utils/api";
 import { isAuthenticated } from "../../utils/roles";
 import { couponOfferLabel } from "../../utils/couponLabel";
-import { toUsStateCode, normalizeUsStateForStorage } from "../../utils/usState";
+import { toUsStateCode } from "../../utils/usState";
 
 interface Address {
   id: number;
@@ -52,7 +52,7 @@ function normalizeAddress(raw: Record<string, unknown>): Address {
     street_address: String(raw.street_address ?? raw.streetAddress ?? ""),
     address_line2: raw.address_line2 != null || raw.addressLine2 != null ? String(raw.address_line2 ?? raw.addressLine2) : null,
     city: String(raw.city ?? ""),
-    state: toUsStateCode(String(raw.state ?? "")) || String(raw.state ?? ""),
+    state: String(raw.state ?? ""),
     postcode: String(raw.postcode ?? ""),
     country: String(raw.country ?? "United States"),
     is_default: Boolean(raw.is_default ?? raw.isDefault),
@@ -239,7 +239,7 @@ function guestAddressPayload(form: GuestAddressForm) {
     streetAddress: form.streetAddress.trim(),
     addressLine2: form.addressLine2.trim() || undefined,
     city: form.city.trim(),
-    state: normalizeUsStateForStorage(form.state),
+    state: form.state.trim(),
     postcode: form.postcode.trim(),
     country: form.country.trim() || "United States",
   };
@@ -296,7 +296,7 @@ function GuestAddressFields({
           autoComplete={`${prefix}address-level2`.trim()}
         />
         <select
-          value={form.state}
+          value={toUsStateCode(form.state) || form.state}
           onChange={(e) => onChange("state", e.target.value)}
           className={inputClass}
           autoComplete={`${prefix}address-level1`.trim()}
@@ -536,7 +536,7 @@ export default function CheckoutPage() {
         streetAddress: billingForm.streetAddress.trim(),
         addressLine2: billingForm.addressLine2.trim() || undefined,
         city: billingForm.city.trim(),
-        state: normalizeUsStateForStorage(billingForm.state),
+        state: billingForm.state.trim(),
         postcode: billingForm.postcode.trim(),
         country: billingForm.country || "United States",
         addressType: "billing",
@@ -1330,7 +1330,7 @@ export default function CheckoutPage() {
                       <input type="text" name="addressLine2" placeholder="Apartment, suite, etc. (optional)" value={billingForm.addressLine2} onChange={handleBillingFormChange} className="w-full px-3 py-2 text-gray-500 border border-gray-400 rounded-md text-sm" />
                       <div className="grid grid-cols-2 gap-2">
                         <input type="text" name="city" placeholder="City *" value={billingForm.city} onChange={handleBillingFormChange} className="w-full px-3 py-2 text-gray-500 border border-gray-400 rounded-md text-sm" required />
-                        <select name="state" value={billingForm.state} onChange={handleBillingFormChange} className="w-full px-3 py-2 text-gray-500 border border-gray-400 rounded-md text-sm" required>
+                        <select name="state" value={toUsStateCode(billingForm.state) || billingForm.state} onChange={handleBillingFormChange} className="w-full px-3 py-2 text-gray-500 border border-gray-400 rounded-md text-sm" required>
                           <option value="">State</option>
                           {US_STATE_CODES.map((s) => (
                             <option key={s} value={s}>

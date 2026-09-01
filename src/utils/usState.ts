@@ -52,17 +52,11 @@ const US_STATE_NAME_TO_CODE: Record<string, string> = {
   "district of columbia": "DC",
 };
 
-/** "Texas" | "tx" | "TX" → "TX". Unknown values return "". */
+/** Map "Texas" / "tx" to "TX" for FedEx and code-only dropdowns. Unknown values return "". */
 export function toUsStateCode(raw: string | null | undefined): string {
   const v = String(raw ?? "").trim();
   if (!v) return "";
   const upper = v.toUpperCase();
   if (/^[A-Z]{2}$/.test(upper)) return upper;
   return US_STATE_NAME_TO_CODE[v.toLowerCase()] ?? "";
-}
-
-/** Prefer a 2-letter code; keep the original string if it cannot be mapped. */
-export function normalizeUsStateForStorage(raw: string | null | undefined): string {
-  const v = String(raw ?? "").trim();
-  return toUsStateCode(v) || v;
 }
