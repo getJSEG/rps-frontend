@@ -4,6 +4,7 @@ import { useState, useEffect, useRef, useCallback } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { addressesAPI } from "../../utils/api";
+import { toUsStateCode, normalizeUsStateForStorage } from "../../utils/usState";
 import { toast } from "react-toastify";
 import { FiEdit } from "react-icons/fi";
 
@@ -36,7 +37,7 @@ function normalizeAddress(raw: Record<string, unknown>): Address {
     street_address: String(raw.street_address ?? raw.streetAddress ?? ""),
     address_line2: raw.address_line2 != null || raw.addressLine2 != null ? String(raw.address_line2 ?? raw.addressLine2) : null,
     city: String(raw.city ?? ""),
-    state: String(raw.state ?? ""),
+    state: toUsStateCode(String(raw.state ?? "")) || String(raw.state ?? ""),
     postcode: String(raw.postcode ?? ""),
     country: String(raw.country ?? "United States"),
     is_default: parseAddressBool(raw.is_default ?? raw.isDefault),
@@ -206,7 +207,7 @@ export default function AddressBook() {
         streetAddress: addr.street_address,
         addressLine2: addr.address_line2 || undefined,
         city: addr.city,
-        state: addr.state,
+        state: normalizeUsStateForStorage(addr.state),
         postcode: addr.postcode,
         country: addr.country,
         addressType: addr.address_type,
@@ -234,7 +235,7 @@ export default function AddressBook() {
       streetAddress: formData.streetAddress.trim(),
       addressLine2: formData.addressLine2.trim() || undefined,
       city: formData.city.trim(),
-      state: formData.state.trim(),
+      state: normalizeUsStateForStorage(formData.state),
       postcode: formData.postcode.trim(),
       country: formData.country || "United States",
       addressType: formData.addressType,

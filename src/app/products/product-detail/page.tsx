@@ -25,6 +25,7 @@ import {
   type TaxEstimateResponse,
 } from "../../../utils/api";
 import { isAuthenticated } from "../../../utils/roles";
+import { toUsStateCode } from "../../../utils/usState";
 import { SITE_TAB_TITLE, pageTitle } from "../../../utils/tabTitle";
 import { FiArrowLeft, FiTrash2, FiX } from "react-icons/fi";
 import { HiOutlinePencilSquare } from "react-icons/hi2";
@@ -64,7 +65,7 @@ function readStoredPdpShipEstimate(): {
       streetAddress: String(p.streetAddress ?? p.street_address ?? ""),
       addressLine2: String(p.addressLine2 ?? p.address_line2 ?? ""),
       city: String(p.city ?? ""),
-      state: String(p.state ?? ""),
+      state: toUsStateCode(String(p.state ?? "")) || String(p.state ?? ""),
       postcode,
       country: String(p.country ?? "United States"),
     };
@@ -696,7 +697,7 @@ function ProductDetailContent() {
             streetAddress: ship.street_address || prev.streetAddress,
             addressLine2: ship.address_line2 || prev.addressLine2,
             city: ship.city || prev.city,
-            state: ship.state || prev.state,
+            state: toUsStateCode(ship.state || prev.state) || ship.state || prev.state,
             postcode: ship.postcode || prev.postcode,
             country: ship.country || prev.country,
           }));
@@ -733,7 +734,7 @@ function ProductDetailContent() {
           streetAddress: estimateShipForm.streetAddress,
           addressLine2: estimateShipForm.addressLine2,
           city: estimateShipForm.city,
-          state: estimateShipForm.state,
+          state: toUsStateCode(estimateShipForm.state) || estimateShipForm.state,
           postcode: estimateShipForm.postcode,
           country: estimateShipForm.country,
         })
@@ -824,7 +825,7 @@ function ProductDetailContent() {
         countryRaw.toLowerCase() === "united states"
           ? "US"
           : countryRaw.trim().toUpperCase(),
-      stateOrProvinceCode: String(estimateShipForm.state || "").trim().toUpperCase() || undefined,
+      stateOrProvinceCode: toUsStateCode(estimateShipForm.state) || undefined,
       city,
       ...(fedexStreetLines.length > 0 ? { streetLines: fedexStreetLines } : {}),
     };

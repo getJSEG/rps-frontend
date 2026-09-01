@@ -32,6 +32,7 @@ import {
 } from "../../utils/api";
 import { isAuthenticated } from "../../utils/roles";
 import { couponOfferLabel } from "../../utils/couponLabel";
+import { toUsStateCode, normalizeUsStateForStorage } from "../../utils/usState";
 
 interface Address {
   id: number;
@@ -51,7 +52,7 @@ function normalizeAddress(raw: Record<string, unknown>): Address {
     street_address: String(raw.street_address ?? raw.streetAddress ?? ""),
     address_line2: raw.address_line2 != null || raw.addressLine2 != null ? String(raw.address_line2 ?? raw.addressLine2) : null,
     city: String(raw.city ?? ""),
-    state: String(raw.state ?? ""),
+    state: toUsStateCode(String(raw.state ?? "")) || String(raw.state ?? ""),
     postcode: String(raw.postcode ?? ""),
     country: String(raw.country ?? "United States"),
     is_default: Boolean(raw.is_default ?? raw.isDefault),
@@ -238,7 +239,7 @@ function guestAddressPayload(form: GuestAddressForm) {
     streetAddress: form.streetAddress.trim(),
     addressLine2: form.addressLine2.trim() || undefined,
     city: form.city.trim(),
-    state: form.state.trim(),
+    state: normalizeUsStateForStorage(form.state),
     postcode: form.postcode.trim(),
     country: form.country.trim() || "United States",
   };
@@ -535,7 +536,7 @@ export default function CheckoutPage() {
         streetAddress: billingForm.streetAddress.trim(),
         addressLine2: billingForm.addressLine2.trim() || undefined,
         city: billingForm.city.trim(),
-        state: billingForm.state.trim(),
+        state: normalizeUsStateForStorage(billingForm.state),
         postcode: billingForm.postcode.trim(),
         country: billingForm.country || "United States",
         addressType: "billing",
@@ -781,7 +782,7 @@ export default function CheckoutPage() {
         String(destinationForFedex?.country || "US").trim().toLowerCase() === "united states"
           ? "US"
           : String(destinationForFedex?.country || "US").trim().toUpperCase(),
-      stateOrProvinceCode: String(destinationForFedex?.state || "").trim().toUpperCase() || undefined,
+      stateOrProvinceCode: toUsStateCode(destinationForFedex?.state) || undefined,
       city: String(destinationForFedex?.city || "").trim(),
       ...(fedexStreetLines.length > 0 ? { streetLines: fedexStreetLines } : {}),
     };
