@@ -257,6 +257,7 @@ type FormState = {
   code: string;
   discountType: "percent" | "fixed";
   discountValue: string;
+  minimumPurchaseAmount: string;
   expiresOn: string;
   isActive: boolean;
 };
@@ -265,6 +266,7 @@ const EMPTY_FORM: FormState = {
   code: "",
   discountType: "percent",
   discountValue: "",
+  minimumPurchaseAmount: "",
   expiresOn: "",
   isActive: true,
 };
@@ -277,6 +279,12 @@ function formatDiscount(coupon: Coupon) {
     return `${value}% off`;
   }
   return `$${value.toFixed(2)} off`;
+}
+
+function formatMinimumPurchase(coupon: Coupon) {
+  const min = Number(coupon.minimumPurchaseAmount) || 0;
+  if (min <= 0) return null;
+  return Number.isInteger(min) ? `Min $${min}` : `Min $${min.toFixed(2)}`;
 }
 
 function formatCreatedAt(value?: string) {
@@ -322,10 +330,12 @@ export default function AdminCouponsPage() {
 
   const startEdit = (row: Coupon) => {
     setEditingId(Number(row.id));
+    const min = Number(row.minimumPurchaseAmount) || 0;
     setForm({
       code: row.code || "",
       discountType: String(row.discountType).toLowerCase() === "fixed" ? "fixed" : "percent",
       discountValue: String(Number(row.discountValue) || ""),
+      minimumPurchaseAmount: min > 0 ? String(min) : "",
       expiresOn: row.expiresOn || "",
       isActive: row.isActive !== false,
     });
@@ -358,6 +368,13 @@ export default function AdminCouponsPage() {
       setSaving(false);
       return;
     }
+    const minRaw = form.minimumPurchaseAmount.trim();
+    const minNum = minRaw === "" ? 0 : parseFloat(minRaw);
+    if (minRaw !== "" && (!Number.isFinite(minNum) || minNum < 0)) {
+      setError("Minimum purchase must be a non-negative number");
+      setSaving(false);
+      return;
+    }
     try {
       const payload = {
         code: form.code.trim(),
@@ -365,6 +382,7 @@ export default function AdminCouponsPage() {
         discountValue: valueNum,
         isActive: form.isActive,
         expiresOn: form.expiresOn.trim() ? form.expiresOn.trim() : null,
+        minimumPurchaseAmount: minNum > 0 ? minNum : 0,
       };
       if (editingId) {
         await couponsAPI.updateAdmin(editingId, payload);
@@ -436,6 +454,23 @@ export default function AdminCouponsPage() {
               />
             </div>
             <div>
+              <label className="block text-xs font-medium text-slate-600 mb-1">Minimum purchase ($)</label>
+              <input
+                className={FIELD_CLASS}
+                placeholder="100"
+                type="text"
+                inputMode="decimal"
+                value={form.minimumPurchaseAmount}
+                onChange={(e) => {
+                  const v = e.target.value;
+                  if (isFloatInput(v)) setForm((p) => ({ ...p, minimumPurchaseAmount: v }));
+                }}
+              />
+              <p className="mt-1 text-[11px] text-slate-500">
+                Leave empty for no minimum. Coupon applies only when product subtotal meets this amount.
+              </p>
+            </div>
+            <div>
               <label className="block text-xs font-medium text-slate-600 mb-1">Expiry date</label>
               <ExpiryCalendar
                 value={form.expiresOn}
@@ -486,7 +521,10 @@ export default function AdminCouponsPage() {
                     <div className="flex items-center justify-between gap-3">
                       <div className="min-w-0">
                         <p className="font-semibold text-sm text-slate-900 font-mono">{r.code}</p>
-                        <p className="text-xs text-slate-600">{formatDiscount(r)}</p>
+                        <p className="text-xs text-slate-600">
+                          {formatDiscount(r)}
+                          {formatMinimumPurchase(r) ? ` · ${formatMinimumPurchase(r)}` : ""}
+                        </p>
                         <p className="text-[11px] text-slate-500">
                           <span className={active ? "text-emerald-600 font-medium" : "text-orange-600 font-medium"}>
                             {active ? "Active" : "Inactive"}

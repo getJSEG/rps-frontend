@@ -406,6 +406,7 @@ export type Coupon = {
   code: string;
   discountType: "percent" | "fixed" | string;
   discountValue: number;
+  minimumPurchaseAmount?: number;
   isActive: boolean;
   expiresOn?: string | null;
   expired?: boolean;
@@ -417,6 +418,7 @@ export type CouponPreview = {
   code: string;
   discountType: string;
   discountValue: number;
+  minimumPurchaseAmount?: number;
   discountAmount: number;
   discountedSubtotal: number;
 };
@@ -1992,6 +1994,7 @@ export const couponsAPI = {
     discountValue: number;
     isActive?: boolean;
     expiresOn?: string | null;
+    minimumPurchaseAmount?: number | null;
   }) => apiCall('/coupons/admin', { method: 'POST', body: JSON.stringify(data) }) as Promise<{ coupon: Coupon }>,
   updateAdmin: async (
     id: number | string,
@@ -2001,6 +2004,7 @@ export const couponsAPI = {
       discountValue: number;
       isActive: boolean;
       expiresOn: string | null;
+      minimumPurchaseAmount: number | null;
     }>
   ) => apiCall(`/coupons/admin/${id}`, { method: 'PUT', body: JSON.stringify(data) }) as Promise<{ coupon: Coupon }>,
   deleteAdmin: async (id: number | string) => apiCall(`/coupons/admin/${id}`, { method: 'DELETE' }),
