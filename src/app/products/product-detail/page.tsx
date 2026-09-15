@@ -2655,7 +2655,7 @@ function ProductDetailContent() {
                       className="bg-white rounded-lg shadow-md overflow-hidden hover:shadow-lg group border-2 border-gray-200 hover:border-gray-300 h-full cursor-pointer transition-all"
                     >
                       {/* Product Image */}
-                      <div className="w-full h-48 bg-gray-200 relative overflow-hidden">
+                      <div className="group relative w-full aspect-square overflow-hidden bg-gray-200">
                         {(() => {
                           const rawUrl = relatedProduct.image_url || relatedProduct.image;
                           const relatedImgSrc = getProductImageUrl(rawUrl);
@@ -2665,19 +2665,19 @@ function ProductDetailContent() {
                               <img
                                 src={relatedImgSrc}
                                 alt={relatedProduct.name}
-                                className="w-full h-full object-contain group-hover:scale-105 transition-transform duration-300"
+                                className="absolute inset-0 h-full w-full object-cover transition-transform duration-300 group-hover:scale-105"
                               />
                             ) : (
                               <Image
                                 src={relatedImgSrc}
                                 alt={relatedProduct.name}
                                 fill
-                                className="object-contain group-hover:scale-105 transition-transform duration-300"
+                                className="object-cover transition-transform duration-300 group-hover:scale-105"
                                 sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, (max-width: 1280px) 33vw, 25vw"
                               />
                             )
                           ) : (
-                            <div className="w-full h-full flex items-center justify-center bg-gray-200">
+                            <div className="absolute inset-0 flex items-center justify-center bg-gray-200">
                               <svg className="w-16 h-16 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path
                                   strokeLinecap="round"

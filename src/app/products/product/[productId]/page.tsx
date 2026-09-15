@@ -143,21 +143,21 @@ export default function ProductDetailPage({ params }: { params: Promise<{ produc
     <Link href={`/products/product-detail?productId=${product.id}`}>
       <div className="group h-full cursor-pointer">
         {/* Product Image */}
-        <div className="w-full h-48 border border-gray-200 bg-gray-200 relative overflow-hidden">
+        <div className="group relative w-full aspect-square overflow-hidden bg-gray-200">
             {imageSrc ? (
               isBackendUpload ? (
-                <img src={imageSrc} alt={product.name} className="w-full h-full object-contain group-hover:scale-105 transition-transform duration-300" />
+                <img src={imageSrc} alt={product.name} className="absolute inset-0 h-full w-full object-cover transition-transform duration-300 group-hover:scale-105" />
               ) : (
                 <Image
                   src={imageSrc}
                   alt={product.name}
                   fill
-                  className="object-contain group-hover:scale-105 transition-transform duration-300"
+                  className="object-cover transition-transform duration-300 group-hover:scale-105"
                   sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, (max-width: 1280px) 33vw, 25vw"
                 />
               )
             ) : (
-            <div className="w-full h-full flex items-center justify-center bg-gray-200">
+            <div className="absolute inset-0 flex items-center justify-center bg-gray-200">
               <svg
                 className="w-16 h-16 text-gray-400"
                 fill="none"
@@ -279,7 +279,7 @@ export default function ProductDetailPage({ params }: { params: Promise<{ produc
                               <Link key={product.id} href={`/products/product-detail?productId=${product.id}`}>
                                 <div className="bg-white border border-gray-200 rounded-lg overflow-hidden group cursor-pointer h-full flex flex-col">
                       {/* Product Image */}
-                      <div className="w-full h-64 border-b border-gray-200 bg-gray-200 relative overflow-hidden">
+                      <div className="group relative w-full aspect-square overflow-hidden bg-gray-200">
                                     {imageSrc ? (
                           <>
                                         {isNew && (
@@ -288,19 +288,19 @@ export default function ProductDetailPage({ params }: { params: Promise<{ produc
                               </div>
                             )}
                             {isBackendUpload ? (
-                              <img src={imageSrc} alt={product.name} className="w-full h-full object-contain group-hover:scale-105 transition-transform duration-300" />
+                              <img src={imageSrc} alt={product.name} className="absolute inset-0 h-full w-full object-cover transition-transform duration-300 group-hover:scale-105" />
                             ) : (
                               <Image
                                 src={imageSrc}
                                 alt={product.name}
                                 fill
-                                className="object-contain group-hover:scale-105 transition-transform duration-300"
+                                className="object-cover transition-transform duration-300 group-hover:scale-105"
                                 sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 33vw"
                               />
                             )}
                           </>
                         ) : (
-                          <div className="w-full h-full flex items-center justify-center bg-gray-200">
+                          <div className="absolute inset-0 flex items-center justify-center bg-gray-200">
                             <svg
                               className="w-16 h-16 text-gray-400"
                               fill="none"
