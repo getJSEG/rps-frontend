@@ -74,17 +74,6 @@ export default function AdminPanel() {
   const [activeTab, setActiveTab] = useState("All Projects");
   const [searchQuery, setSearchQuery] = useState("");
   const [currentPage, setCurrentPage] = useState(1);
-  const sampleImages = [
-    "/0a3pGsJF-s1000.jpg",
-    "/0EVddVW5-s1000.jpg",
-    "/22UuQewt-s1000.jpg",
-    "/2koFWu1n-s1000.jpg",
-    "/3PVhOONT-s1000.jpg",
-    "/3XJNimyc-s1000.jpg",
-    "/4Uag4HyR-s1000.jpg",
-    "/5HeAGSx1-s1000.jpg",
-    "/66xRJHT0-s1000.jpg",
-  ];
 
   const [allOrders, setAllOrders] = useState<Order[]>([]); // Start with empty array - will be populated from database
   const [loading, setLoading] = useState(false);

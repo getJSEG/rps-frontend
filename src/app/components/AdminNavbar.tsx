@@ -109,17 +109,17 @@ export default function AdminNavbar({
     <div className="admin-app min-h-screen flex bg-slate-100 text-slate-900">
       <aside className="flex w-52 shrink-0 flex-col border-r border-slate-700/50 bg-slate-800 text-slate-200 sm:w-56">
         <div className="p-5 border-b border-slate-700/50">
-          <div className="rounded-xl bg-white/95 p-2.5 shadow-sm ring-1 ring-black/5">
+          <div className="flex items-center justify-center rounded-xl bg-white/95 p-2.5 shadow-sm ring-1 ring-black/5">
             <Image
-              src="/logo.png"
+              src="/rps-logo.png"
               alt="Logo"
               width={180}
               height={54}
-              className="h-9 w-auto max-w-full object-contain object-left"
+              className="h-9 w-auto max-w-full object-contain object-center"
               priority
             />
           </div>
-          <p className="mt-3 text-[10px] font-semibold uppercase tracking-[0.2em] text-slate-400">
+          <p className="mt-3 text-center text-[10px] font-semibold uppercase tracking-[0.2em] text-slate-400">
             Control panel
           </p>
         </div>

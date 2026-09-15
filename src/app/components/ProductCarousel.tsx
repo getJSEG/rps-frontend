@@ -141,26 +141,26 @@ export default function ProductCarousel({ products }: ProductCarouselProps) {
             <SwiperSlide key={product.id} className="!h-auto">
               <Link href={`/products/product-detail?productId=${product.id}`} className="block h-full">
                 <div className="group flex h-full cursor-pointer flex-col overflow-hidden rounded-lg border-2 border-gray-200 bg-white shadow-md transition-all hover:border-gray-300 hover:shadow-lg">
-                  <div className="relative h-56 w-full overflow-hidden bg-gray-200">
+                  <div className="group relative w-full aspect-square overflow-hidden bg-gray-200">
                     {imageSrc ? (
                       isBackendUpload ? (
                         <img
                           src={imageSrc}
                           alt={product.name}
-                          className="h-full w-full object-contain transition-transform duration-300 group-hover:scale-105"
+                          className="absolute inset-0 h-full w-full object-cover transition-transform duration-300 group-hover:scale-105"
                         />
                       ) : (
                         <Image
                           src={imageSrc}
                           alt={product.name}
                           fill
-                          className="object-contain transition-transform duration-300 group-hover:scale-105"
+                          className="object-cover transition-transform duration-300 group-hover:scale-105"
                           sizes="(max-width: 640px) 45vw, (max-width: 900px) 30vw, 22vw"
                           unoptimized
                         />
                       )
                     ) : (
-                      <div className="flex h-full w-full items-center justify-center bg-gray-200">
+                      <div className="absolute inset-0 flex items-center justify-center bg-gray-200">
                         <svg className="h-12 w-12 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                           <path
                             strokeLinecap="round"

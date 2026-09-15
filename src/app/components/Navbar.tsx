@@ -393,7 +393,7 @@ export default function Navbar() {
             <div className="flex items-center gap-3 shrink-0">
               <Link href="/" className="flex items-center">
                 <Image
-                  src="/logo.png"
+                  src="/rps-logo.png"
                   alt="Logo"
                   width={160}
                   height={40}
