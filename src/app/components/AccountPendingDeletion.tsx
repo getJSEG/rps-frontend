@@ -34,7 +34,7 @@ export default function AccountPendingDeletion() {
   useEffect(() => {
     const token = typeof window !== "undefined" ? localStorage.getItem("token") : null;
     if (!token) {
-      router.replace("/login");
+      router.replace("/");
       return;
     }
 

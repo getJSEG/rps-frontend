@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { useRouter } from "next/navigation";
 import AdminNavbar from "../../components/AdminNavbar";
 import {
   productsAPI,
@@ -11,7 +10,6 @@ import {
   type ModifierGroup,
   type ShippingBox,
 } from "../../../utils/api";
-import { canAccessAdminPanel, isAuthenticated } from "../../../utils/roles";
 import { FiChevronDown } from "react-icons/fi";
 
 type EditorTemplate = {
@@ -143,7 +141,6 @@ function defaultModifierAmountForBase(group: ModifierGroup, basePrice: number): 
 }
 
 export default function AdminHardwarePage() {
-  const router = useRouter();
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [deletingId, setDeletingId] = useState<number | null>(null);
@@ -227,10 +224,6 @@ export default function AdminHardwarePage() {
   };
 
   useEffect(() => {
-    if (!isAuthenticated() || !canAccessAdminPanel()) {
-      router.push("/");
-      return;
-    }
     (async () => {
       setLoading(true);
       try {
@@ -241,7 +234,7 @@ export default function AdminHardwarePage() {
         setLoading(false);
       }
     })();
-  }, [router]);
+  }, []);
 
   const resetEditor = () => {
     setEditor(createEmptyTemplate());

@@ -1,16 +1,13 @@
 "use client";
 
 import { FormEvent, useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
 import { toast } from "react-toastify";
 import AdminNavbar from "../../components/AdminNavbar";
 import { appSettingsAPI, usersAPI } from "../../../utils/api";
-import { canAccessAdminPanel, isAuthenticated } from "../../../utils/roles";
 
 const STRONG_PASSWORD_REGEX = /^(?=.*[A-Z])(?=.*\d).+$/;
 
 export default function AdminSettingsPage() {
-  const router = useRouter();
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [showNew, setShowNew] = useState(false);
@@ -22,11 +19,6 @@ export default function AdminSettingsPage() {
   const [emailSaving, setEmailSaving] = useState(false);
 
   useEffect(() => {
-    if (!isAuthenticated() || !canAccessAdminPanel()) {
-      router.push("/");
-      return;
-    }
-
     let cancelled = false;
     (async () => {
       try {
@@ -45,7 +37,7 @@ export default function AdminSettingsPage() {
     return () => {
       cancelled = true;
     };
-  }, [router]);
+  }, []);
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();

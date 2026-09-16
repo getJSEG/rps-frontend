@@ -39,7 +39,7 @@ export default function AccountSettings() {
   useEffect(() => {
     const token = typeof window !== "undefined" ? localStorage.getItem("token") : null;
     if (!token) {
-      router.push("/login");
+      router.push("/");
       return;
     }
 
@@ -59,7 +59,7 @@ export default function AccountSettings() {
         }
       } catch (err: any) {
         if (err?.message?.includes("401") || err?.message?.toLowerCase().includes("token")) {
-          router.push("/login");
+          router.push("/");
           return;
         }
         toast.error(err?.message || "Failed to load profile");
@@ -80,7 +80,7 @@ export default function AccountSettings() {
     e.preventDefault();
     const token = typeof window !== "undefined" ? localStorage.getItem("token") : null;
     if (!token) {
-      router.push("/login");
+      router.push("/");
       return;
     }
     try {

@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { useRouter } from "next/navigation";
 import { FiChevronDown, FiX } from "react-icons/fi";
 import AdminNavbar from "../../components/AdminNavbar";
 import {
@@ -11,7 +10,6 @@ import {
   type ModifierPreset,
   type ModifierSubcategory,
 } from "../../../utils/api";
-import { canAccessAdminPanel, isAuthenticated } from "../../../utils/roles";
 
 type Tab = "catalog" | "presets" | "categories";
 type EditorGroup = ModifierGroup & { __uiid: string };
@@ -98,7 +96,6 @@ const emptyGroup = (): EditorGroup => ({
 });
 
 export default function AdminModifiersPage() {
-  const router = useRouter();
   const [loading, setLoading] = useState(true);
   const [tab, setTab] = useState<Tab>("catalog");
   const [message, setMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
@@ -150,10 +147,6 @@ export default function AdminModifiersPage() {
   };
 
   useEffect(() => {
-    if (!isAuthenticated() || !canAccessAdminPanel()) {
-      router.push("/");
-      return;
-    }
     (async () => {
       try {
         await loadAll();
@@ -163,7 +156,7 @@ export default function AdminModifiersPage() {
         setLoading(false);
       }
     })();
-  }, [router]);
+  }, []);
 
   const editorSubcategories = subcategories.filter(
     (item) => Number(item.category_id) === Number(editor.category_id)

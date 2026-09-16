@@ -3,7 +3,6 @@
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import AdminNavbar from "../../components/AdminNavbar";
-import { canAccessAdminPanel, isAuthenticated } from "../../../utils/roles";
 import { FiEdit, FiTrash2 } from "react-icons/fi";
 import { employeesAPI, getProductImageUrl } from "../../../utils/api";
 
@@ -104,18 +103,6 @@ export default function EmployeesPage() {
   const totalPages = Math.max(1, Math.ceil(employees.length / pageSize));
   const currentPage = Math.min(page, totalPages);
   const pagedEmployees = employees.slice((currentPage - 1) * pageSize, currentPage * pageSize);
-
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-    if (!isAuthenticated()) {
-      router.push("/");
-      return;
-    }
-    if (!canAccessAdminPanel()) {
-      router.push("/");
-      return;
-    }
-  }, [router]);
 
   const fetchEmployees = async () => {
     try {

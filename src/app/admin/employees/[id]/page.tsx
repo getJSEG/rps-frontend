@@ -1,10 +1,9 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { useRouter, useParams } from "next/navigation";
+import { useParams } from "next/navigation";
 import Link from "next/link";
 import AdminNavbar from "../../../components/AdminNavbar";
-import { canAccessAdminPanel, isAuthenticated } from "../../../../utils/roles";
 import { employeesAPI, getProductImageUrl } from "../../../../utils/api";
 
 interface Employee {
@@ -48,24 +47,11 @@ function formatDate(d: string | null): string {
 }
 
 export default function EmployeeDetailPage() {
-  const router = useRouter();
   const params = useParams();
   const id = params?.id as string;
   const [employee, setEmployee] = useState<Employee | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-    if (!isAuthenticated()) {
-      router.push("/");
-      return;
-    }
-    if (!canAccessAdminPanel()) {
-      router.push("/");
-      return;
-    }
-  }, [router]);
 
   useEffect(() => {
     if (!id) return;

@@ -1,9 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { useRouter } from "next/navigation";
 import AdminNavbar from "../../components/AdminNavbar";
-import { canAccessAdminPanel, isAuthenticated } from "../../../utils/roles";
 import { usersAPI } from "../../../utils/api";
 
 interface RegisteredUser {
@@ -18,25 +16,12 @@ interface RegisteredUser {
 }
 
 export default function UsersPage() {
-  const router = useRouter();
   const [users, setUsers] = useState<RegisteredUser[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [page, setPage] = useState(1);
   const pageSize = 10;
-
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-    if (!isAuthenticated()) {
-      router.push("/");
-      return;
-    }
-    if (!canAccessAdminPanel()) {
-      router.push("/");
-      return;
-    }
-  }, [router]);
 
   useEffect(() => {
     const fetchUsers = async () => {

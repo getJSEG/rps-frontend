@@ -107,7 +107,7 @@ export default function AddressBook() {
         setAddresses(list);
       } catch (err: any) {
         if (err?.message?.includes("401") || err?.message?.toLowerCase().includes("token")) {
-          router.push("/login");
+          router.push("/");
           return;
         }
         toast.error(err?.message || "Failed to load addresses");
@@ -122,7 +122,7 @@ export default function AddressBook() {
   useEffect(() => {
     const token = typeof window !== "undefined" ? localStorage.getItem("token") : null;
     if (!token) {
-      router.push("/login");
+      router.push("/");
       return;
     }
     fetchAddressList({ showFullPageSpinner: true });
@@ -223,7 +223,7 @@ export default function AddressBook() {
     e.preventDefault();
     const token = typeof window !== "undefined" ? localStorage.getItem("token") : null;
     if (!token) {
-      router.push("/login");
+      router.push("/");
       return;
     }
     if (!formData.streetAddress.trim() || !formData.city.trim() || !formData.state.trim() || !formData.postcode.trim()) {

@@ -4,7 +4,6 @@ import { useState, useEffect, useRef, useCallback, useMemo, type RefObject } fro
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import AdminNavbar from "../../components/AdminNavbar";
-import { canAccessAdminPanel, isAuthenticated } from "../../../utils/roles";
 import {
   getProductImageUrl,
   productsAPI,
@@ -1175,18 +1174,6 @@ export default function AdminProductsPage() {
     setProdImageUrlInput("");
     showMsg("success", "Image URL added.");
   };
-
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-    if (!isAuthenticated()) {
-      router.push("/");
-      return;
-    }
-    if (!canAccessAdminPanel()) {
-      router.push("/");
-      return;
-    }
-  }, [router]);
 
   const loadCategories = async () => {
     try {

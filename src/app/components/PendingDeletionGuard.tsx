@@ -3,7 +3,7 @@
 import { useEffect } from "react";
 import { usePathname, useRouter } from "next/navigation";
 
-const ALLOWED_WHEN_PENDING = ["/account-pending-deletion", "/login"];
+const ALLOWED_WHEN_PENDING = ["/account-pending-deletion"];
 
 function readPendingDeletion(): boolean {
   if (typeof window === "undefined") return false;

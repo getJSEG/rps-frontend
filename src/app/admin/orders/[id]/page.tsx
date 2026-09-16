@@ -10,7 +10,6 @@ import { ordersAPI, getProductImageUrl, downloadUrlAsFile } from "../../../../ut
 // Legacy FedEx shipment flow imports, kept commented while admin uses manual tracking entry.
 // import { ordersAPI, getProductImageUrl, downloadUrlAsFile, fedexAPI, getBackendBaseUrl } from "../../../../utils/api";
 import AdminNavbar from "../../../components/AdminNavbar";
-import { canAccessAdminPanel, isAuthenticated, getUserRole } from "../../../../utils/roles";
 import {
   ADMIN_ORDER_STATUS_OPTIONS,
   adminItemStatusOptionsFor,
@@ -719,34 +718,12 @@ export default function OrderDetails() {
   }, [orderId, router]);
 
   useEffect(() => {
-    if (typeof window === "undefined") return;
-
-    const authenticated = isAuthenticated();
-    const hasAccess = canAccessAdminPanel();
-    const userRole = getUserRole();
-
-    if (!authenticated) {
-      setError("Please login to view order details.");
-      setLoading(false);
-      setTimeout(() => router.push("/"), 1500);
-      return;
-    }
-
-    if (!hasAccess) {
-      setError(`Access denied. Admin only. Your role: ${userRole || "unknown"}`);
-      setLoading(false);
-      setTimeout(() => router.push("/"), 2000);
-    }
-  }, [router]);
-
-  useEffect(() => {
     if (!orderId) {
       setError("Order ID is missing");
       setLoading(false);
       return;
     }
     if (typeof window === "undefined") return;
-    if (!isAuthenticated() || !canAccessAdminPanel()) return;
     if (!localStorage.getItem("token")) {
       setError("Please login as admin.");
       setLoading(false);

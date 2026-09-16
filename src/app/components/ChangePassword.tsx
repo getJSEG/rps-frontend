@@ -22,7 +22,7 @@ export default function ChangePassword() {
   useEffect(() => {
     const token = typeof window !== "undefined" ? localStorage.getItem("token") : null;
     if (!token) {
-      router.push("/login");
+      router.push("/");
     }
   }, [router]);
 
@@ -30,7 +30,7 @@ export default function ChangePassword() {
     e.preventDefault();
     const token = typeof window !== "undefined" ? localStorage.getItem("token") : null;
     if (!token) {
-      router.push("/login");
+      router.push("/");
       return;
     }
     if (newPassword.length < 6) {

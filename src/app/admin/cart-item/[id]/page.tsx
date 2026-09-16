@@ -4,7 +4,6 @@ import { useState, useEffect } from "react";
 import { useRouter, useParams } from "next/navigation";
 import Link from "next/link";
 import AdminNavbar from "../../../components/AdminNavbar";
-import { canAccessAdminPanel, isAuthenticated } from "../../../../utils/roles";
 import { ordersAPI, getProductImageUrl } from "../../../../utils/api";
 import { ADMIN_ORDER_STATUS_OPTIONS } from "../../../../utils/orderStatuses";
 
@@ -40,18 +39,6 @@ export default function CartItemDetailPage() {
   const [savedOrderId, setSavedOrderId] = useState<string | null>(null);
 
   const statusOptions = ADMIN_ORDER_STATUS_OPTIONS;
-
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-    if (!isAuthenticated()) {
-      router.push("/");
-      return;
-    }
-    if (!canAccessAdminPanel()) {
-      router.push("/");
-      return;
-    }
-  }, [router]);
 
   useEffect(() => {
     if (!id) {

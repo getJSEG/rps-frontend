@@ -37,7 +37,7 @@ export default function CreditCards() {
   useEffect(() => {
     const token = typeof window !== "undefined" ? localStorage.getItem("token") : null;
     if (!token) {
-      router.push("/login");
+      router.push("/");
       return;
     }
     const fetchCards = async () => {
@@ -47,7 +47,7 @@ export default function CreditCards() {
         setCards(res?.cards || []);
       } catch (err: any) {
         if (err?.message?.includes("401") || err?.message?.toLowerCase().includes("token")) {
-          router.push("/login");
+          router.push("/");
           return;
         }
         toast.error(err?.message || "Failed to load cards");
@@ -124,7 +124,7 @@ export default function CreditCards() {
     e.preventDefault();
     const token = typeof window !== "undefined" ? localStorage.getItem("token") : null;
     if (!token) {
-      router.push("/login");
+      router.push("/");
       return;
     }
 

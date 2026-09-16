@@ -5,7 +5,6 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { ordersAPI, getProductImageUrl } from "../../../utils/api";
 import AdminNavbar from "../../components/AdminNavbar";
-import { canAccessAdminPanel, isAuthenticated } from "../../../utils/roles";
 import { adminOrderStatusLabel } from "../../../utils/orderStatuses";
 
 function normalizeStatus(raw: string): string {
@@ -77,18 +76,6 @@ export default function RefundsPage() {
   /** When set, shows centered refund confirmation modal for that order id. */
   const [refundModalOrderId, setRefundModalOrderId] = useState<string | null>(null);
   const [awaitingRefundModalOrderId, setAwaitingRefundModalOrderId] = useState<string | null>(null);
-
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-    if (!isAuthenticated()) {
-      router.push("/");
-      return;
-    }
-    if (!canAccessAdminPanel()) {
-      router.push("/");
-      return;
-    }
-  }, [router]);
 
   useEffect(() => {
     const fetchRefundOrders = async () => {

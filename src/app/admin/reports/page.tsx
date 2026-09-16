@@ -5,7 +5,6 @@ import { useRouter } from "next/navigation";
 import AdminNavbar from "../../components/AdminNavbar";
 import { reportsAPI, type AdminDashboardResponse } from "../../../utils/api";
 import { adminOrderStatusLabel } from "../../../utils/orderStatuses";
-import { canAccessAdminPanel, isAuthenticated } from "../../../utils/roles";
 
 type LoadingState = "idle" | "loading" | "ready" | "error";
 
@@ -299,13 +298,8 @@ export default function AdminReportsPage() {
   }, [fromDate, toDate, chartYear]);
 
   useEffect(() => {
-    if (typeof window === "undefined") return;
-    if (!isAuthenticated() || !canAccessAdminPanel()) {
-      router.push("/");
-      return;
-    }
     void fetchDashboard();
-  }, [router, fetchDashboard]);
+  }, [fetchDashboard]);
 
   const overviewRows = useMemo(() => {
     if (!data?.ordersOverview) return [];

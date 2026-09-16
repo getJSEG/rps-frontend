@@ -5,7 +5,6 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { ordersAPI, productsAPI, cartAPI, getProductImageUrl } from "../../utils/api";
 import AdminNavbar from "./AdminNavbar";
-import { canAccessAdminPanel, isAuthenticated, getUserRole } from "../../utils/roles";
 import { FiTrash2 } from "react-icons/fi";
 import { adminOrderStatusLabel, canonicalOrderStatus } from "../../utils/orderStatuses";
 
@@ -78,10 +77,8 @@ export default function AdminPanel() {
   const [allOrders, setAllOrders] = useState<Order[]>([]); // Start with empty array - will be populated from database
   const [loading, setLoading] = useState(false);
   const [cartItems, setCartItems] = useState<CartItem[]>([]);
-  const [cartLoading, setCartLoading] = useState(true);
   const [adminCartToOrder, setAdminCartToOrder] = useState<Record<string, string>>({}); // cart item id -> order id (so we don't show same item twice)
   const [productImages, setProductImages] = useState<{ [key: string]: string }>({});
-  const [accessGranted, setAccessGranted] = useState(false);
   const [removingId, setRemovingId] = useState<string | null>(null);
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
   const itemsPerPage = 10;
@@ -106,30 +103,7 @@ export default function AdminPanel() {
     }
   };
 
-  // Check if user is admin before allowing access; only then allow data fetches
   useEffect(() => {
-    if (typeof window === 'undefined') return;
-
-    const authenticated = isAuthenticated();
-    const hasAccess = canAccessAdminPanel();
-    const userRole = getUserRole();
-
-    if (!authenticated) {
-      router.push('/');
-      return;
-    }
-
-    if (!hasAccess) {
-      router.push('/');
-      return;
-    }
-
-    setAccessGranted(true);
-  }, [router]);
-
-  useEffect(() => {
-    if (!accessGranted) return;
-
     const fetchOrders = async () => {
       try {
         setLoading(true);
@@ -216,7 +190,7 @@ export default function AdminPanel() {
     };
 
     fetchOrders();
-  }, [accessGranted, activeTab, router]);
+  }, [activeTab, router]);
 
   useEffect(() => {
     setCurrentPage(1);
@@ -224,8 +198,6 @@ export default function AdminPanel() {
 
   // Carts are per-user; admin panel lists placed orders only (no global cart merge)
   useEffect(() => {
-    if (!accessGranted) return;
-
     const loadCart = async () => {
       try {
         setCartItems([]);
@@ -236,8 +208,6 @@ export default function AdminPanel() {
         console.error("Error loading cart:", error);
         setCartItems([]);
         setAdminCartToOrder({});
-      } finally {
-        setCartLoading(false);
       }
     };
 
@@ -251,7 +221,7 @@ export default function AdminPanel() {
       window.removeEventListener("cartUpdated", onCartUpdated);
       window.removeEventListener("storage", onCartUpdated);
     };
-  }, [accessGranted]);
+  }, []);
 
   // Fetch product images for orders that don't have images
   useEffect(() => {
