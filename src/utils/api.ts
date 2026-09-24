@@ -225,6 +225,24 @@ export type TaxEstimateResponse = {
   warning?: string;
 };
 
+/** Files returned by the design template uploader: the admin's SVG and the PNG the editor loads. */
+export type DesignTemplateUpload = {
+  svg_url: string;
+  svg_storage_key: string;
+  image_url: string;
+  image_storage_key: string;
+  image_width_px: number;
+  image_height_px: number;
+  original_name?: string;
+};
+
+/** Design-editor template attached to a product. */
+export type ProductDesignTemplate = DesignTemplateUpload & {
+  id?: number;
+  name: string;
+  sort_order?: number;
+};
+
 export type ModifierOption = {
   id?: number;
   label: string;
@@ -1762,6 +1780,29 @@ export const productsAPI = {
     return apiCall('/products/admin/upload-template-file', {
       method: 'DELETE',
       body: JSON.stringify({ storage_key: storageKey }),
+    });
+  },
+  /** Upload a design-editor template SVG; the server also renders the PNG the editor loads. */
+  uploadDesignTemplate: async (file: File): Promise<DesignTemplateUpload> => {
+    const token = typeof window !== 'undefined' ? localStorage.getItem('token') : null;
+    const formData = new FormData();
+    formData.append('file', file);
+    const res = await fetch(`${API_BASE_URL}/products/admin/upload-design-template`, {
+      method: 'POST',
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+      body: formData,
+    });
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      throw new Error(data.message || data.error || 'Design template upload failed');
+    }
+    return res.json();
+  },
+  /** Remove a design template upload that has not been attached to a saved product. */
+  deleteUploadedDesignTemplate: async (svgStorageKey: string, imageStorageKey: string) => {
+    return apiCall('/products/admin/upload-design-template', {
+      method: 'DELETE',
+      body: JSON.stringify({ svg_storage_key: svgStorageKey, image_storage_key: imageStorageKey }),
     });
   },
   /** Upload category/subcategory image file; returns { url: '/uploads/categories/filename' } */
