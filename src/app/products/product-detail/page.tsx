@@ -21,9 +21,12 @@ import {
   productFedexShippingFromProduct,
   type FedexRateQuote,
   type FreeShippingPolicy,
+  type ProductDesignTemplate,
   type ProductShippingBoxRule,
   type TaxEstimateResponse,
 } from "../../../utils/api";
+import DesignFlowModal from "../../components/design/DesignFlowModal";
+import { printSizeKey, type JobDesign, type PrintSize } from "../../components/design/designCanvas";
 import { isAuthenticated } from "../../../utils/roles";
 import { toUsStateCode } from "../../../utils/usState";
 import { SITE_TAB_TITLE, pageTitle } from "../../../utils/tabTitle";
@@ -117,6 +120,7 @@ interface Product {
   spec?: string | null;
   file_setup?: string | null;
   template_files?: ProductTemplateFile[];
+  design_templates?: ProductDesignTemplate[];
   installation_guide?: string | null;
   faq?: ProductFaqItem[] | string | null;
   dimensions?: string;
@@ -361,6 +365,10 @@ function ProductDetailContent() {
   const [taxEstimateLoading, setTaxEstimateLoading] = useState(false);
   const [taxEstimateError, setTaxEstimateError] = useState<string | null>(null);
   const [jobArtworkInfoOpen, setJobArtworkInfoOpen] = useState(false);
+  /** Design per job id, made in the design tool or uploaded before checkout. */
+  const [jobDesigns, setJobDesigns] = useState<Record<string, JobDesign>>({});
+  /** Job index the design tool opened at; null when closed. */
+  const [designFlowStart, setDesignFlowStart] = useState<number | null>(null);
   const [estimateShipForm, setEstimateShipForm] = useState({
     streetAddress: "",
     addressLine2: "",
@@ -391,6 +399,16 @@ function ProductDetailContent() {
 
   const removeJob = (id: string) => {
     setJobs((prev) => (prev.length <= 1 ? prev : prev.filter((j) => j.id !== id)));
+    setJobDesignFor(id, null);
+  };
+
+  const setJobDesignFor = (jobId: string, design: JobDesign | null) => {
+    setJobDesigns((prev) => {
+      const next = { ...prev };
+      if (design) next[jobId] = design;
+      else delete next[jobId];
+      return next;
+    });
   };
 
   const updateJob = (id: string, patch: Partial<Pick<ProductJobRow, "jobName" | "quantity">>) => {
@@ -1069,6 +1087,40 @@ function ProductDetailContent() {
   const widthInches = previewPricing?.width ?? (parseFloat(width) || 0);
   const heightInches = previewPricing?.height ?? (parseFloat(height) || 0);
   const areaSqFt = previewPricing?.areaSqft ?? ((widthInches * heightInches) / 144);
+
+  const designTemplates = useMemo(
+    () => (Array.isArray(product?.design_templates) ? product.design_templates : []),
+    [product?.design_templates]
+  );
+  /** Customer-entered size drives the blank canvas; template and hardware products have a fixed shape instead. */
+  const designPrintSize = useMemo<PrintSize | null>(
+    () =>
+      !skipDimensionsForPrice && widthInches > 0 && heightInches > 0
+        ? { widthIn: widthInches, heightIn: heightInches }
+        : null,
+    [skipDimensionsForPrice, widthInches, heightInches]
+  );
+  const designSizeKey = designTemplates.length > 0 ? null : printSizeKey(designPrintSize);
+
+  // A blank-canvas or uploaded design only fits the size it was made for; drop it when the size changes.
+  useEffect(() => {
+    setJobDesigns((prev) => {
+      const stale = Object.keys(prev).filter((jobId) => prev[jobId].sizeKey !== designSizeKey);
+      if (stale.length === 0) return prev;
+      const next = { ...prev };
+      for (const jobId of stale) delete next[jobId];
+      return next;
+    });
+  }, [designSizeKey]);
+
+  const openDesignFlow = (jobIndex: number) => {
+    if (designTemplates.length === 0 && !skipDimensionsForPrice && !designPrintSize) {
+      setMessage("❌ Error: Enter width and height before starting your design");
+      setTimeout(() => setMessage(""), 5000);
+      return;
+    }
+    setDesignFlowStart(jobIndex);
+  };
   const listFixedUnit = parseProductMoney(product?.price);
   const fallbackFixedFromProduct = listFixedUnit != null ? listFixedUnit : 0;
   const fallbackAreaPrice = Math.max(areaSqFt * pricePerSqFt, minCharge);
@@ -1287,11 +1339,14 @@ function ProductDetailContent() {
       const jobsPayload = jobs.map((j) => {
         const q = Math.max(1, parseInt(j.quantity, 10) || 1);
         const up = unitPrice;
+        // Only approved designs travel with the job; anything else is uploaded after the order.
+        const design = jobDesigns[j.id]?.approved ? jobDesigns[j.id] : null;
         return {
           jobName: j.jobName.trim(),
           quantity: q,
           unitPrice: up,
           lineSubtotal: up * q,
+          ...(design ? { designId: design.id, designUrl: design.fileUrl } : {}),
         };
       });
       const totalQty = jobsPayload.reduce((s, j) => s + j.quantity, 0);
@@ -2044,6 +2099,22 @@ function ProductDetailContent() {
                           ${linePrice.toFixed(2)}
                         </div>
                       </div>
+                      <div className="shrink-0">
+                        <span className="mb-2 block text-sm font-medium text-gray-700">
+                          {jobDesigns[job.id]?.approved ? (
+                            <span className="text-emerald-600">Design ready ✓</span>
+                          ) : (
+                            "Artwork"
+                          )}
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => openDesignFlow(index)}
+                          className="box-border h-10 rounded-lg border border-blue-500 px-4 text-sm font-semibold text-blue-600 transition-colors hover:bg-blue-50"
+                        >
+                          {jobDesigns[job.id] ? "Edit design" : "Start Design"}
+                        </button>
+                      </div>
                       {jobs.length > 1 ? (
                         <div className="shrink-0 flex items-end pb-0.5">
                           <button
@@ -2749,6 +2820,22 @@ function ProductDetailContent() {
         </div>
       )}
     </div>
+      {designFlowStart != null && productId ? (
+        <DesignFlowModal
+          productId={productId}
+          jobs={jobs}
+          startIndex={Math.min(designFlowStart, jobs.length - 1)}
+          templates={designTemplates}
+          printSize={designTemplates.length > 0 ? null : designPrintSize}
+          designs={jobDesigns}
+          onDesignChange={setJobDesignFor}
+          onClose={() => setDesignFlowStart(null)}
+          onAddToCart={() => {
+            setDesignFlowStart(null);
+            void handleAddToCart();
+          }}
+        />
+      ) : null}
       {jobArtworkInfoOpen ? (
         <div
           className="fixed inset-0 z-[100] flex items-center justify-center bg-white/45 p-4 backdrop-blur-[1px] backdrop-saturate-150 supports-[backdrop-filter]:bg-white/35"

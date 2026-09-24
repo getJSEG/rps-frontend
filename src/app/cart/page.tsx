@@ -22,13 +22,16 @@ import {
   type FreeShippingPolicy,
   type CartSummary,
 } from "../../utils/api";
-import { FiArrowLeft, FiTrash2 } from "react-icons/fi";
+import { FiArrowLeft, FiFileText, FiTrash2, FiX } from "react-icons/fi";
 
 interface CartJobLine {
   jobName: string;
   quantity: number;
   unitPrice?: number;
   lineSubtotal?: number;
+  /** Approved design from the design tool (set by the server). */
+  designUrl?: string;
+  designMimeType?: string;
 }
 
 interface CartItem {
@@ -214,6 +217,17 @@ export default function CartPage() {
   });
   const [clearCartPopoverOpen, setClearCartPopoverOpen] = useState(false);
   const [clearingCart, setClearingCart] = useState(false);
+  /** Job design opened in the preview popup. */
+  const [designPreview, setDesignPreview] = useState<{ url: string; isPdf: boolean; jobName: string } | null>(null);
+
+  useEffect(() => {
+    if (!designPreview) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setDesignPreview(null);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [designPreview]);
   // const [isAdminView, setIsAdminView] = useState(false);
   const hasInitializedRef = useRef(false);
 
@@ -557,7 +571,30 @@ export default function CartPage() {
                                     : (Number(j.unitPrice) || Number(item.unitPrice) || 0) * (Number(j.quantity) || 0);
                                 return (
                                   <li key={ji} className="flex flex-wrap items-center justify-between gap-2 py-2 first:pt-0 last:pb-0">
-                                    <span className="font-medium text-gray-900">{j.jobName || `Job ${ji + 1}`}</span>
+                                    <span className="flex min-w-0 items-center gap-2">
+                                      {j.designUrl ? (
+                                        <button
+                                          type="button"
+                                          onClick={() =>
+                                            setDesignPreview({
+                                              url: getProductImageUrl(j.designUrl),
+                                              isPdf: String(j.designMimeType || "").toLowerCase() === "application/pdf",
+                                              jobName: j.jobName || `Job ${ji + 1}`,
+                                            })
+                                          }
+                                          className="flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded border border-gray-200 bg-white hover:border-blue-500 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
+                                          aria-label={`Preview design for ${j.jobName || `Job ${ji + 1}`}`}
+                                        >
+                                          {String(j.designMimeType || "").toLowerCase() === "application/pdf" ? (
+                                            <FiFileText size={18} className="text-gray-500" aria-hidden />
+                                          ) : (
+                                            // eslint-disable-next-line @next/next/no-img-element
+                                            <img src={getProductImageUrl(j.designUrl)} alt="" className="h-full w-full object-contain" />
+                                          )}
+                                        </button>
+                                      ) : null}
+                                      <span className="font-medium text-gray-900">{j.jobName || `Job ${ji + 1}`}</span>
+                                    </span>
                                     <span className="text-gray-600">
                                       Qty <span className="tabular-nums font-medium text-gray-800">{j.quantity}</span>
                                       <span className="ml-2 tabular-nums font-medium text-gray-900">${lineAmt.toFixed(2)}</span>
@@ -702,6 +739,40 @@ export default function CartPage() {
           )}
         </div>
       </div>
+      {designPreview ? (
+        <div
+          className="fixed inset-0 z-[200] flex items-center justify-center bg-black/60 p-4"
+          role="dialog"
+          aria-modal="true"
+          aria-label={`Design for ${designPreview.jobName}`}
+          onClick={() => setDesignPreview(null)}
+        >
+          <div
+            className="relative flex max-h-[90vh] w-full max-w-3xl flex-col rounded-xl bg-white p-4 shadow-xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="mb-3 flex items-center justify-between gap-3">
+              <p className="truncate text-sm font-semibold text-gray-900">{designPreview.jobName}</p>
+              <button
+                type="button"
+                onClick={() => setDesignPreview(null)}
+                className="rounded-md p-1 text-gray-500 hover:bg-gray-100"
+                aria-label="Close preview"
+              >
+                <FiX size={20} />
+              </button>
+            </div>
+            <div className="flex min-h-0 flex-1 items-center justify-center rounded-lg bg-gray-100">
+              {designPreview.isPdf ? (
+                <iframe src={designPreview.url} title={`Design for ${designPreview.jobName}`} className="h-[75vh] w-full rounded-lg" />
+              ) : (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img src={designPreview.url} alt={`Design for ${designPreview.jobName}`} className="max-h-[75vh] max-w-full object-contain" />
+              )}
+            </div>
+          </div>
+        </div>
+      ) : null}
       {clearCartPopoverOpen ? (
         <div
           className="fixed inset-0 z-[100] flex items-center justify-center bg-black/35 p-4"

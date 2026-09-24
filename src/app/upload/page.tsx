@@ -68,6 +68,38 @@ function UploadAfterOrderInner() {
       : "/orders";
 
   const hasOrderContext = orderId != null && orderId !== "";
+  /** True while checking whether every line already has artwork from the design tool. */
+  const [checkingArtwork, setCheckingArtwork] = useState(placed && hasOrderContext);
+
+  // Jobs designed before checkout already carry artwork; skip this page when nothing is left to upload.
+  useEffect(() => {
+    if (!placed || !hasOrderContext) return;
+    if (!guestToken && !isAuthenticated()) {
+      setCheckingArtwork(false);
+      return;
+    }
+    let cancelled = false;
+    void (async () => {
+      try {
+        const res = guestToken
+          ? ((await ordersAPI.getGuestById(String(orderId), guestToken)) as { order?: UploadApprovalOrderRow })
+          : ((await ordersAPI.getById(String(orderId))) as { order?: UploadApprovalOrderRow });
+        const items = Array.isArray(res?.order?.items) ? res.order.items : [];
+        const allHaveArtwork =
+          items.length > 0 && items.every((item) => String(item?.customer_artwork_url || "").trim() !== "");
+        if (!cancelled && allHaveArtwork) {
+          router.replace(orderDetailHref);
+          return;
+        }
+      } catch {
+        /* fall back to the upload prompt */
+      }
+      if (!cancelled) setCheckingArtwork(false);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [placed, hasOrderContext, guestToken, orderId, orderDetailHref, router]);
 
   const goUploadArtwork = () => {
     if (!hasOrderContext) {
@@ -122,6 +154,14 @@ function UploadAfterOrderInner() {
       }
     })();
   };
+
+  if (checkingArtwork) {
+    return (
+      <div className="flex flex-1 items-center justify-center py-16">
+        <p className="text-gray-600">Loading your order…</p>
+      </div>
+    );
+  }
 
   return (
     <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
