@@ -570,8 +570,10 @@ export default function CartPage() {
                                     ? Number(j.lineSubtotal)
                                     : (Number(j.unitPrice) || Number(item.unitPrice) || 0) * (Number(j.quantity) || 0);
                                 return (
-                                  <li key={ji} className="flex flex-wrap items-center justify-between gap-2 py-2 first:pt-0 last:pb-0">
-                                    <span className="flex min-w-0 items-center gap-2">
+                                  <li key={ji} className="flex flex-nowrap items-center justify-between gap-3 py-2 first:pt-0 last:pb-0">
+                                    {/* Job name on the left; design thumbnail sits just before Qty on the right. */}
+                                    <span className="min-w-0 flex-1 truncate font-medium text-gray-900">{j.jobName || `Job ${ji + 1}`}</span>
+                                    <span className="flex shrink-0 items-center gap-3 whitespace-nowrap text-gray-600">
                                       {j.designUrl ? (
                                         <button
                                           type="button"
@@ -593,11 +595,10 @@ export default function CartPage() {
                                           )}
                                         </button>
                                       ) : null}
-                                      <span className="font-medium text-gray-900">{j.jobName || `Job ${ji + 1}`}</span>
-                                    </span>
-                                    <span className="text-gray-600">
-                                      Qty <span className="tabular-nums font-medium text-gray-800">{j.quantity}</span>
-                                      <span className="ml-2 tabular-nums font-medium text-gray-900">${lineAmt.toFixed(2)}</span>
+                                      <span>
+                                        Qty <span className="tabular-nums font-medium text-gray-800">{j.quantity}</span>
+                                        <span className="ml-2 tabular-nums font-medium text-gray-900">${lineAmt.toFixed(2)}</span>
+                                      </span>
                                     </span>
                                   </li>
                                 );
