@@ -516,7 +516,6 @@ function GuestOrderTrackInner() {
                             item={{
                               id: item.id,
                               image_url: item.image_url,
-                              product_name: item.product_name,
                             }}
                           />
                           <p className="min-w-0 font-medium text-gray-900">
