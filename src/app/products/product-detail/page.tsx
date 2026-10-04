@@ -30,7 +30,8 @@ import { printSizeKey, type JobDesign, type PrintSize } from "../../components/d
 import { isAuthenticated } from "../../../utils/roles";
 import { toUsStateCode } from "../../../utils/usState";
 import { SITE_TAB_TITLE, pageTitle } from "../../../utils/tabTitle";
-import { FiArrowLeft, FiTrash2, FiX } from "react-icons/fi";
+import { FiArrowLeft, FiCheck, FiPenTool, FiTrash2, FiX } from "react-icons/fi";
+import { toast } from "react-toastify";
 import { HiOutlinePencilSquare } from "react-icons/hi2";
 
 /** One artwork per job popup image in `public`. */
@@ -1117,6 +1118,7 @@ function ProductDetailContent() {
     if (designTemplates.length === 0 && !skipDimensionsForPrice && !designPrintSize) {
       setMessage("❌ Error: Enter width and height before starting your design");
       setTimeout(() => setMessage(""), 5000);
+      toast.error("Enter width and height before starting your design", { toastId: "design-needs-size" });
       return;
     }
     setDesignFlowStart(jobIndex);
@@ -2059,75 +2061,79 @@ function ProductDetailContent() {
                 {jobs.map((job, index) => {
                   const line = jobLines[index];
                   const linePrice = line ? line.lineSubtotal : 0;
+                  const jobDesign = jobDesigns[job.id];
                   return (
                     <div
                       key={job.id}
-                      className="flex flex-wrap gap-4 items-end rounded-lg border border-gray-100 bg-white/60 p-3 sm:p-4"
+                      className="rounded-lg border border-gray-100 bg-white/60 px-3 pb-3 pt-2 sm:px-4 sm:pb-4 sm:pt-2.5"
                     >
-                      <div className="min-w-0 flex-1 basis-[200px]">
-                        <label className="block text-sm font-medium text-gray-700 mb-2">
-                          Job Name/PO# <span className="text-red-500">*</span>
-                        </label>
-                        <input
-                          type="text"
-                          value={job.jobName}
-                          onChange={(e) => updateJob(job.id, { jobName: e.target.value })}
-                          className="box-border h-10 w-full rounded-lg border border-gray-300 px-3 text-sm text-gray-900 placeholder:text-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                          placeholder="Job Name/PO#"
-                          aria-label={`Job ${index + 1} name or PO number`}
-                        />
-                      </div>
-                      <div className="w-28 shrink-0">
-                        <label className="block text-sm font-medium text-gray-700 mb-2">Qty</label>
-                        <input
-                          type="number"
-                          value={job.quantity}
-                          onChange={(e) => updateJob(job.id, { quantity: e.target.value })}
-                          className="box-border h-10 w-full rounded-lg border border-gray-300 px-3 text-sm text-black focus:outline-none focus:ring-2 focus:ring-blue-500"
-                          min={1}
-                          step={1}
-                          aria-label={`Job ${index + 1} quantity`}
-                        />
-                      </div>
-                      <div className="shrink-0">
-                        <label className="block text-sm font-medium text-gray-700 mb-2">Line total</label>
-                        <div
-                          className="box-border inline-flex h-10 max-w-full min-w-[5.5rem] items-center overflow-x-auto whitespace-nowrap rounded-lg border border-gray-300 bg-gray-50 px-3 text-sm text-black tabular-nums [scrollbar-width:thin]"
-                          aria-readonly="true"
-                          title="Based on unit price × quantity"
-                        >
-                          ${linePrice.toFixed(2)}
-                        </div>
-                      </div>
-                      <div className="shrink-0">
-                        <span className="mb-2 block text-sm font-medium text-gray-700">
-                          {jobDesigns[job.id]?.approved ? (
-                            <span className="text-emerald-600">Design ready ✓</span>
-                          ) : (
-                            "Artwork"
-                          )}
+                      <div className="mb-2 flex items-center gap-2">
+                        <span className="mr-auto text-xs font-semibold uppercase tracking-wide text-gray-500">
+                          Job {index + 1}
                         </span>
+                        {jobDesign?.approved ? (
+                          <span className="inline-flex items-center gap-1 text-xs font-semibold text-emerald-600">
+                            <FiCheck size={13} aria-hidden />
+                            Design ready
+                          </span>
+                        ) : null}
                         <button
                           type="button"
                           onClick={() => openDesignFlow(index)}
-                          className="box-border h-10 rounded-lg border border-blue-500 px-4 text-sm font-semibold text-blue-600 transition-colors hover:bg-blue-50"
+                          className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-blue-200 px-3 text-sm font-medium text-blue-600 transition-colors hover:border-blue-300 hover:bg-blue-50 hover:text-blue-800 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-400"
                         >
-                          {jobDesigns[job.id] ? "Edit design" : "Start Design"}
+                          <FiPenTool size={14} aria-hidden />
+                          {jobDesign ? "Edit Design" : "Start Design"}
                         </button>
-                      </div>
-                      {jobs.length > 1 ? (
-                        <div className="shrink-0 flex items-end pb-0.5">
+                        {jobs.length > 1 ? (
                           <button
                             type="button"
                             onClick={() => removeJob(job.id)}
-                            className="inline-flex items-center mb-3 justify-center font-medium text-rose-600 hover:text-rose-800"
+                            className="inline-flex h-8 w-8 items-center justify-center rounded-full text-gray-400 transition-colors hover:bg-rose-50 hover:text-rose-600 focus:outline-none focus-visible:ring-2 focus-visible:ring-rose-300"
                             aria-label={`Remove job ${index + 1}`}
-                            title="Delete"
+                            title="Delete job"
                           >
-                            <FiTrash2 size={18} aria-hidden />
+                            <FiTrash2 size={16} aria-hidden />
                           </button>
+                        ) : null}
+                      </div>
+                      <div className="flex flex-wrap gap-4 items-end">
+                        <div className="min-w-0 flex-1 basis-[200px]">
+                          <label className="block text-sm font-medium text-gray-700 mb-2">
+                            Job Name/PO# <span className="text-red-500">*</span>
+                          </label>
+                          <input
+                            type="text"
+                            value={job.jobName}
+                            onChange={(e) => updateJob(job.id, { jobName: e.target.value })}
+                            className="box-border h-10 w-full rounded-lg border border-gray-300 px-3 text-sm text-gray-900 placeholder:text-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                            placeholder="Job Name/PO#"
+                            aria-label={`Job ${index + 1} name or PO number`}
+                          />
                         </div>
-                      ) : null}
+                        <div className="w-28 shrink-0">
+                          <label className="block text-sm font-medium text-gray-700 mb-2">Qty</label>
+                          <input
+                            type="number"
+                            value={job.quantity}
+                            onChange={(e) => updateJob(job.id, { quantity: e.target.value })}
+                            className="box-border h-10 w-full rounded-lg border border-gray-300 px-3 text-sm text-black focus:outline-none focus:ring-2 focus:ring-blue-500"
+                            min={1}
+                            step={1}
+                            aria-label={`Job ${index + 1} quantity`}
+                          />
+                        </div>
+                        <div className="shrink-0">
+                          <label className="block text-sm font-medium text-gray-700 mb-2">Line total</label>
+                          <div
+                            className="box-border inline-flex h-10 max-w-full min-w-[5.5rem] items-center overflow-x-auto whitespace-nowrap rounded-lg border border-gray-300 bg-gray-50 px-3 text-sm text-black tabular-nums [scrollbar-width:thin]"
+                            aria-readonly="true"
+                            title="Based on unit price × quantity"
+                          >
+                            ${linePrice.toFixed(2)}
+                          </div>
+                        </div>
+                      </div>
                     </div>
                   );
                 })}

@@ -358,7 +358,7 @@ function JobArtworkDownloadCell({ item }: { item: OrderItem }) {
       </div>
       {item.design_id != null ? (
         <span
-          className="mt-1.5 inline-flex rounded-full border border-sky-200 bg-sky-50 px-2 py-0.5 text-[11px] font-medium text-sky-700"
+          className="mt-1.5 inline-flex whitespace-nowrap rounded-full border border-sky-200 bg-sky-50 px-1.5 py-px text-[10px] font-medium leading-4 text-sky-700"
           title="The customer made this artwork in the design tool before checkout"
         >
           Made in design tool

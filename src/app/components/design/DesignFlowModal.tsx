@@ -1,7 +1,18 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { FiFileText, FiX } from "react-icons/fi";
+import {
+  FiArrowLeft,
+  FiArrowRight,
+  FiCheck,
+  FiClock,
+  FiFileText,
+  FiImage,
+  FiPenTool,
+  FiShoppingCart,
+  FiUploadCloud,
+  FiX,
+} from "react-icons/fi";
 import {
   designsAPI,
   getBackendBaseUrl,
@@ -59,11 +70,29 @@ function DesignPreview({ design, className }: { design: JobDesign; className?: s
       </a>
     );
   }
+  return <DesignImage key={design.fileUrl} url={getProductImageUrl(design.fileUrl)} className={className} />;
+}
+
+/** A just-saved file can briefly fail to load; retry once with a fresh URL before showing a placeholder. */
+function DesignImage({ url, className }: { url: string; className?: string }) {
+  const [attempt, setAttempt] = useState(0);
+  if (attempt > 1) {
+    return (
+      <div className={`flex flex-col items-center justify-center gap-2 px-4 text-center text-sm text-gray-500 ${className ?? ""}`}>
+        <FiImage size={32} aria-hidden className="text-gray-400" />
+        Preview unavailable. Your design was saved.
+      </div>
+    );
+  }
   return (
     // eslint-disable-next-line @next/next/no-img-element
     <img
-      src={getProductImageUrl(design.fileUrl)}
+      src={attempt === 0 ? url : `${url}${url.includes("?") ? "&" : "?"}retry=1`}
       alt="Your design"
+      onError={() => {
+        if (attempt === 0) setTimeout(() => setAttempt(1), 1500);
+        else setAttempt(2);
+      }}
       className={`object-contain ${className ?? ""}`}
     />
   );
@@ -305,31 +334,60 @@ export default function DesignFlowModal({
   }
 
   return (
-    <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/50 p-4" role="dialog" aria-modal="true">
-      <div className="relative flex max-h-[92vh] w-full max-w-4xl flex-col overflow-hidden rounded-2xl bg-white shadow-xl">
-        <div className="flex items-center justify-between border-b border-gray-200 px-5 py-3">
-          <p className="text-sm text-gray-600">
-            {step === "summary"
-              ? "Final step"
-              : `Artwork ${index + 1} of ${jobs.length}${job ? ` · ${jobLabel(job, index)}` : ""}`}
-          </p>
+    <div
+      className="fixed inset-0 z-[200] flex items-center justify-center bg-gray-900/60 p-4 backdrop-blur-sm"
+      role="dialog"
+      aria-modal="true"
+    >
+      <div className="relative flex max-h-[92vh] w-full max-w-4xl flex-col overflow-hidden rounded-2xl bg-white shadow-2xl ring-1 ring-black/5">
+        <div className="flex items-center justify-between gap-4 border-b border-gray-100 px-6 py-4">
+          <div className="flex min-w-0 items-center gap-3">
+            <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-blue-50 text-blue-600">
+              <FiPenTool size={16} aria-hidden />
+            </span>
+            <div className="min-w-0">
+              <p className="truncate text-base font-semibold text-gray-900">
+                {step === "summary" ? "Your artwork" : job ? jobLabel(job, index) : "Artwork"}
+              </p>
+              <p className="text-xs text-gray-500">
+                {step === "summary" ? "Final step" : `Artwork ${index + 1} of ${jobs.length}`}
+              </p>
+            </div>
+          </div>
           <button
             type="button"
             onClick={onClose}
-            className="rounded-md p-1 text-gray-500 hover:bg-gray-100"
+            className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-gray-400 transition-colors hover:bg-gray-100 hover:text-gray-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-400"
             aria-label="Close design tool"
           >
             <FiX size={20} />
           </button>
         </div>
+        {jobs.length > 1 ? (
+          <div className="flex gap-1 px-6 pt-3" aria-hidden>
+            {jobs.map((j, i) => (
+              <span
+                key={j.id}
+                className={`h-1 flex-1 rounded-full transition-colors ${
+                  step === "summary" || i <= index ? "bg-blue-500" : "bg-gray-200"
+                }`}
+              />
+            ))}
+          </div>
+        ) : null}
 
-        <div className="min-h-0 flex-1 overflow-y-auto p-5">
-          {error ? <p className="mb-4 rounded-md bg-rose-50 px-3 py-2 text-sm text-rose-700">{error}</p> : null}
+        <div className="min-h-0 flex-1 overflow-y-auto p-6">
+          {error ? <p className="mb-4 rounded-lg bg-rose-50 px-3 py-2 text-sm text-rose-700">{error}</p> : null}
 
           {step === "choose" && job ? (
-            <div className="flex flex-col items-center gap-5 py-6">
+            <div className="mx-auto w-full max-w-2xl py-2">
+              <div className="text-center">
+                <h2 className="text-xl font-semibold text-gray-900">How would you like to add your artwork?</h2>
+                <p className="mt-1 text-sm text-gray-500">Upload a print-ready file, or design one right here.</p>
+              </div>
+
               {templates.length > 1 ? (
-                <div className="w-full">
+                <div className="mt-6">
                   <p className="mb-2 text-sm font-medium text-gray-700">Choose a template</p>
                   <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
                     {templates.map((t) => (
@@ -337,13 +395,15 @@ export default function DesignFlowModal({
                         key={t.id}
                         type="button"
                         onClick={() => setTemplateId(t.id ?? null)}
-                        className={`flex flex-col items-center gap-2 rounded-lg border p-2 text-xs ${
-                          t.id === templateId ? "border-blue-500 ring-2 ring-blue-200" : "border-gray-200 hover:border-gray-300"
+                        className={`flex flex-col items-center gap-2 rounded-xl border bg-white p-2 text-xs transition ${
+                          t.id === templateId
+                            ? "border-blue-500 ring-2 ring-blue-200"
+                            : "border-gray-200 hover:border-blue-300"
                         }`}
                       >
                         {/* eslint-disable-next-line @next/next/no-img-element */}
                         <img src={getProductImageUrl(t.image_url)} alt="" className="h-24 w-full object-contain" />
-                        <span className="text-gray-800">{t.name}</span>
+                        <span className="font-medium text-gray-800">{t.name}</span>
                       </button>
                     ))}
                   </div>
@@ -357,58 +417,90 @@ export default function DesignFlowModal({
                 className="hidden"
                 onChange={(e) => void handleUpload(e)}
               />
-              <div className="flex w-full max-w-xs flex-col gap-3">
+              <div className={`mt-6 grid gap-4 ${canCreate ? "sm:grid-cols-2" : ""}`}>
                 <button
                   type="button"
                   disabled={busy}
                   onClick={() => fileInputRef.current?.click()}
-                  className="rounded-md bg-blue-500 px-4 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-blue-700 disabled:opacity-60"
+                  className="group flex flex-col items-center rounded-xl border-2 border-dashed border-blue-200 bg-blue-50/50 px-5 py-7 text-center transition hover:border-blue-500 hover:bg-blue-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-400 disabled:cursor-wait disabled:opacity-60"
                 >
-                  {busy ? "Uploading…" : "Upload from this device"}
+                  <span className="flex h-12 w-12 items-center justify-center rounded-full bg-blue-100 text-blue-600 transition-colors group-hover:bg-blue-600 group-hover:text-white">
+                    <FiUploadCloud size={22} aria-hidden />
+                  </span>
+                  <span className="mt-3 text-sm font-semibold text-gray-900">
+                    {busy ? "Uploading…" : "Upload from this device"}
+                  </span>
+                  <span className="mt-1 text-xs text-gray-500">PNG, JPG or single-page PDF, up to 25MB</span>
                 </button>
                 {canCreate ? (
                   <button
                     type="button"
                     disabled={busy}
                     onClick={() => setStep("editor")}
-                    className="rounded-md border border-gray-300 px-4 py-2.5 text-sm font-semibold text-gray-800 hover:bg-gray-50 disabled:opacity-60"
+                    className="group flex flex-col items-center rounded-xl border-2 border-gray-200 bg-white px-5 py-7 text-center transition hover:border-blue-500 hover:shadow-md focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-400 disabled:opacity-60"
                   >
-                    Create Design
+                    <span className="flex h-12 w-12 items-center justify-center rounded-full bg-gray-100 text-gray-700 transition-colors group-hover:bg-blue-600 group-hover:text-white">
+                      <FiPenTool size={20} aria-hidden />
+                    </span>
+                    <span className="mt-3 text-sm font-semibold text-gray-900">Create Design</span>
+                    <span className="mt-1 text-xs text-gray-500">Add text and images in our online editor</span>
                   </button>
                 ) : null}
+              </div>
+
+              <div className="mt-6 flex items-center gap-3 text-xs uppercase tracking-wide text-gray-400">
+                <span className="h-px flex-1 bg-gray-200" />
+                or
+                <span className="h-px flex-1 bg-gray-200" />
+              </div>
+              <div className="mt-4 text-center">
                 <button
                   type="button"
                   disabled={busy}
                   onClick={handleSkip}
-                  className="text-sm text-gray-500 underline hover:text-gray-700"
+                  className="inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm font-medium text-gray-600 transition-colors hover:bg-gray-50 hover:text-blue-600 disabled:opacity-60"
                 >
-                  Skip – upload after order
+                  <FiClock size={14} aria-hidden />
+                  Skip for now – upload after order
                 </button>
               </div>
-              <p className="text-center text-xs text-gray-500">PNG, JPG or single-page PDF, up to 25MB.</p>
             </div>
           ) : null}
 
           {step === "review" && job && design ? (
             <div className="grid gap-6 md:grid-cols-[1.4fr_1fr]">
-              <div className="flex min-h-[320px] items-center justify-center rounded-lg bg-gray-100 p-4">
-                <DesignPreview design={design} className="max-h-[60vh] max-w-full shadow" />
+              <div className="relative min-h-[320px] overflow-hidden rounded-xl border border-gray-200 bg-white">
+                <span className="absolute left-3 top-3 z-10 rounded-full bg-white px-2.5 py-0.5 text-[11px] font-semibold uppercase tracking-wide text-gray-500 shadow-sm ring-1 ring-gray-200">
+                  Preview
+                </span>
+                <DesignPreview design={design} className="absolute inset-0 h-full w-full" />
               </div>
               <div className="flex flex-col">
                 <h2 className="text-xl font-semibold text-gray-900">Review your design</h2>
-                <p className="mt-1 text-sm text-gray-600">Double-check the following details before you continue.</p>
-                <ul className="mt-4 list-disc space-y-1 pl-5 text-sm text-gray-700">
+                <p className="mt-1 text-sm text-gray-500">Double-check the following details before you continue.</p>
+                <ul className="mt-5 space-y-3">
                   {REVIEW_CHECKLIST.map((item) => (
-                    <li key={item}>{item}</li>
+                    <li key={item} className="flex items-center gap-3 text-sm text-gray-700">
+                      <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-blue-50 text-blue-600">
+                        <FiCheck size={14} aria-hidden />
+                      </span>
+                      {item}
+                    </li>
                   ))}
                 </ul>
                 <div className="mt-auto space-y-3 pt-8">
-                  <label className="flex cursor-pointer items-center gap-2 text-sm text-gray-800">
+                  <label
+                    className={`flex cursor-pointer items-center gap-3 rounded-lg border px-3 py-2.5 text-sm transition-colors ${
+                      approveChecked
+                        ? "border-blue-500 bg-blue-50 text-blue-900"
+                        : "border-gray-200 text-gray-800 hover:border-gray-300"
+                    }`}
+                  >
                     <input
                       type="checkbox"
                       checked={approveChecked}
                       onChange={(e) => setApproveChecked(e.target.checked)}
-                      className="h-4 w-4"
+                      className="h-4 w-4 accent-blue-600"
                     />
                     I have reviewed and approve my design.
                   </label>
@@ -416,16 +508,18 @@ export default function DesignFlowModal({
                     type="button"
                     disabled={!approveChecked || busy}
                     onClick={() => void handleContinue()}
-                    className="w-full rounded-md bg-blue-500 px-4 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
+                    className="inline-flex h-11 w-full items-center justify-center gap-1.5 rounded-lg bg-blue-600 px-4 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-blue-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-400 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
                   >
                     {busy ? "Saving…" : "Continue"}
+                    {busy ? null : <FiArrowRight size={16} aria-hidden />}
                   </button>
                   <button
                     type="button"
                     disabled={busy}
                     onClick={() => void handleEditMyDesign()}
-                    className="w-full rounded-md border border-gray-300 px-4 py-2.5 text-sm font-semibold text-gray-800 hover:bg-gray-50"
+                    className="inline-flex h-11 w-full items-center justify-center gap-1.5 rounded-lg border border-gray-200 px-4 text-sm font-semibold text-gray-700 transition-colors hover:border-blue-500 hover:text-blue-600 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-400 disabled:opacity-60"
                   >
+                    <FiPenTool size={15} aria-hidden />
                     Edit my design
                   </button>
                 </div>
@@ -435,31 +529,47 @@ export default function DesignFlowModal({
 
           {step === "summary" ? (
             <div>
-              <h2 className="text-xl font-semibold text-gray-900">Your artwork</h2>
-              <p className="mt-1 text-sm text-gray-600">
-                Jobs without a design can be uploaded after you place the order.
+              <p className="text-sm text-gray-500">
+                Check your artwork below. Jobs without a design can be uploaded after you place the order.
               </p>
-              <ul className="mt-4 divide-y divide-gray-100 rounded-lg border border-gray-200">
+              <ul className="mt-4 space-y-3">
                 {jobs.map((j, i) => {
                   const d = designs[j.id];
                   const ready = d?.approved;
                   return (
-                    <li key={j.id} className="flex items-center gap-4 p-3">
-                      <div className="flex h-16 w-16 shrink-0 items-center justify-center overflow-hidden rounded bg-gray-100">
-                        {d ? <DesignPreview design={d} className="max-h-full max-w-full" /> : null}
+                    <li
+                      key={j.id}
+                      className="flex items-center gap-4 rounded-xl border border-gray-200 bg-white p-3 transition-colors hover:border-blue-200"
+                    >
+                      <div className="relative h-16 w-16 shrink-0 overflow-hidden rounded-lg border border-gray-200 bg-gray-50">
+                        {d ? (
+                          <DesignPreview design={d} className="absolute inset-0 h-full w-full" />
+                        ) : (
+                          <span className="flex h-full w-full items-center justify-center text-gray-300">
+                            <FiImage size={22} aria-hidden />
+                          </span>
+                        )}
                       </div>
                       <div className="min-w-0 flex-1">
-                        <p className="truncate text-sm font-medium text-gray-900">{jobLabel(j, i)}</p>
-                        <p className="text-xs text-gray-500">
-                          Qty {j.quantity} ·{" "}
+                        <p className="truncate text-sm font-semibold text-gray-900">{jobLabel(j, i)}</p>
+                        <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-gray-500">
+                          <span>Qty {j.quantity}</span>
                           {ready ? (
-                            <span className="text-emerald-600">Design approved</span>
+                            <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2 py-0.5 font-semibold text-emerald-700">
+                              <FiCheck size={12} aria-hidden />
+                              Design approved
+                            </span>
                           ) : d ? (
-                            <span className="text-amber-600">Not approved yet</span>
+                            <span className="rounded-full bg-amber-50 px-2 py-0.5 font-semibold text-amber-700">
+                              Not approved yet
+                            </span>
                           ) : (
-                            <span>Upload after order</span>
+                            <span className="inline-flex items-center gap-1 rounded-full bg-gray-100 px-2 py-0.5 font-semibold text-gray-600">
+                              <FiClock size={12} aria-hidden />
+                              Upload after order
+                            </span>
                           )}
-                        </p>
+                        </div>
                       </div>
                       <button
                         type="button"
@@ -467,27 +577,30 @@ export default function DesignFlowModal({
                           setIndex(i);
                           setStep(d ? "review" : "choose");
                         }}
-                        className="text-sm text-blue-600 hover:underline"
+                        className="inline-flex h-9 shrink-0 items-center gap-1.5 rounded-lg border border-blue-500 px-3 text-sm font-semibold text-blue-600 transition-colors hover:bg-blue-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-400"
                       >
+                        {d ? <FiPenTool size={14} aria-hidden /> : <FiUploadCloud size={14} aria-hidden />}
                         {d ? "Edit" : "Add design"}
                       </button>
                     </li>
                   );
                 })}
               </ul>
-              <div className="mt-6 flex justify-end gap-3">
+              <div className="mt-6 flex flex-wrap justify-end gap-3 border-t border-gray-100 pt-5">
                 <button
                   type="button"
                   onClick={onClose}
-                  className="rounded-md border border-gray-300 px-4 py-2.5 text-sm font-semibold text-gray-800 hover:bg-gray-50"
+                  className="inline-flex h-11 items-center gap-1.5 rounded-lg border border-gray-200 px-4 text-sm font-semibold text-gray-700 transition-colors hover:border-gray-300 hover:bg-gray-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-400"
                 >
+                  <FiArrowLeft size={16} aria-hidden />
                   Back to product
                 </button>
                 <button
                   type="button"
                   onClick={onAddToCart}
-                  className="rounded-md bg-blue-500 px-5 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-blue-700"
+                  className="inline-flex h-11 items-center gap-2 rounded-lg bg-blue-600 px-5 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-blue-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-400 focus-visible:ring-offset-2"
                 >
+                  <FiShoppingCart size={16} aria-hidden />
                   Add to cart
                 </button>
               </div>
