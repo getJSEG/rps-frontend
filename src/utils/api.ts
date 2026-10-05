@@ -225,6 +225,24 @@ export type TaxEstimateResponse = {
   warning?: string;
 };
 
+/** Files returned by the design template uploader: the admin's SVG and the PNG the editor loads. */
+export type DesignTemplateUpload = {
+  svg_url: string;
+  svg_storage_key: string;
+  image_url: string;
+  image_storage_key: string;
+  image_width_px: number;
+  image_height_px: number;
+  original_name?: string;
+};
+
+/** Design-editor template attached to a product. */
+export type ProductDesignTemplate = DesignTemplateUpload & {
+  id?: number;
+  name: string;
+  sort_order?: number;
+};
+
 export type ModifierOption = {
   id?: number;
   label: string;
@@ -1764,6 +1782,29 @@ export const productsAPI = {
       body: JSON.stringify({ storage_key: storageKey }),
     });
   },
+  /** Upload a design-editor template SVG; the server also renders the PNG the editor loads. */
+  uploadDesignTemplate: async (file: File): Promise<DesignTemplateUpload> => {
+    const token = typeof window !== 'undefined' ? localStorage.getItem('token') : null;
+    const formData = new FormData();
+    formData.append('file', file);
+    const res = await fetch(`${API_BASE_URL}/products/admin/upload-design-template`, {
+      method: 'POST',
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+      body: formData,
+    });
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      throw new Error(data.message || data.error || 'Design template upload failed');
+    }
+    return res.json();
+  },
+  /** Remove a design template upload that has not been attached to a saved product. */
+  deleteUploadedDesignTemplate: async (svgStorageKey: string, imageStorageKey: string) => {
+    return apiCall('/products/admin/upload-design-template', {
+      method: 'DELETE',
+      body: JSON.stringify({ svg_storage_key: svgStorageKey, image_storage_key: imageStorageKey }),
+    });
+  },
   /** Upload category/subcategory image file; returns { url: '/uploads/categories/filename' } */
   uploadCategoryImage: async (file: File) => {
     const token = typeof window !== 'undefined' ? localStorage.getItem('token') : null;
@@ -1917,6 +1958,86 @@ export const productsAPI = {
     return apiCall(`/products/admin/hardware-templates/${id}`, {
       method: 'DELETE',
     });
+  },
+};
+
+/** A customer's design for one job, made in the editor or uploaded. */
+export type Design = {
+  id: number;
+  productId: number | null;
+  templateId: number | null;
+  source: 'created' | 'uploaded';
+  designState: Record<string, unknown> | null;
+  fileUrl: string;
+  /** True for uploaded images saved with the pre-edit original, so the editor can reopen them. */
+  hasOriginal?: boolean;
+  mimeType: string;
+  widthPx: number | null;
+  heightPx: number | null;
+  approved: boolean;
+};
+
+export type DesignUploadFields = {
+  file: Blob;
+  fileName: string;
+  source: 'created' | 'uploaded';
+  productId: string | number;
+  templateId?: number | null;
+  designState?: unknown;
+  /** Customer's image before editing (uploads opened in the editor). */
+  original?: Blob | null;
+  /** Print size; sent for blank-canvas designs and uploads so the server can check the shape. */
+  widthIn?: number | null;
+  heightIn?: number | null;
+};
+
+/**
+ * Designs are owned by a user or a guest session. Both identities are always sent so a guest who logs in
+ * part-way through the design flow keeps access to designs made before logging in.
+ */
+function designsHeaders(): Record<string, string> {
+  const headers: Record<string, string> = {};
+  const token = typeof window !== 'undefined' ? localStorage.getItem('token') : null;
+  if (token) headers.Authorization = `Bearer ${token}`;
+  const sid = getOrCreateGuestSessionId();
+  if (sid) headers['X-Guest-Session-Id'] = sid;
+  return headers;
+}
+
+async function designsRequest(path: string, init: RequestInit = {}): Promise<{ design: Design }> {
+  const res = await fetch(`${API_BASE_URL}/designs${path}`, { ...init, headers: designsHeaders() });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data.message || 'Design request failed');
+  return data;
+}
+
+function designFormData(fields: DesignUploadFields): FormData {
+  const form = new FormData();
+  form.append('file', fields.file, fields.fileName);
+  form.append('source', fields.source);
+  form.append('product_id', String(fields.productId));
+  if (fields.templateId != null) form.append('template_id', String(fields.templateId));
+  if (fields.designState != null) form.append('design_state', JSON.stringify(fields.designState));
+  if (fields.original) form.append('original', fields.original, 'original');
+  if (fields.widthIn != null && fields.heightIn != null) {
+    form.append('width_in', String(fields.widthIn));
+    form.append('height_in', String(fields.heightIn));
+  }
+  return form;
+}
+
+export const designsAPI = {
+  create: (fields: DesignUploadFields) =>
+    designsRequest('', { method: 'POST', body: designFormData(fields) }),
+  replace: (id: number, fields: DesignUploadFields) =>
+    designsRequest(`/${id}`, { method: 'PUT', body: designFormData(fields) }),
+  approve: (id: number) => designsRequest(`/${id}/approve`, { method: 'POST' }),
+  get: (id: number) => designsRequest(`/${id}`),
+  /** Uploaded image before editing (or the design itself), fetched with owner headers for reopening in the editor. */
+  getOriginal: async (id: number): Promise<Blob> => {
+    const res = await fetch(`${API_BASE_URL}/designs/${id}/original`, { headers: designsHeaders() });
+    if (!res.ok) throw new Error('Could not load your design for editing.');
+    return res.blob();
   },
 };
 
