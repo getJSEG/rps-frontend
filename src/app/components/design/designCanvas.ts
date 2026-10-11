@@ -1,7 +1,10 @@
 import type { Design } from "../../../utils/api";
 
-/** Longest side of a blank canvas; matches the backend's DESIGN_TEMPLATE_MAX_PX default for templates. */
-const BLANK_CANVAS_MAX_PX = 4000;
+/** Pixels per inch of a blank canvas; matches the editor's artboard ruler, so the canvas reads as the customer's size. */
+const BLANK_CANVAS_PPI = 96;
+/** Largest custom size the editor opens (13 ft × 10 ft, either orientation); bigger jobs upload print-ready artwork. */
+const MAX_LONG_SIDE_IN = 13 * 12;
+const MAX_SHORT_SIDE_IN = 10 * 12;
 
 export type PrintSize = { widthIn: number; heightIn: number };
 
@@ -15,31 +18,23 @@ export function printSizeKey(size: PrintSize | null): string | null {
   return size ? `${size.widthIn}x${size.heightIn}` : null;
 }
 
-/** White PNG in the job's shape, used as the editor source when the product has no template. */
-export function blankCanvasDataUrl(size: PrintSize): string {
-  const ratio = size.widthIn / size.heightIn;
-  const width = ratio >= 1 ? BLANK_CANVAS_MAX_PX : Math.max(1, Math.round(BLANK_CANVAS_MAX_PX * ratio));
-  const height = ratio >= 1 ? Math.max(1, Math.round(BLANK_CANVAS_MAX_PX / ratio)) : BLANK_CANVAS_MAX_PX;
-  const canvas = document.createElement("canvas");
-  canvas.width = width;
-  canvas.height = height;
-  const ctx = canvas.getContext("2d");
-  if (ctx) {
-    ctx.fillStyle = "#ffffff";
-    ctx.fillRect(0, 0, width, height);
-  }
-  return canvas.toDataURL("image/png");
+/** Editor canvas size in pixels for a custom-size job: exactly the customer's width × height. */
+export function blankCanvasSize(size: PrintSize): { width: number; height: number } {
+  return {
+    width: Math.max(1, Math.round(size.widthIn * BLANK_CANVAS_PPI)),
+    height: Math.max(1, Math.round(size.heightIn * BLANK_CANVAS_PPI)),
+  };
 }
 
-export async function dataUrlToBlob(dataUrl: string): Promise<Blob> {
-  const res = await fetch(dataUrl);
-  return res.blob();
+export function isBlankCanvasTooLarge(size: PrintSize): boolean {
+  return (
+    Math.max(size.widthIn, size.heightIn) > MAX_LONG_SIDE_IN || Math.min(size.widthIn, size.heightIn) > MAX_SHORT_SIDE_IN
+  );
 }
 
-export function canvasToBlob(canvas: HTMLCanvasElement): Promise<Blob> {
-  return new Promise((resolve, reject) => {
-    canvas.toBlob((blob) => (blob ? resolve(blob) : reject(new Error("Could not export the design."))), "image/png");
-  });
+/** Placeholder source for a blank canvas: the editor sizes the canvas from `blankCanvasSize`, so a 1×1 white pixel is enough. */
+export function blankCanvasDataUrl(): string {
+  return "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==";
 }
 
 export function isPdfDesign(design: Pick<Design, "mimeType"> | null | undefined): boolean {

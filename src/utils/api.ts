@@ -225,7 +225,7 @@ export type TaxEstimateResponse = {
   warning?: string;
 };
 
-/** Files returned by the design template uploader: the admin's SVG and the PNG the editor loads. */
+/** Returned by the design template uploader. The admin's SVG or PNG is stored once as uploaded, so the svg_* and image_* fields point to the same file; the editor loads image_*. */
 export type DesignTemplateUpload = {
   svg_url: string;
   svg_storage_key: string;
@@ -1782,7 +1782,7 @@ export const productsAPI = {
       body: JSON.stringify({ storage_key: storageKey }),
     });
   },
-  /** Upload a design-editor template SVG; the server also renders the PNG the editor loads. */
+  /** Upload a design-editor template (SVG or PNG); stored as uploaded. */
   uploadDesignTemplate: async (file: File): Promise<DesignTemplateUpload> => {
     const token = typeof window !== 'undefined' ? localStorage.getItem('token') : null;
     const formData = new FormData();

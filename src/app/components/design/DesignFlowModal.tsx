@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   FiArrowLeft,
   FiArrowRight,
@@ -23,6 +23,8 @@ import {
 import DesignEditor, { type DesignEditorExport } from "./DesignEditor";
 import {
   blankCanvasDataUrl,
+  blankCanvasSize,
+  isBlankCanvasTooLarge,
   isPdfDesign,
   printSizeKey,
   type JobDesign,
@@ -140,14 +142,14 @@ export default function DesignFlowModal({
   const job = jobs[index];
   const design = job ? designs[job.id] : undefined;
   const selectedTemplate = templates.find((t) => t.id === templateId) ?? null;
-  const canCreate = templates.length > 0 || printSize != null;
+  // Very large custom sizes are too heavy for the browser editor; those jobs upload print-ready artwork instead.
+  const tooLargeToCreate = templates.length === 0 && printSize != null && isBlankCanvasTooLarge(printSize);
+  const canCreate = templates.length > 0 || (printSize != null && !tooLargeToCreate);
+  // Custom sizes the editor can handle are designed online; upload is only offered once the size is too large.
+  const canUpload = !(templates.length === 0 && printSize != null && !tooLargeToCreate);
   const sizeKey = printSizeKey(templates.length > 0 ? null : printSize);
 
-  // Blank canvas is built once per size; it is a few KB but re-encoding on every render is wasteful.
-  const blankSource = useMemo(
-    () => (templates.length === 0 && printSize ? blankCanvasDataUrl(printSize) : null),
-    [templates.length, printSize]
-  );
+  const blankSource = templates.length === 0 && printSize && !tooLargeToCreate ? blankCanvasDataUrl() : null;
 
   useEffect(() => {
     setApproveChecked(false);
@@ -296,7 +298,9 @@ export default function DesignFlowModal({
     ? { width: uploadedImage.width, height: uploadedImage.height }
     : selectedTemplate
       ? { width: selectedTemplate.image_width_px, height: selectedTemplate.image_height_px }
-      : null;
+      : printSize
+        ? blankCanvasSize(printSize)
+        : null;
   // Crop is locked to the job shape: the template's shape, or the customer's width × height.
   const cropRatio = selectedTemplate
     ? selectedTemplate.image_width_px / selectedTemplate.image_height_px
@@ -417,21 +421,23 @@ export default function DesignFlowModal({
                 className="hidden"
                 onChange={(e) => void handleUpload(e)}
               />
-              <div className={`mt-6 grid gap-4 ${canCreate ? "sm:grid-cols-2" : ""}`}>
-                <button
-                  type="button"
-                  disabled={busy}
-                  onClick={() => fileInputRef.current?.click()}
-                  className="group flex flex-col items-center rounded-xl border-2 border-dashed border-blue-200 bg-blue-50/50 px-5 py-7 text-center transition hover:border-blue-500 hover:bg-blue-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-400 disabled:cursor-wait disabled:opacity-60"
-                >
-                  <span className="flex h-12 w-12 items-center justify-center rounded-full bg-blue-100 text-blue-600 transition-colors group-hover:bg-blue-600 group-hover:text-white">
-                    <FiUploadCloud size={22} aria-hidden />
-                  </span>
-                  <span className="mt-3 text-sm font-semibold text-gray-900">
-                    {busy ? "Uploading…" : "Upload from this device"}
-                  </span>
-                  <span className="mt-1 text-xs text-gray-500">PNG, JPG or single-page PDF, up to 25MB</span>
-                </button>
+              <div className={`mt-6 grid gap-4 ${canCreate && canUpload ? "sm:grid-cols-2" : ""}`}>
+                {canUpload ? (
+                  <button
+                    type="button"
+                    disabled={busy}
+                    onClick={() => fileInputRef.current?.click()}
+                    className="group flex flex-col items-center rounded-xl border-2 border-dashed border-blue-200 bg-blue-50/50 px-5 py-7 text-center transition hover:border-blue-500 hover:bg-blue-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-400 disabled:cursor-wait disabled:opacity-60"
+                  >
+                    <span className="flex h-12 w-12 items-center justify-center rounded-full bg-blue-100 text-blue-600 transition-colors group-hover:bg-blue-600 group-hover:text-white">
+                      <FiUploadCloud size={22} aria-hidden />
+                    </span>
+                    <span className="mt-3 text-sm font-semibold text-gray-900">
+                      {busy ? "Uploading…" : "Upload from this device"}
+                    </span>
+                    <span className="mt-1 text-xs text-gray-500">PNG, JPG or single-page PDF, up to 25MB</span>
+                  </button>
+                ) : null}
                 {canCreate ? (
                   <button
                     type="button"
@@ -447,6 +453,11 @@ export default function DesignFlowModal({
                   </button>
                 ) : null}
               </div>
+              {tooLargeToCreate ? (
+                <p className="mt-3 text-center text-xs text-gray-500">
+                  Sizes above 13 ft × 10 ft are too large for the online editor. Please upload your design made to scale.
+                </p>
+              ) : null}
 
               <div className="mt-6 flex items-center gap-3 text-xs uppercase tracking-wide text-gray-400">
                 <span className="h-px flex-1 bg-gray-200" />
