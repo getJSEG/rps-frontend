@@ -12,6 +12,7 @@ import {
   FiShoppingCart,
   FiUploadCloud,
   FiX,
+  FiTrash2, 
 } from "react-icons/fi";
 import {
   designsAPI,
@@ -58,7 +59,7 @@ function jobLabel(job: DesignFlowJob, index: number) {
   return job.jobName.trim() || `Artwork ${index + 1}`;
 }
 
-function DesignPreview({ design, className }: { design: JobDesign; className?: string }) {
+function DesignPreview({ design, templateId, templates, className }: { design: JobDesign; templateId?: number | null; templates: ProductDesignTemplate[]; className?: string }) {
   if (isPdfDesign(design)) {
     return (
       <a
@@ -72,7 +73,25 @@ function DesignPreview({ design, className }: { design: JobDesign; className?: s
       </a>
     );
   }
-  return <DesignImage key={design.fileUrl} url={getProductImageUrl(design.fileUrl)} className={className} />;
+  
+  const template = templates?.find((t) => t.id === templateId || t.id === design.templateId);
+
+  return (
+    <div className={`relative flex h-full w-full items-center justify-center ${className ?? ""}`}>
+      {/* Target Artwork rendered on bottom (z-0) using max dimensions to prevent scaling issues */}
+      <DesignImage url={getProductImageUrl(design.fileUrl)} className="absolute max-h-full max-w-full object-contain z-0" />
+      
+      {/* Template Frame Overlaid on Top (z-10) perfectly aligned */}
+      {template && (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img
+          src={`${getBackendBaseUrl()}/api/products/design-templates/${template.id}/image`}
+          alt="Template Guide"
+          className="absolute max-h-full max-w-full object-contain z-10 pointer-events-none"
+        />
+      )}
+    </div>
+  );
 }
 
 /** A just-saved file can briefly fail to load; retry once with a fresh URL before showing a placeholder. */
@@ -257,7 +276,7 @@ export default function DesignFlowModal({
     if (uploadedImage) {
       await saveDesign({
         file,
-        fileName: "design.png",
+        fileName: "design.svg", 
         source: "uploaded",
         designState,
         original: uploadedImage.file,
@@ -265,7 +284,17 @@ export default function DesignFlowModal({
       clearUploadedImage();
       return;
     }
-    await saveDesign({ file, fileName: "design.png", source: "created", designState });
+    await saveDesign({ file, fileName: "design.svg", source: "created", designState });
+  };
+
+  const handleClearArtwork = () => {
+    if (window.confirm("Are you sure you want to clear this artwork? This action cannot be undone.")) {
+      if (job) {
+        onDesignChange(job.id, null);
+      }
+      clearUploadedImage();
+      setStep("choose");
+    }
   };
 
   const handleSkip = () => {
@@ -288,25 +317,30 @@ export default function DesignFlowModal({
     }
   };
 
-  // Load templates through the API: the editor needs a CORS-enabled image to export, which Spaces does not send.
-  const editorSource = uploadedImage
-    ? uploadedImage.url
-    : selectedTemplate?.id != null
-      ? `${getBackendBaseUrl()}/api/products/design-templates/${selectedTemplate.id}/image`
-      : blankSource;
-  const editorSourceSize = uploadedImage
-    ? { width: uploadedImage.width, height: uploadedImage.height }
-    : selectedTemplate
-      ? { width: selectedTemplate.image_width_px, height: selectedTemplate.image_height_px }
-      : printSize
-        ? blankCanvasSize(printSize)
-        : null;
+  const baseTemplateUrl = selectedTemplate?.id != null
+    ? `${getBackendBaseUrl()}/api/products/design-templates/${selectedTemplate.id}/image`
+    : blankSource;
+
+  // We explicitly preserve the template as the canvas source frame, defaulting to user's uploaded image if no templates/blanks exist
+  const editorSource = baseTemplateUrl || (uploadedImage ? uploadedImage.url : null);
+  
+  const editorSourceSize = selectedTemplate
+    ? { width: selectedTemplate.image_width_px, height: selectedTemplate.image_height_px }
+    : printSize
+      ? blankCanvasSize(printSize)
+      : uploadedImage ? { width: uploadedImage.width, height: uploadedImage.height } : null;
+
+  // Only inject the uploaded image as a layer if it's NOT acting as the main editorSource background
+  const isUploadedImageMainSource = !baseTemplateUrl && !!uploadedImage;
+  const initialImageLayerToPass = isUploadedImageMainSource ? undefined : (uploadedImage || undefined);
+
   // Crop is locked to the job shape: the template's shape, or the customer's width × height.
   const cropRatio = selectedTemplate
     ? selectedTemplate.image_width_px / selectedTemplate.image_height_px
     : printSize
       ? printSize.widthIn / printSize.heightIn
       : null;
+      
   // Reopen the saved layers only when the design was made on the same canvas.
   const reusableState =
     design?.source === "created" &&
@@ -321,7 +355,8 @@ export default function DesignFlowModal({
         <DesignEditor
           key={`${job.id}-${uploadedImage?.url ?? templateId ?? "blank"}`}
           source={editorSource}
-          sourceSize={editorSourceSize}
+          sourceSize={editorSourceSize!}
+          initialImageLayer={initialImageLayerToPass} 
           startOnCrop={uploadedImage?.fresh === true && cropRatio != null}
           cropRatio={cropRatio}
           jobLabel={jobLabel(job, index)}
@@ -344,6 +379,15 @@ export default function DesignFlowModal({
       aria-modal="true"
     >
       <div className="relative flex max-h-[92vh] w-full max-w-4xl flex-col overflow-hidden rounded-2xl bg-white shadow-2xl ring-1 ring-black/5">
+        
+        {/* Busy Overlay Shield during processing/fetching design files */}
+        {busy && (
+          <div className="absolute inset-0 z-[100] flex flex-col items-center justify-center bg-white/80 backdrop-blur-sm">
+            <div className="h-10 w-10 animate-spin rounded-full border-4 border-gray-200 border-t-blue-600"></div>
+            <p className="mt-4 text-sm font-medium text-gray-700">Loading...</p>
+          </div>
+        )}
+
         <div className="flex items-center justify-between gap-4 border-b border-gray-100 px-6 py-4">
           <div className="flex min-w-0 items-center gap-3">
             <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-blue-50 text-blue-600">
@@ -480,12 +524,15 @@ export default function DesignFlowModal({
 
           {step === "review" && job && design ? (
             <div className="grid gap-6 md:grid-cols-[1.4fr_1fr]">
-              <div className="relative min-h-[320px] overflow-hidden rounded-xl border border-gray-200 bg-white">
-                <span className="absolute left-3 top-3 z-10 rounded-full bg-white px-2.5 py-0.5 text-[11px] font-semibold uppercase tracking-wide text-gray-500 shadow-sm ring-1 ring-gray-200">
+              
+              {/* Dynamic Preview Container to support extreme tall/wide aspect ratios seamlessly */}
+              <div className="relative flex h-[40vh] min-h-[350px] w-full items-center justify-center overflow-hidden rounded-xl border border-gray-200 bg-[#f1f2f2] p-4">
+                <span className="absolute left-3 top-3 z-99 rounded-full bg-white px-2.5 py-0.5 text-[11px] font-semibold uppercase tracking-wide text-gray-500 shadow-sm ring-1 ring-gray-200">
                   Preview
                 </span>
-                <DesignPreview design={design} className="absolute inset-0 h-full w-full" />
+                <DesignPreview design={design} templateId={templateId} templates={templates} />
               </div>
+
               <div className="flex flex-col">
                 <h2 className="text-xl font-semibold text-gray-900">Review your design</h2>
                 <p className="mt-1 text-sm text-gray-500">Double-check the following details before you continue.</p>
@@ -533,6 +580,15 @@ export default function DesignFlowModal({
                     <FiPenTool size={15} aria-hidden />
                     Edit my design
                   </button>
+                  <button
+                    type="button"
+                    disabled={busy}
+                    onClick={handleClearArtwork}
+                    className="inline-flex h-11 w-full items-center justify-center gap-1.5 rounded-lg border border-red-200 px-4 text-sm font-semibold text-red-600 transition-colors hover:border-red-500 hover:bg-red-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-red-400 disabled:opacity-60"
+                  >
+                    <FiTrash2 size={15} aria-hidden />
+                    Clear artwork
+                  </button>
                 </div>
               </div>
             </div>
@@ -554,7 +610,7 @@ export default function DesignFlowModal({
                     >
                       <div className="relative h-16 w-16 shrink-0 overflow-hidden rounded-lg border border-gray-200 bg-gray-50">
                         {d ? (
-                          <DesignPreview design={d} className="absolute inset-0 h-full w-full" />
+                          <DesignPreview design={d} templateId={d.templateId} templates={templates} />
                         ) : (
                           <span className="flex h-full w-full items-center justify-center text-gray-300">
                             <FiImage size={22} aria-hidden />

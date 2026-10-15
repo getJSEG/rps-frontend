@@ -1,31 +1,45 @@
 // @ts-nocheck
 "use client";
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { 
   Palette, MousePointer, Hand, Pencil, Type, Square, Circle as CircleIcon, 
   Star, Triangle, Plus, ArrowRight, Compass, Shield, Sun, ImagePlus, Lock, 
-  FileDown, Maximize, ZoomOut, ZoomIn, Layers, X, 
+  Maximize, ZoomOut, ZoomIn, Layers, X, 
   Image as ImageIcon, EyeOff, Eye, Unlock, Trash2, AlignLeft, AlignCenter, 
   AlignRight, AlignJustify, ArrowDown, RotateCw, AlertTriangle, QrCode, Grid3X3,
-  List, ListOrdered, Copy, Crop, FlipHorizontal, FlipVertical, LayoutGrid, ChevronDown
+  List, ListOrdered, Copy, Crop, FlipHorizontal, FlipVertical, LayoutGrid, ChevronDown, Undo2, Redo2
 } from 'lucide-react';
 
 export type DesignEditorExport = { file: Blob; designState: Record<string, unknown> };
 
 const PPI = 96;
-// An uploaded image's temporary link is not stored; the saved layer points at the source instead.
 const SOURCE_PLACEHOLDER = '__source__';
-// Layers are saved with the design; the backend accepts up to 15MB for them.
+const UPLOADED_ARTWORK_PLACEHOLDER = '__uploaded_artwork__';
 const MAX_DESIGN_STATE_BYTES = 12 * 1024 * 1024;
+
 const GOOGLE_FONTS = [
   'Inter', 'Roboto', 'Open Sans', 'Montserrat', 'Playfair Display', 
   'Dancing Script', 'Bebas Neue', 'Cinzel', 'Courier Prime', 'Caveat',
 ];
 
+const FONT_URLS = {
+  'Inter': 'https://cdn.jsdelivr.net/npm/@fontsource/inter/files/inter-latin-400-normal.woff',
+  'Roboto': 'https://cdn.jsdelivr.net/npm/@fontsource/roboto/files/roboto-latin-400-normal.woff',
+  'Open Sans': 'https://cdn.jsdelivr.net/npm/@fontsource/open-sans/files/open-sans-latin-400-normal.woff',
+  'Montserrat': 'https://cdn.jsdelivr.net/npm/@fontsource/montserrat/files/montserrat-latin-400-normal.woff',
+  'Playfair Display': 'https://cdn.jsdelivr.net/npm/@fontsource/playfair-display/files/playfair-display-latin-400-normal.woff',
+  'Dancing Script': 'https://cdn.jsdelivr.net/npm/@fontsource/dancing-script/files/dancing-script-latin-400-normal.woff',
+  'Bebas Neue': 'https://cdn.jsdelivr.net/npm/@fontsource/bebas-neue/files/bebas-neue-latin-400-normal.woff',
+  'Cinzel': 'https://cdn.jsdelivr.net/npm/@fontsource/cinzel/files/cinzel-latin-400-normal.woff',
+  'Courier Prime': 'https://cdn.jsdelivr.net/npm/@fontsource/courier-prime/files/courier-prime-latin-400-normal.woff',
+  'Caveat': 'https://cdn.jsdelivr.net/npm/@fontsource/caveat/files/caveat-latin-400-normal.woff'
+};
+
 const generateId = () => Math.random().toString(36).substr(2, 9);
 const pxToInches = (px) => (px / PPI).toFixed(2);
 
 export default function App(props) {
+  const [isInitializing, setIsInitializing] = useState(true);
   const [elements, setElements] = useState([]);
   const [selectedIds, setSelectedIds] = useState([]);
   const [backgroundColor, setBackgroundColor] = useState('#ffffff');
@@ -58,13 +72,17 @@ export default function App(props) {
   const [menuState, setMenuState] = useState({ tools: true, add: true, props: true });
   const toggleMenu = (key) => setMenuState(prev => ({ ...prev, [key]: !prev[key] }));
 
+  const [history, setHistory] = useState([[]]);
+  const [historyIndex, setHistoryIndex] = useState(0);
+  const isUndoRedoAction = useRef(false);
+
   const fileInputRef = useRef(null);
-  const templateInputRef = useRef(null);
   const customPatternInputRef = useRef(null);
   const containerRef = useRef(null);
   const canvasRef = useRef(null);
   const activePointers = useRef(new Map());
   const touchRef = useRef(null);
+  const dragStartElementsRef = useRef(null);
 
   useEffect(() => {
     const loadScript = (src) => {
@@ -75,8 +93,8 @@ export default function App(props) {
         document.head.appendChild(script);
       }
     };
-    loadScript('https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js');
-    loadScript('https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js');
+    
+    loadScript('https://cdnjs.cloudflare.com/ajax/libs/opentype.js/1.3.4/opentype.min.js');
 
     const linkId = 'google-fonts-link';
     if (!document.getElementById(linkId)) {
@@ -89,17 +107,28 @@ export default function App(props) {
 
       exImgTemplate(props.source, props.sourceSize.width, props.sourceSize.height);
 
-      // Reopening a saved design: put back its layers (the guide above is rebuilt from the source).
       const saved = props.initialDesignState;
       if (saved && Array.isArray(saved.elements)) {
         const hasUploadBase = saved.elements.some(el => el.src === SOURCE_PLACEHOLDER);
-        const restored = saved.elements.map(el => (el.src === SOURCE_PLACEHOLDER ? { ...el, src: props.source } : el));
-        // Safe to run twice (React dev mode re-runs mount effects): drop anything already restored first.
+        
+        const restored = saved.elements.map(el => {
+          let updatedSrc = el.src;
+          if (updatedSrc === SOURCE_PLACEHOLDER) {
+            updatedSrc = props.source;
+          } else if (updatedSrc === UPLOADED_ARTWORK_PLACEHOLDER && props.initialImageLayer?.url) {
+            updatedSrc = props.initialImageLayer.url;
+          }
+          return { ...el, src: updatedSrc };
+        });
+
         const restoredIds = new Set(restored.map(el => el.id));
         setElements(prev => [...restored, ...prev.filter(el => !restoredIds.has(el.id) && !(hasUploadBase && !el.isTemplate && el.src === props.source))]);
         if (saved.backgroundColor) setBackgroundColor(saved.backgroundColor);
       }
-  }, []);
+
+      const initTimer = setTimeout(() => setIsInitializing(false), 600);
+      return () => clearTimeout(initTimer);
+  }, []); 
 
   const handleArtboardSubmit = (e) => {
     e.preventDefault();
@@ -108,116 +137,411 @@ export default function App(props) {
     handleFitToScreen();
   };
 
-
-  // TEMPORARY FUNCTION FOR EXISTING TEMPLATE 
   const exImgTemplate = (src, width, height) => {
     const isUpload = src.startsWith('blob:');
     setCanvasSize({ width, height });
-      if (containerRef.current) {
-        const containerW = Math.max(100, containerRef.current.clientWidth - 80);
-        const containerH = Math.max(100, containerRef.current.clientHeight - 80);
-        const scaleX = containerW / width;
-        const scaleY = containerH / height;
-        setZoomLevel(Math.max(0.05, Math.min(scaleX, scaleY, 1.5)));
-        setPanOffset({ x: 0, y: 0 }); 
-      }
-      const templateElement = {
-        id: generateId(), type: 'image', name: 'Locked Template',
-        src: src, origImgWidth: width, origImgHeight: height,
-        x: 0, y: 0, width: width, height: height, rotation: 0,
-        locked: !isUpload, hidden: false, opacity: 1, isTemplate: !isUpload, flipX: false, flipY: false 
-      };
-      // A blank canvas (data: URL) is only a size; it has no guide to draw over the artwork.
-      if (!src.startsWith('data:')) setElements(prev => [...prev.filter(el => !el.isTemplate), templateElement]);
-      setShowTemplate(true); 
-      setActiveTool('select');
-      if(window.innerWidth < 768) setIsMobileToolsOpen(false);
+    if (containerRef.current) {
+      const containerW = Math.max(100, containerRef.current.clientWidth - 80);
+      const containerH = Math.max(100, containerRef.current.clientHeight - 80);
+      const scaleX = containerW / width;
+      const scaleY = containerH / height;
+      setZoomLevel(Math.max(0.05, Math.min(scaleX, scaleY, 1.5)));
+      setPanOffset({ x: 0, y: 0 }); 
+    }
+    
+    let initialLayers = [];
+
+    if (props.initialImageLayer && props.initialImageLayer.fresh && (!props.initialDesignState || Object.keys(props.initialDesignState).length === 0)) {
+      const { url, width: imgW, height: imgH } = props.initialImageLayer;
+      const renderW = Math.min(imgW, width * 0.8);
+      const renderH = (renderW / imgW) * imgH;
+      initialLayers.push({
+        id: generateId(), type: 'image', name: 'Uploaded Artwork',
+        src: url, origImgWidth: imgW, origImgHeight: imgH,
+        x: (width - renderW) / 2, y: (height - renderH) / 2,
+        width: renderW, height: renderH, rotation: 0, locked: false, hidden: false, opacity: 1, isTemplate: false,
+        flipX: false, flipY: false
+      });
+    }
+
+    const templateElement = {
+      id: generateId(), type: 'image', name: isUpload ? 'Background Image' : 'Locked Template',
+      src: src, origImgWidth: width, origImgHeight: height,
+      x: 0, y: 0, width: width, height: height, rotation: 0,
+      locked: !isUpload, hidden: false, opacity: 1, isTemplate: !isUpload, flipX: false, flipY: false 
+    };
+
+    if (!src.startsWith('data:')) {
+      initialLayers.push(templateElement);
+    }
+    
+    setElements(prev => [...prev.filter(el => !el.isTemplate && el.name !== 'Uploaded Artwork'), ...initialLayers]);
+    setShowTemplate(true); 
+    setActiveTool('select');
+    if(window.innerWidth < 768) setIsMobileToolsOpen(false);
   }
 
-  // THIS IS FOR TESTING ONLY THIS SHOULD NOT BE IN FINAL FILE
-  const handleExportPDF = async (saveToFlow = false) => {
-    if (!canvasRef.current || !window.html2canvas) return;
-    
-    const prevSelected = [...selectedIds];
-    const prevZoom = zoomLevel;
-    const prevPan = { ...panOffset };
-    const prevGrid = showGrid;
-    const prevTemplate = showTemplate;
-    
-    setSelectedIds([]); 
-    setZoomLevel(1);
-    setPanOffset({ x: 0, y: 0 });
-    setShowGrid(false);
-    setShowTemplate(false);
-    setIsExporting(true);
-
-    const maxDim = Math.max(canvasSize.width, canvasSize.height);
-    const exportScale = maxDim > 4000 ? 1 : 2;
-
-    setTimeout(async () => {
-      try {
-        const canvas = await window.html2canvas(canvasRef.current, { 
-          scale: exportScale, 
-          useCORS: true, 
-          backgroundColor: backgroundColor,
-          width: canvasSize.width,   
-          height: canvasSize.height, 
-          windowWidth: canvasSize.width,
-          windowHeight: canvasSize.height,
-          x: 0,
-          y: 0,
-          onclone: (documentClone) => {
-            const clonedCanvas = documentClone.getElementById('design-artboard');
-            if (clonedCanvas) {
-              clonedCanvas.style.position = 'fixed';
-              clonedCanvas.style.top = '0px';
-              clonedCanvas.style.left = '0px';
-              clonedCanvas.style.transform = 'none';
-              clonedCanvas.style.boxShadow = 'none';
-              documentClone.body.appendChild(clonedCanvas);
-              
-              Array.from(documentClone.body.children).forEach(child => {
-                if (child.id !== 'design-artboard') child.style.display = 'none';
-              });
-            }
-          }
-        });
-        
-        if (saveToFlow === true) {
-          const file = await new Promise((resolve, reject) => canvas.toBlob((b) => (b ? resolve(b) : reject(new Error('Could not export the design.'))), 'image/png'));
-          const layers = elements.filter(el => !el.isTemplate).map(el => (el.src === props.source ? { ...el, src: SOURCE_PLACEHOLDER } : el));
-          let designState = { elements: layers, backgroundColor };
-          // Too large to store (e.g. many big photos): still save the design, just without reopenable layers.
-          if (JSON.stringify(designState).length > MAX_DESIGN_STATE_BYTES) designState = {};
-          await props.onExport({ file, designState });
-        } else if (window.jspdf) {
-          const imgData = canvas.toDataURL('image/jpeg', 0.95); 
-          const pdf = new window.jspdf.jsPDF({
-            orientation: canvasSize.width > canvasSize.height ? 'landscape' : 'portrait',
-            unit: 'in',
-            format: [canvasSize.width / PPI, canvasSize.height / PPI]
-          });
-          pdf.addImage(imgData, 'JPEG', 0, 0, canvasSize.width / PPI, canvasSize.height / PPI);
-          pdf.save('design-export.pdf');
-        }
-      } catch (err) { console.error("Export failed:", err); }
-      finally {
-        setSelectedIds(prevSelected);
-        setZoomLevel(prevZoom);
-        setPanOffset(prevPan);
-        setShowGrid(prevGrid);
-        setShowTemplate(prevTemplate);
-        setIsExporting(false);
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
+      if ((e.ctrlKey || e.metaKey) && e.key === 'z') {
+        e.preventDefault();
+        if (e.shiftKey) handleRedo(); else handleUndo();
+      } else if ((e.ctrlKey || e.metaKey) && e.key === 'y') {
+        e.preventDefault();
+        handleRedo();
       }
-    }, 800);
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [historyIndex, history]);
+
+  const pushHistory = useCallback((newElements) => {
+    if (isUndoRedoAction.current) {
+      isUndoRedoAction.current = false;
+      return;
+    }
+    setHistory(prev => {
+      const next = prev.slice(0, historyIndex + 1);
+      next.push(JSON.parse(JSON.stringify(newElements)));
+      if (next.length > 50) next.shift();
+      return next;
+    });
+    setHistoryIndex(prev => Math.min(prev + 1, 50));
+  }, [historyIndex]);
+
+  const handleUndo = () => {
+    if (historyIndex > 0) {
+      isUndoRedoAction.current = true;
+      const prevElements = JSON.parse(JSON.stringify(history[historyIndex - 1]));
+      
+      setElements(currentElements => {
+        const templates = currentElements.filter(el => el.isTemplate);
+        if (templates.length > 0) {
+          const stateWithoutTemplates = prevElements.filter(el => !el.isTemplate);
+          return [...stateWithoutTemplates, ...templates];
+        }
+        return prevElements;
+      });
+      setHistoryIndex(prev => prev - 1);
+    }
   };
 
+  const handleRedo = () => {
+    if (historyIndex < history.length - 1) {
+      isUndoRedoAction.current = true;
+      const nextElements = JSON.parse(JSON.stringify(history[historyIndex + 1]));
+      
+      setElements(currentElements => {
+        const templates = currentElements.filter(el => el.isTemplate);
+        if (templates.length > 0) {
+          const stateWithoutTemplates = nextElements.filter(el => !el.isTemplate);
+          return [...stateWithoutTemplates, ...templates];
+        }
+        return nextElements;
+      });
+      setHistoryIndex(prev => prev + 1);
+    }
+  };
+
+  const updateElementsState = (newElements) => {
+    setElements(newElements);
+    pushHistory(newElements);
+  };
+
+  const fetchBlobAsBase64 = async (url) => {
+    try {
+      if (url && url.startsWith('data:')) return url;
+      const blob = await fetch(url).then(r => r.blob());
+      return new Promise((resolve) => {
+        const reader = new FileReader();
+        reader.onloadend = () => resolve(reader.result);
+        reader.readAsDataURL(blob);
+      });
+    } catch (e) {
+      console.warn("Failed to fetch image for base64 embed:", e);
+      return url; 
+    }
+  };
+
+  const handleExportSVG = async (saveToFlow = false) => {
+    if (elements.length === 0) return;
+    setIsExporting(true);
+
+    if (!window.opentype) {
+      await new Promise((resolve) => {
+        const script = document.createElement('script');
+        script.src = 'https://cdnjs.cloudflare.com/ajax/libs/opentype.js/1.3.4/opentype.min.js';
+        script.onload = resolve;
+        script.onerror = resolve; 
+        document.head.appendChild(script);
+      });
+    }
+    
+    try {
+      let defsContent = `
+        <style>
+          @import url('https://fonts.googleapis.com/css2?family=Bebas+Neue&amp;family=Caveat:wght@400;700&amp;family=Cinzel:wght@400;700&amp;family=Courier+Prime:wght@400;700&amp;family=Dancing+Script:wght@400;700&amp;family=Inter:wght@400;600;700&amp;family=Montserrat:wght@400;600;700&amp;family=Open+Sans:wght@400;600;700&amp;family=Playfair+Display:wght@400;600;700&amp;family=Roboto:wght@400;500;700&amp;display=swap');
+        </style>
+      `;
+      let bodyContent = '';
+
+      for (const el of elements) {
+        if (el.hidden || el.isTemplate) continue;
+
+        const centerX = el.width / 2;
+        const centerY = el.height / 2;
+        const scaleX = el.flipX ? -1 : 1;
+        const scaleY = el.flipY ? -1 : 1;
+        
+        const transform = `translate(${el.x}, ${el.y}) rotate(${el.rotation || 0} ${centerX} ${centerY}) translate(${centerX}, ${centerY}) scale(${scaleX}, ${scaleY}) translate(${-centerX}, ${-centerY})`;
+        let elementSvg = '';
+
+        if (el.type === 'shape') {
+          const fill = el.fill || '#000000';
+          switch(el.shapeType) {
+            case 'rect': elementSvg = `<rect width="${el.width}" height="${el.height}" fill="${fill}" />`; break;
+            case 'circle': elementSvg = `<circle cx="${centerX}" cy="${centerY}" r="${centerX}" fill="${fill}" />`; break;
+            case 'star': elementSvg = `<g transform="scale(${el.width/24}, ${el.height/24})"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" fill="${fill}" /></g>`; break;
+            case 'triangle': elementSvg = `<g transform="scale(${el.width/24}, ${el.height/24})"><polygon points="12 2 22 21 2 21" fill="${fill}" /></g>`; break;
+            case 'cross': elementSvg = `<g transform="scale(${el.width/24}, ${el.height/24})"><path d="M19 10h-5V5h-4v5H5v4h5v5h4v-5h5v-4z" fill="${fill}" /></g>`; break;
+            case 'arrow': elementSvg = `<g transform="scale(${el.width/24}, ${el.height/24})"><path d="M5 13h11.586l-5.293 5.293 1.414 1.414L20.414 12l-7.707-7.707-1.414 1.414L16.586 11H5v2z" fill="${fill}" /></g>`; break;
+            case 'rhombus': elementSvg = `<g transform="scale(${el.width/24}, ${el.height/24})"><polygon points="12 2 22 12 12 22 2 12" fill="${fill}" /></g>`; break;
+            case 'octagon': elementSvg = `<g transform="scale(${el.width/24}, ${el.height/24})"><polygon points="7.86 2 h8.28 l5.86 5.86 v8.28 l-5.86 5.86 H7.86 L2 16.14 V7.86 Z" fill="${fill}" /></g>`; break;
+            case 'sun': elementSvg = `<g transform="scale(${el.width/24}, ${el.height/24})"><circle cx="12" cy="12" r="5" fill="${fill}"/><path d="M12 1v2m0 18v2M4.22 4.22l1.42 1.42m12.72 12.72l1.42 1.42M1 12h2m18 0h2M4.22 19.78l1.42-1.42m12.72-12.72l1.42-1.42" stroke="${fill}" stroke-width="2" stroke-linecap="round"/></g>`; break;
+            default: elementSvg = `<rect width="${el.width}" height="${el.height}" fill="${fill}" />`;
+          }
+        } else if (el.type === 'image' || el.type === 'qr') {
+          let srcBase64 = el.src;
+          if (el.type === 'qr') {
+            const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(el.qrData || 'https://example.com')}&color=${(el.qrColor || '#000000').replace('#','')}&bgcolor=${(el.qrBgColor || '#ffffff').replace('#','')}`;
+            srcBase64 = await fetchBlobAsBase64(qrUrl);
+          } else {
+            srcBase64 = await fetchBlobAsBase64(el.src);
+          }
+          const canvasScaleFactor = Math.max(canvasSize.width, canvasSize.height) / 800;
+          const strokeWidth = (el.strokeWidth || 0) * canvasScaleFactor;
+          const cornerRadius = (el.cornerRadius || 0) * canvasScaleFactor;
+          
+          let imgTag = `<image href="${srcBase64}" xlink:href="${srcBase64}" width="${el.width}" height="${el.height}" preserveAspectRatio="${el.type === 'qr' ? 'none' : 'none'}" />`;
+          
+          if (strokeWidth > 0 || cornerRadius > 0) {
+            const maskId = `mask-${el.id}`;
+            defsContent += `<clipPath id="${maskId}"><rect width="${el.width}" height="${el.height}" rx="${cornerRadius}" ry="${cornerRadius}" /></clipPath>`;
+            elementSvg = `<g clip-path="url(#${maskId})">${imgTag}</g>`;
+            if (strokeWidth > 0) {
+              elementSvg += `<rect width="${el.width}" height="${el.height}" rx="${cornerRadius}" ry="${cornerRadius}" fill="none" stroke="${el.strokeColor || '#000000'}" stroke-width="${strokeWidth * 2}" />`;
+            }
+          } else {
+            elementSvg = imgTag;
+          }
+
+        } else if (el.type === 'pattern') {
+          const patternId = `pattern-${el.id}`;
+          const scaledSize = (el.patternSize || 150) * (el.patternScale || 1);
+          const srcBase64 = await fetchBlobAsBase64(el.src);
+          defsContent += `
+            <pattern id="${patternId}" patternUnits="userSpaceOnUse" width="${scaledSize}" height="${scaledSize}">
+              <image href="${srcBase64}" xlink:href="${srcBase64}" width="${scaledSize}" height="${scaledSize}" preserveAspectRatio="none" />
+            </pattern>`;
+          elementSvg = `<rect width="${el.width}" height="${el.height}" fill="url(#${patternId})" />`;
+
+        } else if (el.type === 'drawing') {
+          const points = el.points.map(p => `${p.x},${p.y}`).join(' ');
+          elementSvg = `<polyline points="${points}" fill="none" stroke="${el.stroke}" stroke-width="${el.strokeWidth}" stroke-linecap="round" stroke-linejoin="round" />`;
+
+        } else if (el.type === 'text') {
+          const fontUrl = FONT_URLS[el.fontFamily] || FONT_URLS['Inter']; 
+          try {
+            const font = await new Promise((resolve, reject) => {
+              if (!window.opentype) {
+                console.warn("Opentype.js is missing for font rendering.");
+                resolve(null);
+              } else {
+                window.opentype.load(fontUrl, (err, f) => {
+                  if (err) {
+                    console.error("Font outlining failed to load TTF URL:", err);
+                    resolve(null);
+                  } else {
+                    resolve(f);
+                  }
+                });
+              }
+            });
+
+            if (font) {
+              let textPaths = '';
+              
+              // Apply programmatic Word-Wrapping logic inside SVG export Engine
+              let lines = [];
+              const hardLines = el.text.split('\n');
+              
+              for (let i = 0; i < hardLines.length; i++) {
+                const hardLine = hardLines[i];
+                let prefix = '';
+                if (el.listType === 'bullet') prefix = '• ';
+                else if (el.listType === 'number') prefix = `${i + 1}. `;
+                
+                const words = hardLine.split(' ');
+                let currentLine = prefix + (words[0] || '');
+                
+                for (let k = 1; k < words.length; k++) {
+                  const word = words[k];
+                  const testLine = currentLine + (currentLine ? ' ' : '') + word;
+                  const testWidth = font.getAdvanceWidth(testLine, el.fontSize);
+                  
+                  if (testWidth > el.width && currentLine !== prefix) {
+                    lines.push(currentLine);
+                    currentLine = word; // break down to next line
+                  } else {
+                    currentLine = testLine;
+                  }
+                }
+                lines.push(currentLine);
+              }
+
+              const lineHeightPx = el.fontSize * (el.lineHeight || 1.2);
+              const ascender = font.ascender / font.unitsPerEm * el.fontSize;
+              let currentY = ascender;
+
+              for (let i = 0; i < lines.length; i++) {
+                const line = lines[i];
+                if (line.trim() === '') {
+                   currentY += lineHeightPx;
+                   continue;
+                }
+                const textWidth = font.getAdvanceWidth(line, el.fontSize);
+                let currentX = 0;
+                
+                if (el.textAlign === 'center') {
+                  currentX = (el.width - textWidth) / 2;
+                } else if (el.textAlign === 'right') {
+                  currentX = el.width - textWidth;
+                }
+                
+                const path = font.getPath(line, currentX, currentY, el.fontSize);
+                path.fill = el.fill || '#000000';
+                
+                if (el.strokeWidth > 0 && el.strokeColor) {
+                  const canvasScaleFactor = Math.max(canvasSize.width, canvasSize.height) / 800;
+                  const strokeWidthPx = el.strokeWidth * canvasScaleFactor;
+                  path.stroke = el.strokeColor;
+                  path.strokeWidth = strokeWidthPx;
+                }
+                textPaths += path.toSVG();
+                currentY += lineHeightPx;
+              }
+              elementSvg = textPaths;
+            } else {
+               // Fallback: If opentype fails (network error) we apply the same word wrap behavior logic via Canvas context
+               let lines = [];
+               const tempCanvas = document.createElement('canvas');
+               const ctx = tempCanvas.getContext('2d');
+               ctx.font = `${el.fontSize}px "${el.fontFamily}"`;
+               
+               const hardLines = el.text.split('\n');
+               
+               for (let i = 0; i < hardLines.length; i++) {
+                 const hardLine = hardLines[i];
+                 let prefix = '';
+                 if (el.listType === 'bullet') prefix = '• ';
+                 else if (el.listType === 'number') prefix = `${i + 1}. `;
+                 
+                 const words = hardLine.split(' ');
+                 let currentLine = prefix + (words[0] || '');
+                 
+                 for (let k = 1; k < words.length; k++) {
+                   const word = words[k];
+                   const testLine = currentLine + (currentLine ? ' ' : '') + word;
+                   const testWidth = ctx.measureText(testLine).width;
+                   
+                   if (testWidth > el.width && currentLine !== prefix) {
+                     lines.push(currentLine);
+                     currentLine = word;
+                   } else {
+                     currentLine = testLine;
+                   }
+                 }
+                 lines.push(currentLine);
+               }
+
+               const lineHeightPx = el.fontSize * (el.lineHeight || 1.2);
+               let yOffset = el.fontSize;
+               let fallbackText = '';
+               
+               for (const line of lines) {
+                 if (line.trim() === '') {
+                   yOffset += lineHeightPx;
+                   continue;
+                 }
+                 
+                 let anchor = "start";
+                 let xPos = 0;
+                 if (el.textAlign === 'center') { anchor = "middle"; xPos = el.width / 2; }
+                 else if (el.textAlign === 'right') { anchor = "end"; xPos = el.width; }
+                 
+                 fallbackText += `<text x="${xPos}" y="${yOffset}" font-family="${el.fontFamily}" font-size="${el.fontSize}" fill="${el.fill}" text-anchor="${anchor}">${line.replace(/</g, '&lt;').replace(/>/g, '&gt;')}</text>`;
+                 yOffset += lineHeightPx;
+               }
+               elementSvg = fallbackText;
+            }
+          } catch (err) {
+             console.error("Text outlining failed, using fallback", err);
+          }
+        }
+
+        bodyContent += `<g id="${el.id}" data-name="${el.type}-Layer" transform="${transform}" opacity="${el.opacity !== undefined ? el.opacity : 1}">${elementSvg}</g>`;
+      }
+
+      const svgString = `<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="${canvasSize.width}" height="${canvasSize.height}" viewBox="0 0 ${canvasSize.width} ${canvasSize.height}">
+  <defs>${defsContent}</defs>
+  <rect width="100%" height="100%" fill="${backgroundColor}"/>
+  ${bodyContent}
+</svg>`;
+
+      const blob = new Blob([svgString], { type: 'image/svg+xml' });
+
+      if (saveToFlow) {
+        const layers = elements.filter(el => !el.isTemplate).map(el => {
+          let safeSrc = el.src;
+          if (safeSrc === props.source) {
+            safeSrc = SOURCE_PLACEHOLDER;
+          } else if (props.initialImageLayer && safeSrc === props.initialImageLayer.url) {
+            safeSrc = UPLOADED_ARTWORK_PLACEHOLDER;
+          }
+          return { ...el, src: safeSrc };
+        });
+
+        let designState = { elements: layers, backgroundColor };
+        if (JSON.stringify(designState).length > MAX_DESIGN_STATE_BYTES) designState = {};
+        
+        await props.onExport({ file: blob, designState });
+      } else {
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = 'vector-design.svg';
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+      }
+    } catch (e) {
+      console.error("SVG Export Error:", e);
+      alert("Failed to export SVG vector.");
+    } finally {
+      setIsExporting(false);
+    }
+  };
+  
   const insertElementUnderTemplates = (newElement) => {
-    setElements(prev => {
-      const templates = prev.filter(el => el.isTemplate);
-      const others = prev.filter(el => !el.isTemplate);
+    const newElementsList = (() => {
+      const templates = elements.filter(el => el.isTemplate);
+      const others = elements.filter(el => !el.isTemplate);
       return [...others, newElement, ...templates];
-    });
+    })();
+    updateElementsState(newElementsList);
   };
 
   const calculateInitialSize = (scaleFactor) => Math.max(150, Math.min(canvasSize.width, canvasSize.height) * scaleFactor);
@@ -237,6 +561,25 @@ export default function App(props) {
     setActiveTool('select');
     if(window.innerWidth < 768) setIsMobileToolsOpen(false);
     if (!menuState.props) toggleMenu('props');
+  };
+
+  const handleAddQR = () => {
+    if (!qrInputValue.trim()) return;
+    const size = calculateInitialSize(0.2);
+    const newElement = {
+      id: generateId(), type: 'qr', name: `QR Code`,
+      qrData: qrInputValue, qrColor: '#000000', qrBgColor: '#ffffff',
+      strokeColor: '#000000', strokeWidth: 0, cornerRadius: 0,
+      x: canvasSize.width / 2 - size / 2, y: canvasSize.height / 2 - size / 2,
+      width: size, height: size, rotation: 0, locked: false, hidden: false, opacity: 1, isTemplate: false,
+      flipX: false, flipY: false
+    };
+    insertElementUnderTemplates(newElement);
+    setSelectedIds([newElement.id]);
+    setIsQRModalOpen(false);
+    setQrInputValue('');
+    setActiveTool('select');
+    if(window.innerWidth < 768) setIsMobileToolsOpen(false);
   };
 
   const addElement = (type) => {
@@ -268,25 +611,6 @@ export default function App(props) {
     if (!menuState.props) toggleMenu('props');
   };
 
-  const handleAddQR = () => {
-    if (!qrInputValue.trim()) return;
-    const size = calculateInitialSize(0.2);
-    const newElement = {
-      id: generateId(), type: 'qr', name: `QR Code`,
-      qrData: qrInputValue, qrColor: '#000000', qrBgColor: '#ffffff',
-      strokeColor: '#000000', strokeWidth: 0, cornerRadius: 0,
-      x: canvasSize.width / 2 - size / 2, y: canvasSize.height / 2 - size / 2,
-      width: size, height: size, rotation: 0, locked: false, hidden: false, opacity: 1, isTemplate: false,
-      flipX: false, flipY: false
-    };
-    insertElementUnderTemplates(newElement);
-    setSelectedIds([newElement.id]);
-    setIsQRModalOpen(false);
-    setQrInputValue('');
-    setActiveTool('select');
-    if(window.innerWidth < 768) setIsMobileToolsOpen(false);
-  };
-  // this is for image and pattern upload
   const handleFileUpload = (e, isCustomPattern = false) => {
     const file = e.target.files[0];
     if (!file) return;
@@ -386,97 +710,8 @@ export default function App(props) {
     e.target.value = '';
   };
 
-  // THIS IS FOR TESTING ONLY THIS SHOULD NOT BE IN FINAL FILE
-  const handleTemplateUpload = (e) => {
-    const file = e.target.files[0];
-    if (!file) return;
-
-    const processTemplateContent = (src, width, height) => {
-      setCanvasSize({ width, height });
-      if (containerRef.current) {
-        const containerW = Math.max(100, containerRef.current.clientWidth - 80);
-        const containerH = Math.max(100, containerRef.current.clientHeight - 80);
-        const scaleX = containerW / width;
-        const scaleY = containerH / height;
-        setZoomLevel(Math.max(0.05, Math.min(scaleX, scaleY, 1.5)));
-        setPanOffset({ x: 0, y: 0 }); 
-      }
-      const templateElement = {
-        id: generateId(), type: 'image', name: 'Locked Template',
-        src: src, origImgWidth: width, origImgHeight: height,
-        x: 0, y: 0, width: width, height: height, rotation: 0,
-        locked: true, hidden: false, opacity: 1, isTemplate: true, flipX: false, flipY: false 
-      };
-      setElements(prev => [...prev.filter(el => !el.isTemplate), templateElement]);
-      setShowTemplate(true); 
-      setActiveTool('select');
-      if(window.innerWidth < 768) setIsMobileToolsOpen(false);
-    };
-
-    if (file.type === 'image/svg+xml' || file.name.endsWith('.svg')) {
-      const reader = new FileReader();
-      reader.onload = (event) => {
-        try {
-          const svgText = event.target.result;
-          const parser = new DOMParser();
-          const svgDoc = parser.parseFromString(svgText, 'image/svg+xml');
-          const svgEl = svgDoc.querySelector('svg');
-          if (!svgEl) throw new Error("Invalid SVG");
-
-          if (!svgEl.getAttribute('xmlns')) svgEl.setAttribute('xmlns', 'http://www.w3.org/2000/svg');
-          
-          const parseDimension = (val) => {
-            if (!val) return null;
-            const str = String(val).toLowerCase();
-            const num = parseFloat(str);
-            if (isNaN(num)) return null;
-            if (str.includes('in')) return num * 96;
-            if (str.includes('cm')) return num * (96 / 2.54);
-            if (str.includes('mm')) return num * (96 / 25.4);
-            if (str.includes('pt')) return num * (96 / 72);
-            return num * (96 / 72);
-          };
-
-          let width = null; let height = null;
-          const wAttr = parseDimension(svgEl.getAttribute('width'));
-          const hAttr = parseDimension(svgEl.getAttribute('height'));
-          
-          if (wAttr && hAttr) {
-            width = wAttr; height = hAttr;
-          } else {
-            const viewBox = svgEl.getAttribute('viewBox');
-            if (viewBox) {
-              const parts = viewBox.split(/[\s,]+/).map(Number);
-              if (parts.length === 4 && parts[2] > 0 && parts[3] > 0) { 
-                width = parts[2] * (96 / 72); 
-                height = parts[3] * (96 / 72); 
-              }
-            }
-          }
-          if (!width || !height) { width = 800; height = 600; }
-
-          const serializer = new XMLSerializer();
-          const svgString = serializer.serializeToString(svgDoc);
-          const dataUrl = 'data:image/svg+xml;base64,' + btoa(unescape(encodeURIComponent(svgString)));
-          processTemplateContent(dataUrl, width, height);
-        } catch (err) { console.error("Failed to parse Template SVG:", err); }
-      };
-      reader.readAsText(file);
-    } else {
-      const reader = new FileReader();
-      reader.onload = (event) => {
-        const img = new window.Image();
-        img.onload = () => {
-          processTemplateContent(event.target.result, img.width, img.height);
-        };
-        img.src = event.target.result;
-      };
-      reader.readAsDataURL(file);
-    }
-    e.target.value = '';
-  };
-
   const handleLayerDragStart = (e, id) => { setDraggedLayerId(id); e.dataTransfer.effectAllowed = 'move'; };
+
   const handleLayerDragOver = (e, targetId) => {
     e.preventDefault();
     if (!draggedLayerId || draggedLayerId === targetId) return;
@@ -486,16 +721,21 @@ export default function App(props) {
     if (draggedIdx !== -1 && targetIdx !== -1) {
       const [removed] = currentElements.splice(draggedIdx, 1);
       currentElements.splice(targetIdx, 0, removed);
-      setElements(currentElements);
+      updateElementsState(currentElements);
     }
   };
+
   const handleLayerDragEnd = () => setDraggedLayerId(null);
 
-  const toggleLayerProperty = (id, property) => setElements(elements.map(el => el.id === id ? { ...el, [property]: !el[property] } : el));
-  const updateElements = (ids, newProps) => setElements(elements.map((el) => (ids.includes(el.id) ? { ...el, ...newProps } : el)));
+  const toggleLayerProperty = (id, property) => {
+    updateElementsState(elements.map(el => el.id === id ? { ...el, [property]: !el[property] } : el));
+  }
+  const updateElements = (ids, newProps) => {
+    updateElementsState(elements.map((el) => (ids.includes(el.id) ? { ...el, ...newProps } : el)));
+  }
   
   const deleteSelected = () => {
-    setElements(elements.filter((el) => !selectedIds.includes(el.id)));
+    updateElementsState(elements.filter((el) => !selectedIds.includes(el.id)));
     setSelectedIds([]);
   };
 
@@ -536,6 +776,7 @@ export default function App(props) {
       }
     });
 
+    dragStartElementsRef.current = JSON.parse(JSON.stringify(elements));
     setDragAction({ type, direction, startX: e.clientX, startY: e.clientY, origPositions, pointerId: e.pointerId, target: e.target });
   };
 
@@ -554,6 +795,7 @@ export default function App(props) {
       const rect = canvasRef.current.getBoundingClientRect();
       const x = (e.clientX - rect.left) / zoomLevel;
       const y = (e.clientY - rect.top) / zoomLevel;
+      dragStartElementsRef.current = JSON.parse(JSON.stringify(elements));
       setDragAction({ type: 'drawing', points: [{x, y}] });
       return;
     } else if (activeTool === 'select' && !e.shiftKey) {
@@ -615,22 +857,43 @@ export default function App(props) {
         if (dragAction.type === 'move') {
           return { ...el, x: orig.x + dx, y: orig.y + dy };
         } else if (dragAction.type === 'resize' && selectedIds.length === 1) {
-          let newW = orig.w; let newH = orig.h;
-          let newX = orig.x; let newY = orig.y;
-          
-          if (dragAction.direction.includes('e')) newW += dx;
-          if (dragAction.direction.includes('w')) { newW -= dx; newX += dx; }
-          if (dragAction.direction.includes('s')) newH += dy;
-          if (dragAction.direction.includes('n')) { newH -= dy; newY += dy; }
-          
-          if (newW < 20) { newW = 20; if (dragAction.direction.includes('w')) newX = orig.x + orig.w - 20; }
-          if (newH < 20) { newH = 20; if (dragAction.direction.includes('n')) newY = orig.y + orig.h - 20; }
+          const angleRad = (orig.rot || 0) * (Math.PI / 180);
+          const localDx = dx * Math.cos(-angleRad) - dy * Math.sin(-angleRad);
+          const localDy = dx * Math.sin(-angleRad) + dy * Math.cos(-angleRad);
+
+          let newW = orig.w; 
+          let newH = orig.h;
+          let dw = 0; let dh = 0;
+
+          if (dragAction.direction.includes('e')) { dw = localDx; newW += dw; }
+          if (dragAction.direction.includes('w')) { dw = -localDx; newW += dw; }
+          if (dragAction.direction.includes('s')) { dh = localDy; newH += dh; }
+          if (dragAction.direction.includes('n')) { dh = -localDy; newH += dh; }
+
+          const MIN_SIZE = 20;
+          if (newW < MIN_SIZE) { dw += (MIN_SIZE - newW); newW = MIN_SIZE; }
+          if (newH < MIN_SIZE) { dh += (MIN_SIZE - newH); newH = MIN_SIZE; }
+
+          let localCxShift = 0; let localCyShift = 0;
+          if (dragAction.direction.includes('e')) localCxShift = dw / 2;
+          if (dragAction.direction.includes('w')) localCxShift = -dw / 2;
+          if (dragAction.direction.includes('s')) localCyShift = dh / 2;
+          if (dragAction.direction.includes('n')) localCyShift = -dh / 2;
+
+          const globalCxShift = localCxShift * Math.cos(angleRad) - localCyShift * Math.sin(angleRad);
+          const globalCyShift = localCxShift * Math.sin(angleRad) + localCyShift * Math.cos(angleRad);
+
+          const origCx = orig.x + orig.w / 2;
+          const origCy = orig.y + orig.h / 2;
+          const newX = (origCx + globalCxShift) - newW / 2;
+          const newY = (origCy + globalCyShift) - newH / 2;
 
           if (el.type === 'text') {
             const isCorner = ['nw', 'ne', 'sw', 'se'].includes(dragAction.direction);
             if (isCorner) {
               const ratio = newH / orig.h;
-              return { ...el, fontSize: Math.max(4, Math.round(orig.fontSize * ratio)), width: newW, height: newH, x: newX, y: newY };
+              const newFontSize = Math.min(1296, Math.max(4, Math.round(orig.fontSize * ratio)));
+              return { ...el, fontSize: newFontSize, width: newW, height: newH, x: newX, y: newY };
             }
           }
           return { ...el, width: newW, height: newH, x: newX, y: newY };
@@ -640,7 +903,7 @@ export default function App(props) {
             const centerXScreen = rect.left + (orig.x + orig.w / 2) * zoomLevel;
             const centerYScreen = rect.top + (orig.y + orig.h / 2) * zoomLevel;
             const radians = Math.atan2(e.clientY - centerYScreen, e.clientX - centerXScreen);
-            const angle = Math.round(radians * (180 / Math.PI) + 90);
+            let angle = Math.round(radians * (180 / Math.PI) + 90);
             return { ...el, rotation: (angle + 360) % 360 };
           }
         }
@@ -652,6 +915,8 @@ export default function App(props) {
   const handlePointerUp = () => {
     if (selectionBox) setSelectionBox(null);
 
+    let hasChanges = false;
+    
     if (dragAction?.type === 'drawing') {
       const points = dragAction.points;
       if (points.length > 1) {
@@ -669,8 +934,27 @@ export default function App(props) {
           rotation: 0, locked: false, hidden: false, isTemplate: false,
           name: `Drawing ${elements.length + 1}`, flipX: false, flipY: false
         };
-        insertElementUnderTemplates(newElement);
+        const newElements = (() => {
+          const templates = elements.filter(el => el.isTemplate);
+          const others = elements.filter(el => !el.isTemplate);
+          return [...others, newElement, ...templates];
+        })();
+        setElements(newElements);
+        hasChanges = true;
       }
+    } else if (dragAction && ['move', 'resize', 'rotate'].includes(dragAction.type)) {
+        hasChanges = true;
+    }
+
+    if (hasChanges && dragStartElementsRef.current) {
+        setHistory(prev => {
+            const next = prev.slice(0, historyIndex + 1);
+            next.push(JSON.parse(JSON.stringify(elements)));
+            if (next.length > 50) next.shift();
+            return next;
+        });
+        setHistoryIndex(prev => Math.min(prev + 1, 50));
+        dragStartElementsRef.current = null;
     }
 
     if (dragAction?.target && dragAction?.pointerId) {
@@ -712,11 +996,17 @@ export default function App(props) {
   return (
     <div className="flex h-screen w-full bg-slate-100 font-sans text-slate-800 overflow-hidden touch-none">
 
+      {isInitializing && (
+        <div className="absolute inset-0 z-[9999] flex flex-col items-center justify-center bg-slate-100">
+          <div className="h-10 w-10 animate-spin rounded-full border-4 border-slate-200 border-t-blue-600 mb-4" />
+          <p className="text-sm font-medium text-slate-600">Loading your workspace...</p>
+        </div>
+      )}
+
       {(isMobileToolsOpen || isMobileLayersOpen) && (
         <div className="md:hidden fixed inset-0 bg-black/40 backdrop-blur-sm z-40" onClick={() => {setIsMobileToolsOpen(false); setIsMobileLayersOpen(false);}} />
       )}
 
-      {/* QR Code Modal Overlay */}
       {isQRModalOpen && (
         <div className="fixed inset-0 bg-black/50 z-[100] flex items-center justify-center p-4">
           <div className="bg-white rounded-xl shadow-2xl p-6 w-full max-w-sm">
@@ -730,25 +1020,20 @@ export default function App(props) {
               className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm mb-4 focus:ring-2 focus:ring-blue-500 outline-none"
             />
             <button onClick={handleAddQR} className="w-full bg-blue-600 hover:bg-blue-700 text-white font-medium py-2 rounded-lg transition-colors">
-              Add QR to Canvas
+              Add QR
             </button>
           </div>
         </div>
       )}
 
-      {/* LEFT SIDEBAR: Tools and Properties */}
       <aside className={`fixed md:relative inset-y-0 left-0 w-[85vw] max-w-[300px] md:w-72 bg-white border-r border-slate-200 flex flex-col shadow-2xl md:shadow-sm z-50 transform transition-transform duration-300 ease-in-out ${isMobileToolsOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'}`}>
         <div className="p-4 border-b border-slate-200 flex items-center justify-between bg-slate-50">
-            <img src="/rps-logo.png" alt="Logo"
-              width={160} height={40} className="rounded-lg object-contain"
-              style={{ width: "auto", height: "40px" }}
-            />
+            <img src="/rps-logo.png" alt="Logo" width={160} height={40} className="rounded-lg object-contain" style={{ width: "auto", height: "40px" }} />
           <button className="md:hidden p-1.5 text-slate-400 bg-white rounded-md border shadow-sm" onClick={() => setIsMobileToolsOpen(false)}><X size={18}/></button>
         </div>
 
         <div className="flex-1 overflow-y-auto pb-20 md:pb-0">
           
-          {/* Workspace Tools Accordion */}
           <div className="border-b border-slate-200 bg-white">
             <button onClick={() => toggleMenu('tools')} className="w-full p-3 flex items-center justify-between hover:bg-slate-50 transition-colors">
                <h2 className="text-[11px] font-bold text-slate-500 uppercase tracking-wider flex items-center gap-2"><MousePointer size={14} className="text-slate-400"/> Workspace Tools</h2>
@@ -787,7 +1072,6 @@ export default function App(props) {
             )}
           </div>
 
-          {/* Add Elements Section */}
           <div className="border-b border-slate-200 bg-white">
             <button onClick={() => toggleMenu('add')} className="w-full p-3 flex items-center justify-between hover:bg-slate-50 transition-colors">
                <h2 className="text-[11px] font-bold text-slate-500 uppercase tracking-wider flex items-center gap-2"><Plus size={14} className="text-slate-400"/> Add Elements</h2>
@@ -838,14 +1122,6 @@ export default function App(props) {
                   <QrCode size={18} className="text-slate-600 mb-1" />
                   <span className="text-[10px] font-medium">QR Code</span>
                 </button>
-
-                <div className="col-span-2 mt-1">
-                  <button onClick={() => templateInputRef.current?.click()} className="w-full flex items-center justify-center gap-2 bg-indigo-50/50 border border-indigo-200 hover:bg-indigo-100 p-2.5 rounded-lg transition-colors">
-                    <Lock size={14} className="text-indigo-600" />
-                    <span className="text-[11px] font-semibold text-indigo-700">Add Locked Template</span>
-                  </button>
-                  <input type="file" ref={templateInputRef} onChange={handleTemplateUpload} accept="image/png, image/jpeg, image/svg+xml" className="hidden" />
-                </div>
               </div>
             )}
           </div>
@@ -1078,7 +1354,6 @@ export default function App(props) {
         </div>
       </aside>
 
-      {/* MAIN VIEWPORT */}
       <main 
         className="flex-1 flex flex-col h-full relative pb-14 md:pb-0" 
         onPointerDownCapture={(e) => {
@@ -1117,7 +1392,7 @@ export default function App(props) {
       >
         <header className="h-14 bg-white border-b border-slate-200 flex items-center justify-between px-3 md:px-6 shadow-sm z-10 shrink-0">
           <div className="flex items-center gap-2 md:gap-4 text-[11px] font-semibold text-slate-500">
-            {isEditingArtboard ? (
+            {/* {isEditingArtboard ? (
               <form onSubmit={handleArtboardSubmit} className="hidden md:flex items-center gap-1 bg-white border border-blue-400 rounded px-2 py-0.5 shadow-sm">
                 <input type="number" step="0.1" value={artboardInput.w} onChange={(e) => setArtboardInput({...artboardInput, w: parseFloat(e.target.value) || 0})} className="w-12 text-center outline-none text-blue-700 font-bold bg-transparent" />
                 <span className="text-slate-400">"</span>
@@ -1131,7 +1406,7 @@ export default function App(props) {
                  Artboard: <span className="text-slate-800 font-bold border-b border-dashed border-slate-400 hover:border-blue-600 pb-0.5">{pxToInches(canvasSize.width)}" x {pxToInches(canvasSize.height)}"</span>
               </span>
             )}
-            
+             */}
             <div className="flex items-center bg-slate-100 p-0.5 rounded border border-slate-200">
               <button onClick={() => setShowTemplate(!showTemplate)} className={`px-2 py-1 hover:bg-white rounded flex items-center gap-1 ${showTemplate ? 'text-blue-600 font-medium' : 'text-slate-400'}`} title="Toggle Guides Visibility">
                 {showTemplate ? <Eye size={12} /> : <EyeOff size={12} />} <span className="hidden md:inline">Guides</span>
@@ -1139,6 +1414,16 @@ export default function App(props) {
               <div className="w-px h-3 bg-slate-300 mx-1"></div>
               <button onClick={() => setShowGrid(!showGrid)} className={`px-2 py-1 hover:bg-white rounded flex items-center gap-1 ${showGrid ? 'text-indigo-600 font-medium' : 'text-slate-400'}`} title="Toggle Grid">
                 <Grid3X3 size={12} /> <span className="hidden md:inline">Grid</span>
+              </button>
+            </div>
+
+            <div className="flex items-center bg-slate-100 p-0.5 rounded border border-slate-200 ml-2">
+              <button onClick={handleUndo} disabled={historyIndex === 0} className={`px-2 py-1 rounded flex items-center gap-1 ${historyIndex === 0 ? 'text-slate-300 cursor-not-allowed' : 'text-slate-600 hover:bg-white hover:text-blue-600'}`} title="Undo (Ctrl+Z)">
+                <Undo2 size={14} />
+              </button>
+              <div className="w-px h-3 bg-slate-300 mx-1"></div>
+              <button onClick={handleRedo} disabled={historyIndex === history.length - 1} className={`px-2 py-1 rounded flex items-center gap-1 ${historyIndex === history.length - 1 ? 'text-slate-300 cursor-not-allowed' : 'text-slate-600 hover:bg-white hover:text-blue-600'}`} title="Redo (Ctrl+Y)">
+                <Redo2 size={14} />
               </button>
             </div>
             
@@ -1152,25 +1437,21 @@ export default function App(props) {
 
           <div className="flex items-center gap-2">
             <button onClick={props.onBack} className="flex items-center gap-1.5 px-4 py-1.5 bg-white hover:bg-slate-50 text-slate-700 text-[11px] font-semibold rounded border border-slate-200 shadow-sm transition-colors">Back</button>
-            <button onClick={() => handleExportPDF(true)} disabled={isExporting} className="flex items-center gap-1.5 px-4 py-1.5 bg-blue-600 hover:bg-blue-700 disabled:opacity-60 text-white text-[11px] font-semibold rounded shadow-sm transition-colors">{isExporting ? 'Saving…' : 'Save & Next'}</button>
-            <button onClick={() => handleExportPDF()} className="flex items-center gap-1.5 px-4 py-1.5 bg-blue-600 hover:bg-blue-700 text-white text-[11px] font-semibold rounded shadow-sm transition-colors"><FileDown size={14} /> <span>Export PDF</span></button>
+            <button onClick={() => handleExportSVG(true)} disabled={isExporting} className="flex items-center gap-1.5 px-4 py-1.5 bg-blue-600 hover:bg-blue-700 disabled:opacity-60 text-white text-[11px] font-semibold rounded shadow-sm transition-colors">{isExporting ? 'Saving…' : 'Save & Next'}</button>
           </div>
         </header>
 
-        {/* Canvas Engine */}
         <div ref={containerRef} className="flex-1 overflow-hidden bg-[#f1f2f2] relative select-none" onPointerDown={handleContainerPointerDown} onWheel={handleWheel}>
-          {/* Covers the canvas area only (editor stays visible) while the export uses a temporary 100% zoom */}
           {isExporting && (
             <div className="absolute inset-0 z-[9999] flex flex-col items-center justify-center gap-3 bg-[#f1f2f2]">
               <div className="h-10 w-10 animate-spin rounded-full border-4 border-slate-200 border-t-blue-600" />
-              <p className="text-sm font-medium text-slate-600">Preparing your design…</p>
+              <p className="text-sm font-medium text-slate-600">Generating Vector SVG…</p>
             </div>
           )}
           <div style={{ position: 'absolute', top: '50%', left: '50%', transform: `translate(calc(-50% + ${panOffset.x}px), calc(-50% + ${panOffset.y}px))` }}>
             
             <div style={{ position: 'relative', width: canvasSize.width * zoomLevel, height: canvasSize.height * zoomLevel }}>
               
-              {/* Dimension Lines */}
               <div style={{ position: 'absolute', top: -30, left: 0, width: '100%', height: 20, display: 'flex', alignItems: 'center', justifyContent: 'center', pointerEvents: 'none', zIndex: 10 }}>
                 <div style={{ position: 'absolute', left: 0, height: 10, width: 1, backgroundColor: '#64748b' }} />
                 <div style={{ width: '100%', height: 1, backgroundColor: '#64748b' }} />
@@ -1184,7 +1465,6 @@ export default function App(props) {
                 <div style={{ position: 'absolute', backgroundColor: '#e2e8f0', padding: '2px 8px', borderRadius: '4px', fontSize: '11px', fontWeight: 'bold', color: '#475569', transform: 'rotate(-90deg)', whiteSpace: 'nowrap' }}>{pxToInches(canvasSize.height)}"</div>
               </div>
 
-              {/* Artboard Container */}
               <div id="design-artboard" ref={canvasRef} style={{ width: '100%', height: '100%', position: 'relative', backgroundColor: backgroundColor, overflow: 'hidden'}}>
                 
                 {showGrid && (
@@ -1276,11 +1556,8 @@ export default function App(props) {
                         <div 
                           style={baseStyle} 
                           onPointerDown={(e) => {
-                            if (isEditing) {
-                              e.stopPropagation(); // Allow selecting text while typing
-                            } else {
-                              handlePointerDown(e, el.id, 'move');
-                            }
+                            if (isEditing) e.stopPropagation(); 
+                            else handlePointerDown(e, el.id, 'move');
                           }}
                           onDoubleClick={() => {
                             if (el.locked || el.isTemplate || activeTool === 'draw') return;
@@ -1292,26 +1569,24 @@ export default function App(props) {
                             <textarea
                               autoFocus
                               value={el.text}
-                              onChange={(e) => updateElements([el.id], { text: e.target.value })}
-                              onBlur={() => setEditingTextId(null)}
+                              onChange={(e) => setElements(elements.map(item => item.id === el.id ? { ...item, text: e.target.value } : item))}
+                              onBlur={(e) => {
+                                 setEditingTextId(null);
+                                 updateElementsState(elements.map(item => item.id === el.id ? { ...item, text: e.target.value } : item));
+                              }}
                               onKeyDown={(e) => {
-                                if (e.key === 'Escape') setEditingTextId(null);
+                                if (e.key === 'Escape') {
+                                   setEditingTextId(null);
+                                   updateElementsState(elements.map(item => item.id === el.id ? { ...item, text: e.target.value } : item));
+                                }
                                 e.stopPropagation();
                               }}
                               style={{
                                 ...textStyle,
                                 ...contentWrapperStyle,
-                                background: 'transparent',
-                                border: 'none',
-                                outline: 'none',
-                                resize: 'none',
-                                width: '100%',
-                                height: '100%',
-                                padding: 0,
-                                margin: 0,
-                                WebkitTextStroke: 'none', // Removed while typing for visual clarity
-                                textShadow: 'none', // Removed while typing for visual clarity
-                                overflow: 'hidden'
+                                background: 'transparent', border: 'none', outline: 'none', resize: 'none',
+                                width: '100%', height: '100%', padding: 0, margin: 0,
+                                WebkitTextStroke: 'none', textShadow: 'none', overflow: 'hidden'
                               }}
                             />
                           ) : (
@@ -1409,27 +1684,19 @@ export default function App(props) {
                   return elementContent;
                 })}
 
-                {/* Real-time Drawing Overlay */}
                 {dragAction?.type === 'drawing' && dragAction.points?.length > 0 && (
                   <div style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', pointerEvents: 'none', zIndex: 9999 }}>
                     <svg viewBox={`0 0 ${canvasSize.width} ${canvasSize.height}`} style={{width: '100%', height: '100%', overflow: 'visible'}}>
                       <polyline
                         points={dragAction.points.map(p => `${p.x},${p.y}`).join(' ')}
-                        fill="none"
-                        stroke={drawSettings.color}
-                        strokeWidth={drawSettings.width}
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        opacity={drawSettings.opacity}
+                        fill="none" stroke={drawSettings.color} strokeWidth={drawSettings.width}
+                        strokeLinecap="round" strokeLinejoin="round" opacity={drawSettings.opacity}
                       />
                     </svg>
                   </div>
                 )}
-              </div> {/* End of #design-artboard. Canvas clipping happens here! */}
+              </div> 
 
-              {/* OVERLAY: Selection Handles & Marquee (Moved OUTSIDE #design-artboard) 
-                  This ensures bounding boxes and handles are fully visible and 
-                  interactive even when the element's actual shape is clipped out-of-bounds. */}
               {!isExporting && (
                 <div style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', pointerEvents: 'none', overflow: 'visible', zIndex: 9999 }}>
                   
@@ -1448,22 +1715,26 @@ export default function App(props) {
                         position: 'absolute', left: el.x * zoomLevel, top: el.y * zoomLevel,
                         width: el.width * zoomLevel, height: el.height * zoomLevel,
                         transform: `rotate(${el.rotation || 0}deg)`, transformOrigin: 'center center',
-                        outline: '2px solid #3b82f6',
-                        pointerEvents: 'none'
+                        outline: '2px solid #3b82f6', pointerEvents: 'none'
                       }}>
                         {selectedIds.length === 1 && (
                           <>
-                            {/* Invisible Clickable Frame: Allows users to drag elements back onto the canvas by clicking the blue outline */}
                             <div onPointerDown={(e) => handlePointerDown(e, el.id, 'move')} style={{ position: 'absolute', top: grabOffset, left: grabOffset, right: grabOffset, height: grabThickness, cursor: 'move', pointerEvents: 'auto' }} title="Drag outline to move" />
                             <div onPointerDown={(e) => handlePointerDown(e, el.id, 'move')} style={{ position: 'absolute', bottom: grabOffset, left: grabOffset, right: grabOffset, height: grabThickness, cursor: 'move', pointerEvents: 'auto' }} title="Drag outline to move" />
                             <div onPointerDown={(e) => handlePointerDown(e, el.id, 'move')} style={{ position: 'absolute', top: grabOffset, bottom: grabOffset, left: grabOffset, width: grabThickness, cursor: 'move', pointerEvents: 'auto' }} title="Drag outline to move" />
                             <div onPointerDown={(e) => handlePointerDown(e, el.id, 'move')} style={{ position: 'absolute', top: grabOffset, bottom: grabOffset, right: grabOffset, width: grabThickness, cursor: 'move', pointerEvents: 'auto' }} title="Drag outline to move" />
 
                             {['nw', 'n', 'ne', 'e', 'se', 's', 'sw', 'w'].map(pos => {
+                              const baseAngles = { 'n': 0, 'ne': 45, 'e': 90, 'se': 135, 's': 180, 'sw': 225, 'w': 270, 'nw': 315 };
+                              const cursorAngles = ['n', 'ne', 'e', 'se', 's', 'sw', 'w', 'nw'];
+                              const rotAngle = ((baseAngles[pos] + (el.rotation || 0)) % 360 + 360) % 360;
+                              const cursorIndex = Math.round(rotAngle / 45) % 8;
+                              const dynamicCursor = `${cursorAngles[cursorIndex]}-resize`;
+
                               const style = {
                                 position: 'absolute', width: handleSize, height: handleSize, backgroundColor: '#fff',
-                                border: '2px solid #3b82f6', borderRadius: pos.length === 1 ? '0%' : '50%', cursor: `${pos}-resize`, zIndex: 20,
-                                pointerEvents: 'auto'
+                                border: '2px solid #3b82f6', borderRadius: pos.length === 1 ? '0%' : '50%', 
+                                cursor: dynamicCursor, zIndex: 20, pointerEvents: 'auto'
                               };
                               if (pos.includes('n')) style.top = -handleSize / 2;
                               if (pos.includes('s')) style.bottom = -handleSize / 2;
@@ -1474,10 +1745,8 @@ export default function App(props) {
                               return <div key={pos} onPointerDown={(e) => handlePointerDown(e, el.id, 'resize', pos)} style={style} />;
                             })}
                             
-                            {/* Rotate Handle Connection Line */}
                             <div style={{ position: 'absolute', top: isMobileUI ? -40 : -23, left: '50%', marginLeft: -0.5, width: 1, height: isMobileUI ? 40 : 23, backgroundColor: '#3b82f6', pointerEvents: 'none', zIndex: 19 }} />
                             
-                            {/* Rotate Handle */}
                             <div
                               onPointerDown={(e) => handlePointerDown(e, el.id, 'rotate')}
                               style={{ 
@@ -1507,12 +1776,11 @@ export default function App(props) {
                 </div>
               )}
 
-            </div> {/* End of scaling wrapper */}
-          </div> {/* End of panOffset wrapper */}
-        </div> {/* End of viewport container */}
+            </div>
+          </div>
+        </div>
       </main>
 
-      {/* RIGHT SIDEBAR: Layers */}
       <aside className={`fixed md:relative inset-y-0 right-0 w-[85vw] max-w-[300px] md:w-64 bg-white border-l border-slate-200 flex flex-col shadow-2xl md:shadow-sm z-50 transform transition-transform duration-300 ease-in-out ${isMobileLayersOpen ? 'translate-x-0' : 'translate-x-full md:translate-x-0'}`}>
         <div className="p-4 border-b border-slate-200 flex items-center justify-between bg-slate-50 shrink-0">
           <div className="flex items-center gap-2">
@@ -1565,7 +1833,6 @@ export default function App(props) {
         </div>
       </aside>
 
-      {/* Mobile Navigation Footer */}
       <div className="md:hidden fixed bottom-0 left-0 w-full h-14 bg-white border-t border-slate-200 flex items-center justify-around z-40 shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.1)] pb-safe">
         <button onClick={() => {setIsMobileToolsOpen(!isMobileToolsOpen); setIsMobileLayersOpen(false);}} className={`flex flex-col items-center p-2 w-20 rounded-lg transition-colors ${isMobileToolsOpen ? 'text-blue-600 bg-blue-50' : 'text-slate-500 hover:bg-slate-50'}`}>
           <Palette size={20} />
