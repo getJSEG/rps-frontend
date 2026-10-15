@@ -1006,7 +1006,7 @@ export default function Orders() {
                                   {showItemCancelColumn ? (
                                     <th className="whitespace-nowrap px-3 py-3">Action</th>
                                   ) : null}
-                                  <th className="whitespace-nowrap px-3 py-3">Download</th>
+                                  <th className="whitespace-nowrap px-3 py-3">Artwork</th>
                                   <th className="whitespace-nowrap px-3 py-3 text-right">Qty</th>
                                   <th className="whitespace-nowrap px-3 py-3 text-right">Price</th>
                                   <th className="whitespace-nowrap px-3 py-3 pr-4 text-right">Total</th>
