@@ -135,6 +135,17 @@ export default function DesignFlowModal({
   const [templateId, setTemplateId] = useState<number | null>(templates[0]?.id ?? null);
   const [approveChecked, setApproveChecked] = useState(false);
   const [busy, setBusy] = useState(false);
+  /** In-page confirmation before "Clear artwork" removes the job's design. */
+  const [confirmClearOpen, setConfirmClearOpen] = useState(false);
+
+  useEffect(() => {
+    if (!confirmClearOpen) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setConfirmClearOpen(false);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [confirmClearOpen]);
   const [error, setError] = useState<string | null>(null);
   /** Customer's uploaded image while it is open in the editor (object URL, revoked when replaced). */
   const [uploadedImage, setUploadedImage] = useState<{
@@ -164,8 +175,8 @@ export default function DesignFlowModal({
   // Very large custom sizes are too heavy for the browser editor; those jobs upload print-ready artwork instead.
   const tooLargeToCreate = templates.length === 0 && printSize != null && isBlankCanvasTooLarge(printSize);
   const canCreate = templates.length > 0 || (printSize != null && !tooLargeToCreate);
-  // Custom sizes the editor can handle are designed online; upload is only offered once the size is too large.
-  const canUpload = !(templates.length === 0 && printSize != null && !tooLargeToCreate);
+  // Customers can always upload their own artwork, with or without a template.
+  const canUpload = true;
   const sizeKey = printSizeKey(templates.length > 0 ? null : printSize);
 
   const blankSource = templates.length === 0 && printSize && !tooLargeToCreate ? blankCanvasDataUrl() : null;
@@ -288,13 +299,12 @@ export default function DesignFlowModal({
   };
 
   const handleClearArtwork = () => {
-    if (window.confirm("Are you sure you want to clear this artwork? This action cannot be undone.")) {
-      if (job) {
-        onDesignChange(job.id, null);
-      }
-      clearUploadedImage();
-      setStep("choose");
+    setConfirmClearOpen(false);
+    if (job) {
+      onDesignChange(job.id, null);
     }
+    clearUploadedImage();
+    setStep("choose");
   };
 
   const handleSkip = () => {
@@ -479,7 +489,7 @@ export default function DesignFlowModal({
                     <span className="mt-3 text-sm font-semibold text-gray-900">
                       {busy ? "Uploading…" : "Upload from this device"}
                     </span>
-                    <span className="mt-1 text-xs text-gray-500">PNG, JPG or single-page PDF, up to 25MB</span>
+                    <span className="mt-1 text-xs text-gray-500">PNG, JPG or single-page PDF, up to 50MB</span>
                   </button>
                 ) : null}
                 {canCreate ? (
@@ -583,12 +593,54 @@ export default function DesignFlowModal({
                   <button
                     type="button"
                     disabled={busy}
-                    onClick={handleClearArtwork}
+                    onClick={() => setConfirmClearOpen(true)}
                     className="inline-flex h-11 w-full items-center justify-center gap-1.5 rounded-lg border border-red-200 px-4 text-sm font-semibold text-red-600 transition-colors hover:border-red-500 hover:bg-red-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-red-400 disabled:opacity-60"
                   >
                     <FiTrash2 size={15} aria-hidden />
                     Clear artwork
                   </button>
+                  {confirmClearOpen ? (
+                    <div
+                      className="fixed inset-0 z-[260] flex items-center justify-center bg-black/40 p-4"
+                      onClick={() => setConfirmClearOpen(false)}
+                    >
+                      <div
+                        role="alertdialog"
+                        aria-modal="true"
+                        aria-labelledby="clear-artwork-title"
+                        aria-describedby="clear-artwork-text"
+                        className="w-full max-w-sm rounded-xl bg-white p-6 text-left shadow-xl"
+                        onClick={(e) => e.stopPropagation()}
+                      >
+                        <div className="mb-3 flex h-10 w-10 items-center justify-center rounded-full bg-red-50 text-red-600">
+                          <FiTrash2 size={18} aria-hidden />
+                        </div>
+                        <h3 id="clear-artwork-title" className="text-base font-semibold text-gray-900">
+                          Clear this artwork?
+                        </h3>
+                        <p id="clear-artwork-text" className="mt-1 text-sm text-gray-600">
+                          Your design for this job will be removed. This action cannot be undone.
+                        </p>
+                        <div className="mt-6 flex justify-end gap-3">
+                          <button
+                            type="button"
+                            autoFocus
+                            onClick={() => setConfirmClearOpen(false)}
+                            className="h-10 rounded-lg border border-gray-300 px-4 text-sm font-semibold text-gray-700 hover:bg-gray-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-400"
+                          >
+                            Cancel
+                          </button>
+                          <button
+                            type="button"
+                            onClick={handleClearArtwork}
+                            className="h-10 rounded-lg bg-red-600 px-4 text-sm font-semibold text-white hover:bg-red-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-red-400"
+                          >
+                            Clear artwork
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  ) : null}
                 </div>
               </div>
             </div>
