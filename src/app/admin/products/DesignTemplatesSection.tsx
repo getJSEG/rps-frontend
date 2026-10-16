@@ -49,7 +49,7 @@ export function validateDesignTemplateDrafts(drafts: DesignTemplateDraft[]): str
     const label = d.name.trim() || `Design template ${i + 1}`;
     if (d.uploading) return `${label}: wait for the upload to finish.`;
     if (!d.name.trim()) return `Design template ${i + 1}: enter a name.`;
-    if (!d.svg_url || !d.image_url) return `${label}: upload the SVG file.`;
+    if (!d.svg_url || !d.image_url) return `${label}: upload the SVG or PNG file.`;
   }
   return null;
 }
@@ -93,8 +93,8 @@ export default function DesignTemplatesSection({ drafts, onChange, showMsg, inpu
     const file = event.target.files?.[0];
     event.target.value = "";
     if (!file) return;
-    if (!file.name.toLowerCase().endsWith(".svg")) {
-      showMsg("error", "Design templates must be SVG files.");
+    if (!/\.(svg|png)$/i.test(file.name)) {
+      showMsg("error", "Design templates must be SVG or PNG files.");
       return;
     }
     updateRow(row.client_key, { uploading: true });
@@ -108,7 +108,7 @@ export default function DesignTemplatesSection({ drafts, onChange, showMsg, inpu
         image_storage_key: uploaded.image_storage_key,
         image_width_px: uploaded.image_width_px,
         image_height_px: uploaded.image_height_px,
-        name: row.name || file.name.replace(/\.svg$/i, ""),
+        name: row.name || file.name.replace(/\.(svg|png)$/i, ""),
         uploading: false,
       });
       showMsg("success", "Design template uploaded.");
@@ -124,7 +124,7 @@ export default function DesignTemplatesSection({ drafts, onChange, showMsg, inpu
         <div>
           <p className="text-sm font-semibold text-slate-800">Design Editor Templates</p>
           <p className="mt-1 text-xs text-slate-500">
-            SVG templates customers open in the design editor.
+            SVG or PNG templates customers open in the design editor. Files are saved as uploaded.
           </p>
         </div>
         <button
@@ -153,7 +153,7 @@ export default function DesignTemplatesSection({ drafts, onChange, showMsg, inpu
                         className="max-h-full max-w-full object-contain"
                       />
                     ) : (
-                      <span className="px-2 text-center text-[11px] text-slate-400">No SVG</span>
+                      <span className="px-2 text-center text-[11px] text-slate-400">No file</span>
                     )}
                   </div>
                   <div className="grid min-w-0 flex-1 gap-3 sm:grid-cols-2 xl:grid-cols-[1.4fr_1fr]">
@@ -168,12 +168,12 @@ export default function DesignTemplatesSection({ drafts, onChange, showMsg, inpu
                       />
                     </label>
                     <div>
-                      <span className="mb-1 block text-xs font-medium text-slate-600">SVG File</span>
+                      <span className="mb-1 block text-xs font-medium text-slate-600">Template File</span>
                       <label className="inline-block cursor-pointer rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-700 shadow-sm hover:bg-slate-50">
-                        {row.uploading ? "Uploading…" : row.svg_url ? "Replace SVG" : "Choose SVG"}
+                        {row.uploading ? "Uploading…" : row.svg_url ? "Replace file" : "Choose SVG or PNG"}
                         <input
                           type="file"
-                          accept=".svg,image/svg+xml"
+                          accept=".svg,.png,image/svg+xml,image/png"
                           className="hidden"
                           disabled={row.uploading}
                           onChange={(e) => void handleUpload(row, e)}

@@ -1089,9 +1089,17 @@ function ProductDetailContent() {
   const heightInches = previewPricing?.height ?? (parseFloat(height) || 0);
   const areaSqFt = previewPricing?.areaSqft ?? ((widthInches * heightInches) / 144);
 
+  // TEMPORARILY DISABLED: admin design templates for simple (width × height) products.
+  // To bring them back, delete the active block below and uncomment this original one.
+  // const designTemplates = useMemo(
+  //   () => (Array.isArray(product?.design_templates) ? product.design_templates : []),
+  //   [product?.design_templates]
+  // );
+  // Simple products (customer enters width × height) ignore templates and always open a blank canvas at that size.
+  // Products without width/height inputs (e.g. hardware) keep their templates.
   const designTemplates = useMemo(
-    () => (Array.isArray(product?.design_templates) ? product.design_templates : []),
-    [product?.design_templates]
+    () => (!skipDimensionsForPrice || !Array.isArray(product?.design_templates) ? [] : product.design_templates),
+    [skipDimensionsForPrice, product?.design_templates]
   );
   /** Customer-entered size drives the blank canvas; template and hardware products have a fixed shape instead. */
   const designPrintSize = useMemo<PrintSize | null>(
