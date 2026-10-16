@@ -12,10 +12,18 @@ import {
   type ModifierGroup,
   type ModifierPreset,
   type ProductConditionalModifierRule,
+  type ProductDesignTemplate,
   type ProductPurchaseOption,
   type ShippingBox,
 } from "../../../utils/api";
 import { FiEdit, FiTrash2, FiChevronUp, FiChevronDown, FiPackage, FiX } from "react-icons/fi";
+import DesignTemplatesSection, {
+  cleanupUnsavedDesignTemplateUpload,
+  designTemplateDraftsFromProduct,
+  designTemplatePayload,
+  validateDesignTemplateDrafts,
+  type DesignTemplateDraft,
+} from "./DesignTemplatesSection";
 
 type Tab = "products" | "categories" | "subcategories";
 
@@ -141,6 +149,7 @@ interface Product {
   sku: string | null;
   properties?: ProductProperty[] | null;
   template_files?: ProductTemplateFile[] | null;
+  design_templates?: ProductDesignTemplate[] | null;
 }
 
 type ProductModifierAssignment = {
@@ -918,6 +927,7 @@ export default function AdminProductsPage() {
   const [prodFileSetup, setProdFileSetup] = useState("");
   const [prodTemplateGroupLabel, setProdTemplateGroupLabel] = useState("");
   const [prodTemplateFiles, setProdTemplateFiles] = useState<ProductTemplateFileDraft[]>([]);
+  const [prodDesignTemplates, setProdDesignTemplates] = useState<DesignTemplateDraft[]>([]);
   const [prodInstallationGuide, setProdInstallationGuide] = useState("");
   const [prodFaq, setProdFaq] = useState<ProductFaqItem[]>([]);
   const [prodParentId, setProdParentId] = useState<string>("");
@@ -1736,6 +1746,11 @@ export default function AdminProductsPage() {
       showMsg("error", "Complete every template file row and upload its file.");
       return;
     }
+    const designTemplatesError = validateDesignTemplateDrafts(prodDesignTemplates);
+    if (designTemplatesError) {
+      showMsg("error", designTemplatesError);
+      return;
+    }
     setFedexShippingFieldErrors({});
     setSaving(true);
     try {
@@ -1762,6 +1777,7 @@ export default function AdminProductsPage() {
           storage_key: row.storage_key,
           sort_order: index,
         })),
+        design_templates: designTemplatePayload(prodDesignTemplates),
         installation_guide: prodInstallationGuide.trim() || undefined,
         faq: prodFaq
           .filter((item) => item.question.trim() || item.answer.trim())
@@ -1899,6 +1915,7 @@ export default function AdminProductsPage() {
       setProdFileSetup("");
       setProdTemplateGroupLabel("");
       setProdTemplateFiles([]);
+      setProdDesignTemplates([]);
       setProdInstallationGuide("");
       setProdFaq([]);
       setProdParentId("");
@@ -1999,6 +2016,7 @@ export default function AdminProductsPage() {
         }))
       );
     }
+    setProdDesignTemplates(designTemplateDraftsFromProduct(p.design_templates));
     setProdInstallationGuide(p.installation_guide || "");
     {
       const f = p.faq;
@@ -2253,6 +2271,7 @@ export default function AdminProductsPage() {
 
   const cancelEdit = () => {
     void Promise.all(prodTemplateFiles.map(cleanupUnsavedTemplateUpload));
+    void Promise.all(prodDesignTemplates.map(cleanupUnsavedDesignTemplateUpload));
     setEditingCategoryId(null);
     setEditingProductId(null);
     setCatName("");
@@ -2266,6 +2285,7 @@ export default function AdminProductsPage() {
     setProdFileSetup("");
     setProdTemplateGroupLabel("");
     setProdTemplateFiles([]);
+    setProdDesignTemplates([]);
     setProdInstallationGuide("");
     setProdFaq([]);
     setProdParentId("");
@@ -4160,6 +4180,13 @@ export default function AdminProductsPage() {
                           </div>
                         )}
                       </div>
+
+                      <DesignTemplatesSection
+                        drafts={prodDesignTemplates}
+                        onChange={setProdDesignTemplates}
+                        showMsg={showMsg}
+                        inputClass={inputClass}
+                      />
 
                       <CollapsibleSection title={`Description${WORD_STYLE_LABEL_SUFFIX}`}>
                         <AdminRichTextField

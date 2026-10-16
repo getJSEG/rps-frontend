@@ -45,6 +45,8 @@ interface OrderItem {
   customer_artwork_url?: string | null;
   /** Some API responses use camelCase; normalized to `customer_artwork_url` when order loads. */
   customerArtworkUrl?: string | null;
+  /** Set when the artwork was made in the customer design tool before checkout. */
+  design_id?: number | null;
   selection_mode?: "graphic_only" | "graphic_frame" | null;
   graphic_scenario_enabled?: boolean | null;
   purchase_option_key?: string | null;
@@ -354,6 +356,14 @@ function JobArtworkDownloadCell({ item }: { item: OrderItem }) {
           </button>
         </div>
       </div>
+      {item.design_id != null ? (
+        <span
+          className="mt-1.5 inline-flex whitespace-nowrap rounded-full border border-sky-200 bg-sky-50 px-1.5 py-px text-[10px] font-medium leading-4 text-sky-700"
+          title="The customer made this artwork in the design tool before checkout"
+        >
+          Made in design tool
+        </span>
+      ) : null}
 
       {previewOpen ? (
         <div
@@ -610,6 +620,7 @@ export default function OrderDetails() {
                     : item.customerArtworkUrl != null && String(item.customerArtworkUrl).trim() !== ""
                       ? String(item.customerArtworkUrl)
                       : null,
+                design_id: item.design_id != null ? Number(item.design_id) : null,
                 selected_modifiers: Array.isArray(item.selected_modifiers)
                   ? (item.selected_modifiers as OrderItem["selected_modifiers"])
                   : Array.isArray(item.selectedModifiers)

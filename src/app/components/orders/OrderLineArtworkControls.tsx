@@ -1,9 +1,9 @@
 "use client";
 
-import { useEffect, useState, type MouseEvent } from "react";
+import { useEffect, useState } from "react";
 import Image from "next/image";
 import { lineCustomerArtworkSource } from "../../../utils/customerArtworkSource";
-import { getProductImageUrl, downloadUrlAsFile } from "../../../utils/api";
+import { getProductImageUrl } from "../../../utils/api";
 
 /** Shared shape for customer `/orders` and admin line rows. */
 export type OrderLineArtworkItem = {
@@ -37,22 +37,9 @@ function ArtworkPreviewIcon({ className = "h-5 w-5" }: { className?: string }) {
   );
 }
 
-function ArtworkDownloadIcon({ className = "h-5 w-5" }: { className?: string }) {
-  return (
-    <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden>
-      <path
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        strokeWidth={2}
-        d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"
-      />
-    </svg>
-  );
-}
-
 /**
  * Thumbnail: always shows the product image (never the customer artwork).
- * The uploaded artwork is shown separately in the Download column.
+ * The uploaded artwork is shown separately in the Artwork column.
  */
 export function OrderLineThumbnail({ item }: { item: OrderLineArtworkItem }) {
   const productSrc = getProductImageUrl(item.image_url ?? item.product_image ?? undefined);
@@ -93,10 +80,9 @@ export function OrderLineThumbnail({ item }: { item: OrderLineArtworkItem }) {
   );
 }
 
-/** Preview modal + download — same behavior as admin `JobArtworkDownloadCell`. */
+/** Customer artwork: thumbnail and preview only; customers cannot download the file (admin keeps download). */
 export function OrderLineArtworkDownloadCell({ item }: { item: OrderLineArtworkItem }) {
   const href = getProductImageUrl(lineCustomerArtworkSource(item));
-  const [downloading, setDownloading] = useState(false);
   const [previewOpen, setPreviewOpen] = useState(false);
 
   useEffect(() => {
@@ -115,19 +101,6 @@ export function OrderLineArtworkDownloadCell({ item }: { item: OrderLineArtworkI
   const isRasterImage = ["jpg", "jpeg", "png", "gif", "webp", "bmp", "svg"].includes(ext);
   const isPdf = ext === "pdf";
   const downloadName = jobArtworkDownloadName(item, href);
-
-  const onDownload = async (e: MouseEvent<HTMLButtonElement>) => {
-    e.preventDefault();
-    if (downloading) return;
-    setDownloading(true);
-    try {
-      await downloadUrlAsFile(href, downloadName);
-    } catch {
-      /* downloadUrlAsFile uses same-origin proxy for /uploads/ — no new-tab fallback */
-    } finally {
-      setDownloading(false);
-    }
-  };
 
   const openPreview = () => setPreviewOpen(true);
 
@@ -163,16 +136,6 @@ export function OrderLineArtworkDownloadCell({ item }: { item: OrderLineArtworkI
             onClick={openPreview}
           >
             <ArtworkPreviewIcon />
-          </button>
-          <button
-            type="button"
-            className="rounded transition-colors hover:bg-sky-50 hover:text-sky-800 disabled:opacity-50"
-            title={downloading ? "Saving…" : "Download"}
-            aria-label="Download artwork"
-            onClick={onDownload}
-            disabled={downloading}
-          >
-            <ArtworkDownloadIcon className={downloading ? "h-5 w-5 animate-pulse" : "h-5 w-5"} />
           </button>
         </div>
       </div>
@@ -218,15 +181,6 @@ export function OrderLineArtworkDownloadCell({ item }: { item: OrderLineArtworkI
               ) : (
                 <div className="flex flex-col items-center justify-center gap-4 py-12 text-center text-gray-600">
                   <p className="text-sm">Preview isn&apos;t available for this file type in the browser.</p>
-                  <button
-                    type="button"
-                    onClick={onDownload}
-                    disabled={downloading}
-                    className="inline-flex items-center gap-2 rounded-lg bg-sky-600 px-4 py-2 text-sm font-semibold text-white hover:bg-sky-500 disabled:opacity-60"
-                  >
-                    <ArtworkDownloadIcon className="h-4 w-4" />
-                    {downloading ? "Saving…" : "Download file"}
-                  </button>
                 </div>
               )}
             </div>
