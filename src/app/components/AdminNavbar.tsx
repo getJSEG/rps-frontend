@@ -62,6 +62,11 @@ const navItems = [
     match: (p: string) => p === "/admin/coupons" || p.startsWith("/admin/coupons"),
   },
   {
+    href: "/admin/tax-nexus",
+    label: "Tax Nexus",
+    match: (p: string) => p === "/admin/tax-nexus" || p.startsWith("/admin/tax-nexus"),
+  },
+  {
     href: "/admin/box-rules",
     label: "Shipping Box Rules",
     match: (p: string) => p === "/admin/box-rules" || p.startsWith("/admin/box-rules"),
