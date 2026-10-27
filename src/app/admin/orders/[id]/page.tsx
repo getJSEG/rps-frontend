@@ -123,6 +123,7 @@ interface Order {
   tax_amount?: number;
   coupon_code?: string | null;
   coupon_discount_amount?: number;
+  coupon_shipping_discount_amount?: number;
   coupon_discount_type?: string | null;
   coupon_discount_value?: number | null;
   refund_amount?: number;
@@ -662,6 +663,10 @@ export default function OrderDetails() {
           d.coupon_discount_amount != null && d.coupon_discount_amount !== ""
             ? parseFloat(String(d.coupon_discount_amount)) || 0
             : 0,
+        coupon_shipping_discount_amount:
+          d.coupon_shipping_discount_amount != null && d.coupon_shipping_discount_amount !== ""
+            ? parseFloat(String(d.coupon_shipping_discount_amount)) || 0
+            : 0,
         coupon_discount_type:
           d.coupon_discount_type != null && String(d.coupon_discount_type).trim() !== ""
             ? String(d.coupon_discount_type)
@@ -1053,6 +1058,7 @@ export default function OrderDetails() {
 
   const linesSubtotal = order.items.reduce((s, i) => s + (Number.isFinite(i.total_price) ? i.total_price : 0), 0);
   const couponDiscount = Number(order.coupon_discount_amount ?? 0);
+  const couponShippingDiscount = Number(order.coupon_shipping_discount_amount ?? 0);
   const couponOffer = couponOfferLabel(order);
   const originalSubtotal = Math.round(((order.subtotal_amount ?? linesSubtotal) + (couponDiscount > 0 ? couponDiscount : 0)) * 100) / 100;
   const totalCharged = order.total_amount;
@@ -1695,6 +1701,12 @@ export default function OrderDetails() {
                 />
               ) : null}
               <DetailCell label="Shipping service" value={dash(order.shipping_method)} />
+              {couponShippingDiscount > 0 ? (
+                <DetailCell
+                  label={couponLineLabel(order)}
+                  value={`-$${formatMoney(couponShippingDiscount)} shipping (customer paid $0)`}
+                />
+              ) : null}
               {/* Carrier estimated delivery / charge details hidden for generic tracking-only admin view.
               <DetailCell label="Estimated delivery" value={dash(order.shipping_estimated_delivery)} />
               <DetailCell label="Shipping charge" value={`$${formatMoney(shipStored)}`} />
@@ -1983,9 +1995,18 @@ export default function OrderDetails() {
             {(order.shipping_method || shipStored > 0) && (
               <p className="text-sm text-slate-600">
                 Shipping ({dash(order.shipping_method)}){" "}
-                <span className="font-semibold text-slate-900">${formatMoney(shipStored)}</span>
+                <span className="font-semibold text-slate-900">${formatMoney(shipStored + couponShippingDiscount)}</span>
               </p>
             )}
+            {couponShippingDiscount > 0 ? (
+              <p className="text-sm text-emerald-700">
+                Coupon
+                {couponOffer ? (
+                  <span className="font-semibold font-mono text-[13px]"> ({couponOffer})</span>
+                ) : null}{" "}
+                <span className="font-semibold">-${formatMoney(couponShippingDiscount)}</span>
+              </p>
+            ) : null}
             {!!(order.tax_amount ?? 0) && (
               <p className="text-sm text-slate-600">
                 Tax{" "}

@@ -27,16 +27,30 @@ function parseIsoDate(value: string) {
   return { year, month, day };
 }
 
+type DiscountType = "percent" | "fixed" | "free_shipping" | "shipping_percent";
+
+const DISCOUNT_TYPE_OPTIONS: ReadonlyArray<{ id: DiscountType; label: string }> = [
+  { id: "percent", label: "Percentage" },
+  { id: "fixed", label: "Fixed" },
+  { id: "free_shipping", label: "Free shipping" },
+  { id: "shipping_percent", label: "Shipping %" },
+];
+
+function toDiscountType(raw: unknown): DiscountType {
+  const t = String(raw ?? "").toLowerCase();
+  return t === "fixed" || t === "free_shipping" || t === "shipping_percent" ? t : "percent";
+}
+
 function DiscountTypeSelect({
   value,
   onChange,
 }: {
-  value: "percent" | "fixed";
-  onChange: (next: "percent" | "fixed") => void;
+  value: DiscountType;
+  onChange: (next: DiscountType) => void;
 }) {
   const [open, setOpen] = useState(false);
   const wrapRef = useRef<HTMLDivElement | null>(null);
-  const label = value === "fixed" ? "Fixed" : "Percentage";
+  const label = DISCOUNT_TYPE_OPTIONS.find((opt) => opt.id === value)?.label ?? "Percentage";
 
   useEffect(() => {
     if (!open) return;
@@ -75,12 +89,7 @@ function DiscountTypeSelect({
           className="absolute z-30 mt-1 w-full overflow-hidden rounded-lg border border-slate-200 bg-white p-1 shadow-lg"
           role="listbox"
         >
-          {(
-            [
-              { id: "percent", label: "Percentage" },
-              { id: "fixed", label: "Fixed" },
-            ] as const
-          ).map((opt) => {
+          {DISCOUNT_TYPE_OPTIONS.map((opt) => {
             const active = opt.id === value;
             return (
               <button
@@ -255,7 +264,7 @@ function ExpiryCalendar({
 
 type FormState = {
   code: string;
-  discountType: "percent" | "fixed";
+  discountType: DiscountType;
   discountValue: string;
   minimumPurchaseAmount: string;
   expiresOn: string;
@@ -274,6 +283,10 @@ const EMPTY_FORM: FormState = {
 const isFloatInput = (v: string) => v === "" || /^\d*\.?\d*$/.test(v);
 
 function formatDiscount(coupon: Coupon) {
+  if (toDiscountType(coupon.discountType) === "free_shipping") return "Free shipping";
+  if (toDiscountType(coupon.discountType) === "shipping_percent") {
+    return `${Number(coupon.discountValue) || 0}% off shipping`;
+  }
   const value = Number(coupon.discountValue) || 0;
   if (String(coupon.discountType).toLowerCase() === "percent") {
     return `${value}% off`;
@@ -282,6 +295,7 @@ function formatDiscount(coupon: Coupon) {
 }
 
 function formatMinimumPurchase(coupon: Coupon) {
+  if (toDiscountType(coupon.discountType) === "free_shipping") return null;
   const min = Number(coupon.minimumPurchaseAmount) || 0;
   if (min <= 0) return null;
   return Number.isInteger(min) ? `Min $${min}` : `Min $${min.toFixed(2)}`;
@@ -333,7 +347,7 @@ export default function AdminCouponsPage() {
     const min = Number(row.minimumPurchaseAmount) || 0;
     setForm({
       code: row.code || "",
-      discountType: String(row.discountType).toLowerCase() === "fixed" ? "fixed" : "percent",
+      discountType: toDiscountType(row.discountType),
       discountValue: String(Number(row.discountValue) || ""),
       minimumPurchaseAmount: min > 0 ? String(min) : "",
       expiresOn: row.expiresOn || "",
@@ -352,23 +366,25 @@ export default function AdminCouponsPage() {
     e.preventDefault();
     setSaving(true);
     setError("");
-    const valueNum = parseFloat(form.discountValue);
+    const freeShipping = form.discountType === "free_shipping";
+    const valueNum = freeShipping ? 0 : parseFloat(form.discountValue);
     if (!form.code.trim()) {
       setError("Coupon code is required");
       setSaving(false);
       return;
     }
-    if (!Number.isFinite(valueNum) || valueNum <= 0) {
+    if (!freeShipping && (!Number.isFinite(valueNum) || valueNum <= 0)) {
       setError("Discount value must be greater than 0");
       setSaving(false);
       return;
     }
-    if (form.discountType === "percent" && valueNum > 100) {
+    if ((form.discountType === "percent" || form.discountType === "shipping_percent") && valueNum > 100) {
       setError("Percent discount cannot be greater than 100");
       setSaving(false);
       return;
     }
-    const minRaw = form.minimumPurchaseAmount.trim();
+    // Free shipping has no minimum: it applies to every order.
+    const minRaw = freeShipping ? "" : form.minimumPurchaseAmount.trim();
     const minNum = minRaw === "" ? 0 : parseFloat(minRaw);
     if (minRaw !== "" && (!Number.isFinite(minNum) || minNum < 0)) {
       setError("Minimum purchase must be a non-negative number");
@@ -436,13 +452,23 @@ export default function AdminCouponsPage() {
                 onChange={(discountType) => setForm((p) => ({ ...p, discountType }))}
               />
             </div>
+            {form.discountType === "free_shipping" ? (
+              <p className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-600">
+                Customers who apply this code pay $0 for whichever shipping option they choose, on any order
+                (no minimum purchase). Product prices are not discounted.
+              </p>
+            ) : (
             <div>
               <label className="block text-xs font-medium text-slate-600 mb-1">
-                {form.discountType === "percent" ? "Percent" : "Amount ($)"}
+                {form.discountType === "percent"
+                  ? "Percent"
+                  : form.discountType === "shipping_percent"
+                    ? "Percent off shipping"
+                    : "Amount ($)"}
               </label>
               <input
                 className={FIELD_CLASS}
-                placeholder={form.discountType === "percent" ? "10" : "30"}
+                placeholder={form.discountType === "fixed" ? "30" : form.discountType === "shipping_percent" ? "20" : "10"}
                 type="text"
                 inputMode="decimal"
                 value={form.discountValue}
@@ -452,7 +478,15 @@ export default function AdminCouponsPage() {
                 }}
                 required
               />
+              {form.discountType === "shipping_percent" ? (
+                <p className="mt-1 text-[11px] text-slate-500">
+                  Takes this percent off whichever shipping option the customer chooses (100 = free shipping).
+                  Product prices are not discounted.
+                </p>
+              ) : null}
             </div>
+            )}
+            {form.discountType === "free_shipping" ? null : (
             <div>
               <label className="block text-xs font-medium text-slate-600 mb-1">Minimum purchase ($)</label>
               <input
@@ -470,6 +504,7 @@ export default function AdminCouponsPage() {
                 Leave empty for no minimum. Coupon applies only when product subtotal meets this amount.
               </p>
             </div>
+            )}
             <div>
               <label className="block text-xs font-medium text-slate-600 mb-1">Expiry date</label>
               <ExpiryCalendar
