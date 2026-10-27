@@ -23,6 +23,7 @@ import {
   fedexDeliveryEstimateWithProduction,
   maxProductionTimeBusinessDays,
   buildFedexPackagesFromShippableCartItems,
+  shippingTierHint,
   type FedexRateQuote,
   type ShippingMethod,
   type ShippingRates,
@@ -1559,7 +1560,12 @@ export default function CheckoutPage() {
                                         : "text-gray-700 hover:bg-gray-50 hover:text-gray-950"
                                     }`}
                                   >
-                                    <span className="min-w-0 truncate">{r.serviceName}</span>
+                                    <span className="min-w-0">
+                                      <span className="block truncate">{r.serviceName}</span>
+                                      {shippingTierHint(r) ? (
+                                        <span className="block truncate text-xs text-gray-500">{shippingTierHint(r)}</span>
+                                      ) : null}
+                                    </span>
                                     <span className="shrink-0 text-xs font-medium tabular-nums">
                                       ${Number(r.totalCharge || 0).toFixed(2)}
                                     </span>
