@@ -19,6 +19,7 @@ import {
   productionTimeBusinessDaysForQuantity,
   buildFedexPackagesForProductConfigure,
   productFedexShippingFromProduct,
+  shippingTierHint,
   type FedexRateQuote,
   type FreeShippingPolicy,
   type ProductDesignTemplate,
@@ -384,6 +385,7 @@ function ProductDetailContent() {
   const [fedexRatesLoading, setFedexRatesLoading] = useState(false);
   const [fedexRatesError, setFedexRatesError] = useState<string | null>(null);
   const [selectedFedexServiceType, setSelectedFedexServiceType] = useState("");
+  const [fedexServiceMenuOpen, setFedexServiceMenuOpen] = useState(false);
   /** When false and postal+country are set, show compact Ship to card (image 2). When true, show full address form. */
   const [shipToEditing, setShipToEditing] = useState(false);
   const [freeShippingPolicy, setFreeShippingPolicy] = useState<FreeShippingPolicy>({
@@ -876,6 +878,7 @@ function ProductDetailContent() {
         try {
           setFedexRatesLoading(true);
           setFedexRatesError(null);
+          setFedexServiceMenuOpen(false);
           const res = await fedexAPI.getRates(destination, packages, { signal: abortController.signal });
           if (fedexRatesRunRef.current !== myRun) return;
           const raw = Array.isArray(res?.rates) ? res.rates : [];
@@ -2303,18 +2306,57 @@ function ProductDetailContent() {
                         </label>
                         {fedexRatesError ? <p className="mb-2 text-xs text-rose-600">{fedexRatesError}</p> : null}
                         {fedexRates.length > 0 ? (
-                          <select
-                            id="pdp-fedex-service"
-                            value={selectedFedexServiceType}
-                            onChange={(e) => setSelectedFedexServiceType(e.target.value)}
-                            className="w-full rounded-md border border-gray-300 px-2 py-2 text-sm text-gray-800"
-                          >
-                            {fedexRates.map((r) => (
-                              <option key={r.serviceType} value={r.serviceType}>
-                                {r.serviceName}
-                              </option>
-                            ))}
-                          </select>
+                          <div className="relative">
+                            <button
+                              id="pdp-fedex-service"
+                              type="button"
+                              onClick={() => setFedexServiceMenuOpen((open) => !open)}
+                              className="flex w-full items-center justify-between gap-3 rounded-md border border-gray-300 bg-white px-3 py-2 text-left text-sm text-gray-800 shadow-sm transition hover:border-gray-400 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
+                              aria-haspopup="listbox"
+                              aria-expanded={fedexServiceMenuOpen}
+                            >
+                              <span className="min-w-0 truncate">
+                                {selectedFedexRatePdp?.serviceName || "Select service"}
+                              </span>
+                              <svg className={`h-4 w-4 shrink-0 text-gray-500 transition-transform ${fedexServiceMenuOpen ? "rotate-180" : ""}`} viewBox="0 0 20 20" fill="currentColor" aria-hidden>
+                                <path fillRule="evenodd" d="M5.23 7.21a.75.75 0 011.06.02L10 11.17l3.71-3.94a.75.75 0 111.08 1.04l-4.25 4.5a.75.75 0 01-1.08 0l-4.25-4.5a.75.75 0 01.02-1.06z" clipRule="evenodd" />
+                              </svg>
+                            </button>
+                            {fedexServiceMenuOpen ? (
+                              <div className="absolute z-30 mt-2 max-h-64 w-full overflow-y-auto rounded-md border border-gray-200 bg-white p-1 shadow-lg" role="listbox">
+                                {fedexRates.map((r) => {
+                                  const active = r.serviceType === selectedFedexRatePdp?.serviceType;
+                                  return (
+                                    <button
+                                      key={r.serviceType}
+                                      type="button"
+                                      role="option"
+                                      aria-selected={active}
+                                      onClick={() => {
+                                        setSelectedFedexServiceType(r.serviceType);
+                                        setFedexServiceMenuOpen(false);
+                                      }}
+                                      className={`flex w-full items-center justify-between gap-3 rounded px-3 py-2 text-left text-sm transition ${
+                                        active
+                                          ? "bg-blue-50 text-blue-700"
+                                          : "text-gray-700 hover:bg-gray-50 hover:text-gray-950"
+                                      }`}
+                                    >
+                                      <span className="min-w-0">
+                                        <span className="block truncate">{r.serviceName}</span>
+                                        {shippingTierHint(r) ? (
+                                          <span className="block truncate text-xs text-gray-500">{shippingTierHint(r)}</span>
+                                        ) : null}
+                                      </span>
+                                      <span className="shrink-0 text-xs font-medium tabular-nums">
+                                        ${Number(r.totalCharge || 0).toFixed(2)}
+                                      </span>
+                                    </button>
+                                  );
+                                })}
+                              </div>
+                            ) : null}
+                          </div>
                         ) : (
                           <p className="rounded-md border border-dashed border-gray-200 bg-gray-50 px-2 py-2 text-xs text-gray-500">
                             {fedexRatesLoading

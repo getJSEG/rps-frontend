@@ -441,13 +441,29 @@ export type CouponPreview = {
   discountedSubtotal: number;
 };
 
+export type ShippingTier = "economy" | "standard" | "express";
+
 export type FedexRateQuote = {
   serviceType: string;
+  /** Customer-facing tier name (Economy / Standard / Express) for tiered quotes. */
   serviceName: string;
   totalCharge: number;
   currency: string;
   estimatedDelivery?: string | null;
+  tier?: ShippingTier;
+  /** FedEx's own service name behind the tier, e.g. "FedEx Home Delivery®". */
+  carrierServiceName?: string;
 };
+
+const SHIPPING_TIER_HINTS: Record<ShippingTier, string> = {
+  economy: "Slowest, lowest price",
+  standard: "Balanced speed and price",
+  express: "Fastest, highest price",
+};
+
+export function shippingTierHint(rate: Pick<FedexRateQuote, "tier"> | null | undefined): string {
+  return rate?.tier ? SHIPPING_TIER_HINTS[rate.tier] ?? "" : "";
+}
 
 const FEDEX_SERVICE_TRANSIT_BUSINESS_DAYS: Record<string, number> = {
   FIRST_OVERNIGHT: 1,
