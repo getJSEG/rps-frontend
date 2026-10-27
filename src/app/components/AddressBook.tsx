@@ -6,7 +6,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { addressesAPI } from "../../utils/api";
 import { toUsStateCode } from "../../utils/usState";
 import { toast } from "react-toastify";
-import { FiEdit } from "react-icons/fi";
+import { FiEdit, FiTrash2 } from "react-icons/fi";
 
 interface Address {
   id: number;
@@ -89,6 +89,8 @@ export default function AddressBook() {
   const [saving, setSaving] = useState(false);
   const [editingId, setEditingId] = useState<number | null>(null);
   const [formData, setFormData] = useState(defaultForm);
+  const [deleteTarget, setDeleteTarget] = useState<Address | null>(null);
+  const [deleting, setDeleting] = useState(false);
 
   const fetchAddressList = useCallback(
     async (options?: { showFullPageSpinner?: boolean }) => {
@@ -216,6 +218,22 @@ export default function AddressBook() {
       toast.success("Default address updated.");
     } catch (err: any) {
       toast.error(err?.message || "Failed to set default.");
+    }
+  };
+
+  const confirmDelete = async () => {
+    if (!deleteTarget) return;
+    try {
+      setDeleting(true);
+      await addressesAPI.remove(String(deleteTarget.id));
+      if (editingId === deleteTarget.id) cancelEdit();
+      await fetchAddressList({ showFullPageSpinner: false });
+      toast.success("Address deleted.");
+      setDeleteTarget(null);
+    } catch (err: unknown) {
+      toast.error(err instanceof Error && err.message ? err.message : "Failed to delete address.");
+    } finally {
+      setDeleting(false);
     }
   };
 
@@ -374,6 +392,15 @@ export default function AddressBook() {
                       >
                         <FiEdit size={18} />
                       </button>
+                      <button
+                        type="button"
+                        onClick={() => setDeleteTarget(addr)}
+                        className="font-medium text-rose-600 hover:text-rose-800"
+                        title="Delete"
+                        aria-label="Delete address"
+                      >
+                        <FiTrash2 size={18} />
+                      </button>
                     </div>
                   </div>
                 ))}
@@ -502,6 +529,52 @@ export default function AddressBook() {
           </main>
         </div>
       </div>
+
+      {deleteTarget ? (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="delete-address-title"
+        >
+          <div className="w-full max-w-md rounded-sm border border-gray-200 bg-white p-6 shadow-xl">
+            <h3 id="delete-address-title" className="text-lg font-semibold text-gray-900">
+              Delete this address?
+            </h3>
+            <div className="mt-3 rounded-sm border border-gray-200 bg-gray-50 px-4 py-3 text-sm text-gray-700">
+              <div>{deleteTarget.street_address}</div>
+              {deleteTarget.address_line2 && <div>{deleteTarget.address_line2}</div>}
+              <div>
+                {deleteTarget.city}, {deleteTarget.state} {deleteTarget.postcode}
+              </div>
+            </div>
+            <p className="mt-3 text-sm text-gray-600">
+              It will be removed from your address book. Orders you already placed keep their delivery address.
+              {deleteTarget.is_default && addresses.length > 1
+                ? " Another saved address will become your default."
+                : ""}
+            </p>
+            <div className="mt-5 flex justify-end gap-3">
+              <button
+                type="button"
+                onClick={() => setDeleteTarget(null)}
+                disabled={deleting}
+                className="rounded-sm border border-gray-400 px-5 py-2.5 text-sm font-medium text-gray-800 transition-colors hover:bg-gray-200 disabled:opacity-60"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={() => void confirmDelete()}
+                disabled={deleting}
+                className="rounded-sm bg-rose-600 px-5 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-rose-700 disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                {deleting ? "Deleting…" : "Delete"}
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }
