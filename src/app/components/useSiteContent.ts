@@ -12,20 +12,23 @@ export const DEFAULT_SITE_CONTENT: SiteContent = {
   holidayScheduleImageUrl: null,
 };
 
-/** One request per page load, shared by the footer and the page using the hook. */
-let cachedRequest: Promise<SiteContent> | null = null;
+/**
+ * Shared only while in flight, so the footer and page that mount together make one request, but every later
+ * page visit fetches fresh content (an admin change, such as a new holiday image, shows without a full reload).
+ */
+let inFlight: Promise<SiteContent> | null = null;
 
 function loadSiteContent(): Promise<SiteContent> {
-  if (!cachedRequest) {
-    cachedRequest = appSettingsAPI
+  if (!inFlight) {
+    inFlight = appSettingsAPI
       .getSiteContent()
       .then((content) => ({ ...DEFAULT_SITE_CONTENT, ...content }))
-      .catch(() => {
-        cachedRequest = null;
-        return DEFAULT_SITE_CONTENT;
+      .catch(() => DEFAULT_SITE_CONTENT)
+      .finally(() => {
+        inFlight = null;
       });
   }
-  return cachedRequest;
+  return inFlight;
 }
 
 /** Admin-editable contact details and holiday schedule image. `loaded` turns true once the server answered. */

@@ -158,7 +158,7 @@ export default function AdminHelpCenterPage() {
   };
 
   return (
-    <AdminNavbar title="Help Center" subtitle="Manage the categories and questions shown on the Help Center page">
+    <AdminNavbar title="Help Center"subtitle="Manage the categories and questions shown on the Help Center page">
       {loading ? (
         <p className="text-sm text-slate-500">Loading…</p>
       ) : (
