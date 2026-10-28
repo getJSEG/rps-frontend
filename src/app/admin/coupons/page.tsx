@@ -33,7 +33,16 @@ const DISCOUNT_TYPE_OPTIONS: ReadonlyArray<{ id: DiscountType; label: string }> 
   { id: "percent", label: "Percentage" },
   { id: "fixed", label: "Fixed" },
   { id: "free_shipping", label: "Free shipping" },
-  { id: "shipping_percent", label: "Shipping %" },
+  { id: "shipping_percent", label: "Shipping discount (%)" },
+];
+
+/** Saved Coupons filter tabs: everything, then one tab per discount type. */
+const COUPON_TABS: ReadonlyArray<{ id: "all" | DiscountType; label: string }> = [
+  { id: "all", label: "All" },
+  { id: "percent", label: "Percentage" },
+  { id: "fixed", label: "Fixed" },
+  { id: "free_shipping", label: "Free shipping" },
+  { id: "shipping_percent", label: "Shipping discount" },
 ];
 
 function toDiscountType(raw: unknown): DiscountType {
@@ -324,6 +333,8 @@ export default function AdminCouponsPage() {
   const [error, setError] = useState("");
   const [togglingId, setTogglingId] = useState<number | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<Coupon | null>(null);
+  const [typeFilter, setTypeFilter] = useState<"all" | DiscountType>("all");
+  const visibleRows = typeFilter === "all" ? rows : rows.filter((r) => toDiscountType(r.discountType) === typeFilter);
 
   const load = async () => {
     setLoading(true);
@@ -543,13 +554,47 @@ export default function AdminCouponsPage() {
 
         <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
           <h2 className="text-lg font-semibold text-slate-900 mb-4">Saved Coupons</h2>
+          <div className="mb-4 flex flex-wrap gap-2" role="tablist" aria-label="Filter coupons by discount type">
+            {COUPON_TABS.map((tab) => {
+              const count =
+                tab.id === "all" ? rows.length : rows.filter((r) => toDiscountType(r.discountType) === tab.id).length;
+              const selected = typeFilter === tab.id;
+              return (
+                <button
+                  key={tab.id}
+                  type="button"
+                  role="tab"
+                  aria-selected={selected}
+                  onClick={() => setTypeFilter(tab.id)}
+                  className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-medium transition-colors ${
+                    selected
+                      ? "border-slate-900 bg-slate-900 text-white"
+                      : "border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
+                  }`}
+                >
+                  {tab.label}
+                  <span
+                    className={`rounded-full px-1.5 text-[11px] ${
+                      selected ? "bg-white/20 text-white" : "bg-slate-100 text-slate-500"
+                    }`}
+                  >
+                    {count}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
           {loading ? (
             <p className="text-slate-500 text-sm">Loading...</p>
           ) : rows.length === 0 ? (
             <p className="text-slate-500 text-sm">No coupons yet.</p>
+          ) : visibleRows.length === 0 ? (
+            <p className="text-slate-500 text-sm">
+              No {COUPON_TABS.find((t) => t.id === typeFilter)?.label.toLowerCase()} coupons yet.
+            </p>
           ) : (
             <div className="space-y-2 max-h-[70vh] overflow-y-auto pr-1">
-              {rows.map((r) => {
+              {visibleRows.map((r) => {
                 const active = r.isActive !== false && r.expired !== true;
                 return (
                   <div key={r.id} className="rounded-lg border border-slate-200 px-3 py-2">
