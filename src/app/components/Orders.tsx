@@ -120,6 +120,7 @@ type OrderRow = {
   coupon_discount_amount?: number | string | null;
   coupon_discount_type?: string | null;
   coupon_discount_value?: number | string | null;
+  coupon_shipping_discount_amount?: number | string | null;
   refund_amount?: number | string | null;
   refunded_at?: string | null;
   order_tracking_id?: string | null;
@@ -749,6 +750,8 @@ export default function Orders() {
               const orderTax = Number(order.tax_amount ?? 0);
               const orderTaxPct = Number(order.tax_percentage ?? 0);
               const couponAmt = Number(order.coupon_discount_amount ?? 0);
+              const couponShippingAmt = Number(order.coupon_shipping_discount_amount ?? 0);
+              const shippingBeforeCouponNum = shippingChargeNum + (couponShippingAmt > 0 ? couponShippingAmt : 0);
               const couponOffer = couponOfferLabel(order);
               const discountedSubtotal = Number(order.subtotal_amount ?? subtotal);
               const orderSubtotal = Math.round((discountedSubtotal + (couponAmt > 0 ? couponAmt : 0)) * 100) / 100;
@@ -1146,10 +1149,21 @@ export default function Orders() {
                               <span>-${formatMoney(couponAmt)}</span>
                             </div>
                           )}
-                          {shippingChargeNum > 0 && (
+                          {shippingBeforeCouponNum > 0 && (
                             <div className="flex justify-between text-gray-600">
                               <span>Shipping</span>
-                              <span>${formatMoney(shippingChargeNum)}</span>
+                              <span>${formatMoney(shippingBeforeCouponNum)}</span>
+                            </div>
+                          )}
+                          {couponShippingAmt > 0 && (
+                            <div className="flex justify-between text-emerald-700">
+                              <span>
+                                Coupon
+                                {couponOffer ? (
+                                  <span className="font-semibold font-mono text-[13px]"> ({couponOffer})</span>
+                                ) : null}
+                              </span>
+                              <span>-${formatMoney(couponShippingAmt)}</span>
                             </div>
                           )}
                           <div className="flex justify-between text-gray-600">
