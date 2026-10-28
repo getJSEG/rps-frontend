@@ -3,9 +3,10 @@
 import { useRouter, usePathname } from "next/navigation";
 import Link from "next/link";
 import Image from "next/image";
-import { ReactNode } from "react";
+import { ReactNode, useEffect, useState } from "react";
 import { FiLogOut } from "react-icons/fi";
 import { toast } from "react-toastify";
+import { nexusAPI, NEXUS_ATTENTION_CHANGED_EVENT } from "../../utils/api";
 
 interface AdminNavbarProps {
   children: ReactNode;
@@ -97,6 +98,26 @@ export default function AdminNavbar({
 }: AdminNavbarProps) {
   const router = useRouter();
   const pathname = usePathname() || "";
+  /** States at close warning / reached, shown as a badge on "Tax Nexus". */
+  const [nexusAttention, setNexusAttention] = useState(0);
+
+  useEffect(() => {
+    let cancelled = false;
+    const load = () => {
+      nexusAPI
+        .getAttentionCountAdmin()
+        .then((r) => {
+          if (!cancelled) setNexusAttention(Number(r?.count) || 0);
+        })
+        .catch(() => {});
+    };
+    load();
+    window.addEventListener(NEXUS_ATTENTION_CHANGED_EVENT, load);
+    return () => {
+      cancelled = true;
+      window.removeEventListener(NEXUS_ATTENTION_CHANGED_EVENT, load);
+    };
+  }, []);
 
   const handleLogout = () => {
     localStorage.removeItem("isLoggedIn");
@@ -208,8 +229,21 @@ export default function AdminNavbar({
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
                     </svg>
                   )}
+                  {label === "Tax Nexus" && (
+                    <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a2 2 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0zM15 11a3 3 0 11-6 0 3 3 0 016 0z" />
+                    </svg>
+                  )}
                 </span>
                 {label}
+                {label === "Tax Nexus" && nexusAttention > 0 && (
+                  <span
+                    className="ml-auto inline-flex min-w-5 items-center justify-center rounded-full bg-rose-500 px-1.5 py-0.5 text-[11px] font-semibold leading-none text-white"
+                    title={`${nexusAttention} state(s) close to or past the nexus threshold`}
+                  >
+                    {nexusAttention}
+                  </span>
+                )}
               </Link>
             );
           })}
