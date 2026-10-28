@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "react-toastify";
@@ -785,7 +786,16 @@ export default function RegisterPage() {
                 required
               />
               <label htmlFor="termsAccepted" className="ml-2 text-slate-700 text-sm">
-                I agree to the Terms and Conditions <span className="text-red-500">*</span>
+                I agree to the{" "}
+                <Link
+                  href="/terms"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="font-medium text-[#0B6BCB] hover:underline"
+                >
+                  Terms and Conditions
+                </Link>{" "}
+                <span className="text-red-500">*</span>
               </label>
             </div>
 

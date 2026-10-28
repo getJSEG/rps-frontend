@@ -19,7 +19,7 @@ export default function ShippingBanner() {
           {/* Call to Action Button (on image) */}
           <div className="absolute inset-0 z-10 flex items-center justify-center">
             <Link
-              href="/products"
+              href="/products/banners"
               className="bg-orange-500 hover:bg-orange-600 text-white font-bold text-lg px-8 py-2 rounded-sm shadow-lg transition-colors transform hover:scale-105"
             >
               SHOP ALL BANNERS

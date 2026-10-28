@@ -75,6 +75,13 @@ const EXACT: Record<string, string> = {
   "/reseller-permit": "Reseller Permit",
   "/testimonial": "Testimonials",
   "/white-label": "White Label",
+  "/about-us": "About Us",
+  "/contact-us": "Contact Us",
+  "/help-center": "Help Center",
+  "/holiday-schedule": "Holiday Schedule",
+  "/terms": "Terms and Conditions",
+  "/privacy-policy": "Privacy Policy",
+  "/cookie-policy": "Cookie Policy",
   "/admin": "Admin",
 };
 

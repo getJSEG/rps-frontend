@@ -4,6 +4,7 @@ import { FormEvent, useEffect, useState } from "react";
 import { toast } from "react-toastify";
 import AdminNavbar from "../../components/AdminNavbar";
 import { appSettingsAPI, usersAPI } from "../../../utils/api";
+import SiteContentSettings from "./SiteContentSettings";
 
 const STRONG_PASSWORD_REGEX = /^(?=.*[A-Z])(?=.*\d).+$/;
 
@@ -91,7 +92,7 @@ export default function AdminSettingsPage() {
   return (
     <AdminNavbar
       title="Admin Settings"
-      subtitle="Manage your admin account and store notification preferences."
+      subtitle="Manage your admin account, store notifications and storefront content."
     >
       <div className="mx-auto flex w-full max-w-3xl flex-col gap-6">
         <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm sm:p-8">
@@ -147,6 +148,8 @@ export default function AdminSettingsPage() {
             </div>
           </form>
         </section>
+
+        <SiteContentSettings />
 
         <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm sm:p-8">
           <h2 className="text-xl font-semibold text-slate-900">Change Password</h2>
