@@ -125,8 +125,34 @@ export type FreeShippingPolicy = {
   freeShippingThreshold: number;
 };
 
+/** Admin-editable storefront content: Contact Us page, footer contact details, holiday schedule image. */
+export type SiteContent = {
+  contactPhone: string;
+  contactEmail: string;
+  contactHours: string;
+  contactAddress: string;
+  holidayScheduleImageUrl: string | null;
+};
+
 export type AppSettings = {
   emailNotificationsEnabled: boolean;
+} & Partial<SiteContent>;
+
+export type HelpFaq = {
+  id: number;
+  categoryId: number;
+  question: string;
+  answer: string;
+  sortOrder: number;
+  isActive: boolean;
+};
+
+export type HelpCategory = {
+  id: number;
+  name: string;
+  sortOrder: number;
+  isActive: boolean;
+  faqs: HelpFaq[];
 };
 
 export type ShippingRatesResponse = {
@@ -2085,8 +2111,36 @@ export const shippingRatesAPI = {
 
 export const appSettingsAPI = {
   get: async (): Promise<AppSettings> => apiCall('/settings'),
-  update: async (payload: AppSettings): Promise<AppSettings> =>
+  /** Partial update: send only the settings being changed. */
+  update: async (payload: Partial<AppSettings>): Promise<AppSettings> =>
     apiCall('/settings', { method: 'PUT', body: JSON.stringify(payload) }),
+  /** Public storefront content (no login needed). */
+  getSiteContent: async (): Promise<SiteContent> => apiCall('/settings/public'),
+};
+
+export const helpCenterAPI = {
+  /** Public: active categories that have active questions. */
+  get: async (): Promise<{ categories: HelpCategory[] }> => apiCall('/help-center'),
+  getAdmin: async (): Promise<{ categories: HelpCategory[] }> => apiCall('/help-center/admin'),
+  createCategory: async (data: { name: string; isActive?: boolean }) =>
+    apiCall('/help-center/admin/categories', { method: 'POST', body: JSON.stringify(data) }),
+  updateCategory: async (id: number, data: Partial<{ name: string; isActive: boolean }>) =>
+    apiCall(`/help-center/admin/categories/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
+  deleteCategory: async (id: number) => apiCall(`/help-center/admin/categories/${id}`, { method: 'DELETE' }),
+  reorderCategories: async (ids: number[]): Promise<{ categories: HelpCategory[] }> =>
+    apiCall('/help-center/admin/categories/reorder', { method: 'PUT', body: JSON.stringify({ ids }) }),
+  createFaq: async (data: { categoryId: number; question: string; answer: string; isActive?: boolean }) =>
+    apiCall('/help-center/admin/faqs', { method: 'POST', body: JSON.stringify(data) }),
+  updateFaq: async (
+    id: number,
+    data: Partial<{ categoryId: number; question: string; answer: string; isActive: boolean }>
+  ) => apiCall(`/help-center/admin/faqs/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
+  deleteFaq: async (id: number) => apiCall(`/help-center/admin/faqs/${id}`, { method: 'DELETE' }),
+  reorderFaqs: async (categoryId: number, ids: number[]): Promise<{ categories: HelpCategory[] }> =>
+    apiCall(`/help-center/admin/categories/${categoryId}/faqs/reorder`, {
+      method: 'PUT',
+      body: JSON.stringify({ ids }),
+    }),
 };
 
 export const shippingBoxesAPI = {

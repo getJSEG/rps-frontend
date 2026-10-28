@@ -1,14 +1,23 @@
 "use client";
 
+import Link from "next/link";
+import { phoneHref, useSiteContent } from "./useSiteContent";
+
+const NAVIGATION_LINKS = [
+  { label: "About Us", href: "/about-us" },
+  { label: "Contact Us", href: "/contact-us" },
+  { label: "Help Center", href: "/help-center" },
+  { label: "Holiday Schedule", href: "/holiday-schedule" },
+];
+
+const POLICY_LINKS = [
+  { label: "Terms & Conditions", href: "/terms" },
+  { label: "Privacy Policy", href: "/privacy-policy" },
+  { label: "Cookie Policy", href: "/cookie-policy" },
+];
+
 export default function Footer() {
-  const navigationLinks = [
-    "About Us",
-    "Contact Us",
-    "Help Center",
-    "Design Templates",
-    "Request Sample Kit",
-    "Holiday Schedule",
-  ];
+  const site = useSiteContent();
 
   return (
     <footer className="relative w-full min-w-0 bg-[#3f3f3f] text-white">
@@ -32,7 +41,7 @@ export default function Footer() {
                     Customer Service Office Hour
                   </p>
                   <p className="text-xs leading-snug text-gray-300 sm:text-sm">
-                    Mon - Fri: 8:00am - 5:00pm PST
+                    {site.contactHours}
                   </p>
                 </div>
 
@@ -40,12 +49,12 @@ export default function Footer() {
                   <p className="text-xs font-medium text-gray-100 sm:text-sm">
                     Toll Free:{" "}
                     <span className="font-normal text-gray-200">
-                      1 (888) 739-8501
+                      {site.contactPhone}
                     </span>
                   </p>
                   <div className="flex flex-wrap gap-2">
-                    <button
-                      type="button"
+                    <a
+                      href={phoneHref(site.contactPhone)}
                       className="inline-flex items-center gap-1.5 rounded-md bg-[#0B6BCB] px-3 py-1.5 text-xs font-medium text-white shadow-sm transition-colors hover:bg-blue-600 sm:text-sm"
                     >
                       <svg
@@ -62,13 +71,7 @@ export default function Footer() {
                         />
                       </svg>
                       Call
-                    </button>
-                    <button
-                      type="button"
-                      className="rounded-md border border-gray-400/70 bg-[#4a4a4a] px-3 py-1.5 text-xs text-gray-100 shadow-sm transition-colors hover:bg-[#555] sm:text-sm"
-                    >
-                      Request Callback
-                    </button>
+                    </a>
                   </div>
                 </div>
               </div>
@@ -91,10 +94,10 @@ export default function Footer() {
                 Email
               </h3>
               <a
-                href="mailto:info@resourcefulDigital.com"
+                href={`mailto:${site.contactEmail}`}
                 className="break-all text-xs leading-snug text-gray-200 underline-offset-2 transition-colors hover:text-white hover:underline sm:text-sm"
               >
-                info@resourcefulDigital.com
+                {site.contactEmail}
               </a>
             </section>
           </div>
@@ -104,14 +107,14 @@ export default function Footer() {
             aria-label="Footer links"
           >
             <ul className="flex flex-wrap items-center justify-center gap-x-5 gap-y-2 sm:gap-x-7 md:gap-x-9">
-              {navigationLinks.map((link, index) => (
-                <li key={index}>
-                  <a
-                    href="#"
+              {NAVIGATION_LINKS.map((link) => (
+                <li key={link.href}>
+                  <Link
+                    href={link.href}
                     className="text-xs text-gray-300 transition-colors hover:text-[#f47b23] sm:text-sm"
                   >
-                    {link}
-                  </a>
+                    {link.label}
+                  </Link>
                 </li>
               ))}
             </ul>
@@ -127,16 +130,20 @@ export default function Footer() {
               Copyright © 2026-2027 Resourceful Print Solutions, Inc. All Rights
               Reserved.
             </p>
-            <span
-              className="hidden h-3 w-px shrink-0 bg-gray-600 sm:block"
-              aria-hidden
-            />
-            <a
-              href="#"
-              className="text-[11px] text-blue-400/90 transition-colors hover:text-blue-300 sm:text-xs"
-            >
-              Terms & Conditions
-            </a>
+            {POLICY_LINKS.map((link) => (
+              <span key={link.href} className="flex items-center gap-x-5">
+                <span
+                  className="hidden h-3 w-px shrink-0 bg-gray-600 sm:block"
+                  aria-hidden
+                />
+                <Link
+                  href={link.href}
+                  className="text-[11px] text-blue-400/90 transition-colors hover:text-blue-300 sm:text-xs"
+                >
+                  {link.label}
+                </Link>
+              </span>
+            ))}
           </div>
         </div>
       </div>
