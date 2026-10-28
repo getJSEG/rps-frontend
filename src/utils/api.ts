@@ -2480,6 +2480,8 @@ export const addressesAPI = {
     });
   },
 
+  remove: async (id: string) => apiCall(`/addresses/${id}`, { method: 'DELETE' }),
+
   setDefault: async (
     id: string,
     addressSnapshot: {
