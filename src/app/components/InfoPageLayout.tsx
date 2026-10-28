@@ -7,10 +7,12 @@ import Footer from "./Footer";
 type Props = {
   title: string;
   subtitle?: ReactNode;
-  /** "text" is a narrow reading column (policy pages); "wide" fits cards (contact, help center). */
-  width?: "text" | "wide";
+  /** "text" is a narrow reading column; "wide" fits cards (contact, help center); "full" spans the page (policy pages). */
+  width?: "text" | "wide" | "full";
   children: ReactNode;
 };
+
+const MAX_WIDTH = { text: "max-w-3xl", wide: "max-w-5xl", full: "max-w-7xl" } as const;
 
 /** Shared shell for simple content pages: navbar, navy title band, light content area, footer. */
 export default function InfoPageLayout({ title, subtitle, width = "wide", children }: Props) {
@@ -27,7 +29,7 @@ export default function InfoPageLayout({ title, subtitle, width = "wide", childr
           {subtitle ? <div className="mx-auto mt-3 max-w-2xl text-sm text-slate-300 sm:text-base">{subtitle}</div> : null}
         </header>
         <div
-          className={`mx-auto w-full px-4 py-10 sm:px-6 sm:py-12 ${width === "text" ? "max-w-3xl" : "max-w-5xl"}`}
+          className={`mx-auto w-full px-4 py-10 sm:px-6 sm:py-12 lg:px-8 ${MAX_WIDTH[width]}`}
         >
           {children}
         </div>
