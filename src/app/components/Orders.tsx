@@ -699,7 +699,7 @@ export default function Orders() {
           <div className="bg-white border border-gray-200 rounded-lg p-8 text-center shadow-sm">
             <p className="text-gray-700 mb-4">Sign in to see orders linked to your account.</p>
             <Link
-              href="/"
+              href="/login?next=%2Forders"
               className="inline-block bg-[#0B6BCB] hover:bg-blue-700 text-white font-medium py-2 px-6 rounded-lg"
             >
               Sign in
