@@ -12,7 +12,7 @@ import {
 
 /**
  * Sales tax nexus tracker. Statuses always come from the rolling 12 months of completed orders,
- * recalculated after each month closes; the weekly/monthly filter only changes the numbers shown.
+ * recalculated every week (to last Sunday); the weekly/monthly filter only changes the numbers shown.
  */
 
 type Rule = "or" | "and";
