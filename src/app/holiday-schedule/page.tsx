@@ -11,7 +11,7 @@ export default function HolidaySchedulePage() {
   const imageUrl = site.holidayScheduleImageUrl ? getProductImageUrl(site.holidayScheduleImageUrl) : "";
 
   return (
-    <InfoPageLayout title="Holiday Schedule">
+    <InfoPageLayout title="Holiday Schedule" width="full">
       {imageUrl ? (
         <div className="overflow-hidden rounded-lg border border-gray-200 bg-white p-2 shadow-sm sm:p-3">
           {/* Admin-uploaded image of any size; shown as-is so its text stays readable. */}

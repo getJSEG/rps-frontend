@@ -8,7 +8,7 @@ export default function ContactUsPage() {
   const site = useSiteContent();
 
   return (
-    <InfoPageLayout title="Contact Us" subtitle="We're here to help with orders, artwork and anything else you need.">
+    <InfoPageLayout title="Contact Us" width="full" subtitle="We're here to help with orders, artwork and anything else you need.">
       {site.contactAddress || site.contactHours ? (
         <div className="mb-8 space-y-2 text-center text-sm text-gray-700">
           {site.contactAddress ? (
@@ -26,7 +26,7 @@ export default function ContactUsPage() {
         </div>
       ) : null}
 
-      <div className="mx-auto grid max-w-3xl grid-cols-1 gap-5 sm:grid-cols-2">
+      <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
         <section className="flex flex-col items-center rounded-lg border border-gray-200 bg-white px-6 py-8 text-center shadow-sm transition-shadow hover:shadow-md">
           <span className="mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-[#0B6BCB]/10 text-[#0B6BCB]">
             <FiPhone size={22} aria-hidden />

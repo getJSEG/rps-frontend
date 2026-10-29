@@ -83,7 +83,7 @@ export default function HelpCenterPage() {
   };
 
   return (
-    <InfoPageLayout title="Help Center" subtitle="Answers to common questions about ordering, artwork, shipping and more.">
+    <InfoPageLayout title="Help Center" width="full" subtitle="Answers to common questions about ordering, artwork, shipping and more.">
       <div className="relative mx-auto mb-8 max-w-xl">
         <FiSearch className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-gray-400" aria-hidden />
         <input
