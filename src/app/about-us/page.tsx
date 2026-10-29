@@ -11,7 +11,7 @@ const ABOUT_PARAGRAPHS = [
 
 export default function AboutUsPage() {
   return (
-    <InfoPageLayout title="About Us" width="text">
+    <InfoPageLayout title="About Us" width="full">
       <article className="space-y-4 rounded-lg border border-gray-200 bg-white px-5 py-8 text-[15px] leading-relaxed text-gray-700 shadow-sm sm:px-10 sm:py-10">
         {ABOUT_PARAGRAPHS.map((text) => (
           <p key={text}>{text}</p>

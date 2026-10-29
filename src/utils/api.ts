@@ -1627,7 +1627,9 @@ async function apiCall(endpoint: string, options: RequestInit = {}) {
           }
           throw new Error('Session invalid. Please log in again.');
         }
-        throw new Error(errorMessage);
+        const httpError: Error & { status?: number } = new Error(errorMessage);
+        httpError.status = response.status;
+        throw httpError;
       }
       
       return data;
@@ -1650,7 +1652,13 @@ async function apiCall(endpoint: string, options: RequestInit = {}) {
         );
       }
 
-      console.error('API Error:', error);
+      // A 4xx answer (validation, not found, ...) is handled by the caller, which shows it to the user;
+      // only log real failures as errors so the Next.js dev overlay doesn't count them as issues.
+      if (typeof error?.status === 'number' && error.status < 500) {
+        console.warn('API request rejected:', error.message);
+      } else {
+        console.error('API Error:', error);
+      }
       
       // If it's already an Error object, throw it as is
       if (error instanceof Error) {
