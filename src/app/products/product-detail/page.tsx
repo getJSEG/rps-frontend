@@ -362,7 +362,8 @@ function ProductDetailContent() {
   const [subcategories, setSubcategories] = useState<Array<{name: string; slug: string; image_url?: string}>>([]);
   const [selectedSubcategory, setSelectedSubcategory] = useState<string | null>(null);
   const [imageZoom, setImageZoom] = useState({ x: 50, y: 50, scale: 1 });
-  const [message, setMessage] = useState("");
+  /** Fields shown with a red border after a failed check (e.g. "width", "modifier:lamination", "job:<id>:name"). */
+  const [invalidFields, setInvalidFields] = useState<Set<string>>(() => new Set());
   const [taxEstimate, setTaxEstimate] = useState<TaxEstimateResponse | null>(null);
   const [taxEstimateLoading, setTaxEstimateLoading] = useState(false);
   const [taxEstimateError, setTaxEstimateError] = useState<string | null>(null);
@@ -791,8 +792,7 @@ function ProductDetailContent() {
       return cleanup;
     }
     if (widthLimitError || heightLimitError) {
-      setMessage(`Error: ${widthLimitError || heightLimitError}`);
-      setTimeout(() => setMessage(""), 5000);
+      toast.error(widthLimitError || heightLimitError, { toastId: `pdp-error:${widthLimitError || heightLimitError}` });
       return;
     }
     if (missingRequiredModifiers.length > 0) {
@@ -1075,8 +1075,14 @@ function ProductDetailContent() {
         if (!cancelled && response?.pricing) {
           setPreviewPricing(response.pricing);
         }
-      } catch {
-        if (!cancelled) setPreviewPricing(null);
+      } catch (err) {
+        if (cancelled) return;
+        setPreviewPricing(null);
+        // e.g. "Width must be at least 8 inches." — tell the customer and outline the field it is about.
+        const text = err instanceof Error && err.message ? err.message : "Could not calculate the price";
+        toast.error(text, { toastId: `pdp-error:${text}` });
+        const field = /^width/i.test(text) ? "width" : /^height/i.test(text) ? "height" : null;
+        if (field) setInvalidFields((prev) => new Set(prev).add(field));
       } finally {
         if (!cancelled) setPreviewLoading(false);
       }
@@ -1127,9 +1133,10 @@ function ProductDetailContent() {
 
   const openDesignFlow = (jobIndex: number) => {
     if (designTemplates.length === 0 && !skipDimensionsForPrice && !designPrintSize) {
-      setMessage("❌ Error: Enter width and height before starting your design");
-      setTimeout(() => setMessage(""), 5000);
-      toast.error("Enter width and height before starting your design", { toastId: "design-needs-size" });
+      showError(
+        "Enter width and height before starting your design",
+        [!String(width).trim() || widthInches <= 0 ? "width" : "height"]
+      );
       return;
     }
     setDesignFlowStart(jobIndex);
@@ -1274,40 +1281,77 @@ function ProductDetailContent() {
   );
   const showShipToForm = !shipToAddressReady || shipToEditing;
 
+  /**
+   * Every product-page error is a top-center toast. When it is about specific fields, those fields turn red and
+   * the page scrolls to the first one. The same message is never stacked twice.
+   */
+  const showError = (text: string, fields: string[] = []) => {
+    toast.error(text, { toastId: `pdp-error:${text}` });
+    setInvalidFields(new Set(fields));
+    if (fields[0] && typeof document !== "undefined") {
+      const el = document.querySelector<HTMLElement>(`[data-field="${CSS.escape(fields[0])}"]`);
+      el?.scrollIntoView({ behavior: "smooth", block: "center" });
+      el?.focus({ preventScroll: true });
+    }
+  };
+
+  // Shipping and tax problems found in the background are shown as toasts too (once per message).
+  useEffect(() => {
+    if (fedexRatesError) toast.error(fedexRatesError, { toastId: `pdp-error:${fedexRatesError}` });
+  }, [fedexRatesError]);
+  useEffect(() => {
+    if (taxEstimateError && isAuthenticated()) toast.error(taxEstimateError, { toastId: `pdp-error:${taxEstimateError}` });
+  }, [taxEstimateError]);
+
+  /** Clear a field's red border once the customer changes it. */
+  const clearInvalid = (field: string) => {
+    setInvalidFields((prev) => {
+      if (!prev.has(field)) return prev;
+      const next = new Set(prev);
+      next.delete(field);
+      return next;
+    });
+  };
+
+  const fieldClass = (field: string, normal: string) =>
+    invalidFields.has(field) ? `${normal} border-red-500` : `${normal} border-gray-300`;
+
   // Handle Add to Cart (logged-in or guest via X-Guest-Session-Id from api.ts)
   const handleAddToCart = async () => {
-    if (!skipDimensionsForPrice && !String(width).trim()) {
-      setMessage("❌ Error: Width is required");
-      setTimeout(() => setMessage(""), 5000);
-      return;
-    }
-    if (!skipDimensionsForPrice && !String(height).trim()) {
-      setMessage("❌ Error: Height is required");
-      setTimeout(() => setMessage(""), 5000);
-      return;
-    }
-    if (!skipDimensionsForPrice && (widthInches <= 0 || heightInches <= 0)) {
-      setMessage("❌ Error: Width and Height must be greater than 0");
-      setTimeout(() => setMessage(""), 5000);
-      return;
+    if (!skipDimensionsForPrice) {
+      const missingSize = [!String(width).trim() && "width", !String(height).trim() && "height"].filter(
+        (f): f is string => Boolean(f)
+      );
+      if (missingSize.length > 0) {
+        showError(missingSize.length === 2 ? "Width and height are required" : `${missingSize[0] === "width" ? "Width" : "Height"} is required`, missingSize);
+        return;
+      }
+      if (widthInches <= 0 || heightInches <= 0) {
+        showError("Width and height must be greater than 0", [widthInches <= 0 ? "width" : "height"]);
+        return;
+      }
+      if (widthLimitError || heightLimitError) {
+        showError(widthLimitError || heightLimitError, [widthLimitError ? "width" : "height"]);
+        return;
+      }
     }
     if (missingRequiredModifiers.length > 0) {
-      const firstMissing = missingRequiredModifiers[0];
-      setMessage(`❌ Error: Please select ${firstMissing.name || firstMissing.key}`);
-      setTimeout(() => setMessage(""), 5000);
+      const names = missingRequiredModifiers.map((g) => g.name || g.key);
+      showError(
+        names.length === 1 ? `Please select ${names[0]}` : `Please select ${names.slice(0, -1).join(", ")} and ${names[names.length - 1]}`,
+        missingRequiredModifiers.map((g) => `modifier:${g.key}`)
+      );
       return;
     }
 
     for (let i = 0; i < jobs.length; i++) {
       if (!jobs[i].jobName.trim()) {
-        setMessage(`❌ Error: Job ${i + 1}: Please enter Job Name/PO#`);
-        setTimeout(() => setMessage(""), 5000);
+        showError(`Job ${i + 1}: Please enter Job Name/PO#`, [`job:${jobs[i].id}:name`]);
         return;
       }
       const q = parseInt(jobs[i].quantity, 10);
       if (!Number.isFinite(q) || q < 1) {
-        setMessage(`❌ Error: Job ${i + 1}: Quantity must be at least 1`);
-        setTimeout(() => setMessage(""), 5000);
+        showError(`Job ${i + 1}: Quantity must be at least 1`, [`job:${jobs[i].id}:qty`]);
         return;
       }
     }
@@ -1318,31 +1362,27 @@ function ProductDetailContent() {
       (fedexRates.length > 0 ? fedexRates[0] : null);
     if (isAuthenticated()) {
       if (!String(estimateShipForm.postcode || "").trim() || !String(estimateShipForm.country || "").trim()) {
-        setMessage("❌ Error: Enter ship-to postal code and country for FedEx.");
-        setTimeout(() => setMessage(""), 5000);
+        showError("Enter ship-to postal code and country for FedEx.");
         return;
       }
       if (fedexRatesLoading) {
-        setMessage("❌ Error: Please wait for FedEx rates to finish loading.");
-        setTimeout(() => setMessage(""), 5000);
+        showError("Please wait for FedEx rates to finish loading.");
         return;
       }
       if (fedexRatesError || !resolvedRateForCart || fedexRates.length === 0) {
-        setMessage("❌ Error: Choose a FedEx service (check ship-to address and try again).");
-        setTimeout(() => setMessage(""), 5000);
+        showError("Choose a FedEx service (check ship-to address and try again).");
         return;
       }
       const chargeNum = Number(resolvedRateForCart.totalCharge);
       if (!Number.isFinite(chargeNum) || chargeNum < 0) {
-        setMessage("❌ Error: FedEx rate is invalid. Refresh rates and try again.");
-        setTimeout(() => setMessage(""), 5000);
+        showError("FedEx rate is invalid. Refresh rates and try again.");
         return;
       }
       fedExValidatedQuoteAmount = chargeNum;
     }
 
     setAddingToCart(true);
-    setMessage("");
+    setInvalidFields(new Set());
 
     try {
       // Extract fullWall and halfWall quantities from strings
@@ -1504,18 +1544,15 @@ function ProductDetailContent() {
       await cartAPI.add(cartItem);
 
       window.dispatchEvent(new Event("cartUpdated"));
-      setMessage("✅ Product added to cart successfully!");
+      toast.success("Product added to cart successfully!");
       setTimeout(() => {
-        setMessage("");
-        // Navigate to cart page
         router.push("/cart");
       }, 1000);
 
     } catch (error: unknown) {
       console.error("Error adding to cart:", error);
       const msg = error instanceof Error ? error.message : "Failed to add product to cart";
-      setMessage(`❌ Error: ${msg}`);
-      setTimeout(() => setMessage(""), 5000);
+      showError(msg);
     } finally {
       setAddingToCart(false);
     }
@@ -1921,14 +1958,22 @@ function ProductDetailContent() {
                       type="text"
                       inputMode="decimal"
                       value={width}
+                      data-field="width"
+                      aria-invalid={invalidFields.has("width") || Boolean(widthLimitError)}
                       onChange={(e) => {
                         const v = e.target.value;
-                        if (v === "" || /^\d*\.?\d*$/.test(v)) setWidth(v);
+                        if (v === "" || /^\d*\.?\d*$/.test(v)) {
+                          setWidth(v);
+                          clearInvalid("width");
+                        }
                       }}
                       placeholder="0"
-                      className="w-full px-3 py-2 border border-gray-300 text-black rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      className={
+                        widthLimitError
+                          ? "w-full px-3 py-2 border text-black rounded-lg focus:outline-none border-red-500"
+                          : fieldClass("width", "w-full px-3 py-2 border text-black rounded-lg focus:outline-none")
+                      }
                     />
-                    {widthLimitError ? <p className="mt-1 text-xs text-rose-600">{widthLimitError}</p> : null}
                   </div>
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-2">
@@ -1938,14 +1983,22 @@ function ProductDetailContent() {
                       type="text"
                       inputMode="decimal"
                       value={height}
+                      data-field="height"
+                      aria-invalid={invalidFields.has("height") || Boolean(heightLimitError)}
                       onChange={(e) => {
                         const v = e.target.value;
-                        if (v === "" || /^\d*\.?\d*$/.test(v)) setHeight(v);
+                        if (v === "" || /^\d*\.?\d*$/.test(v)) {
+                          setHeight(v);
+                          clearInvalid("height");
+                        }
                       }}
                       placeholder="0"
-                      className="w-full px-3 py-2 border border-gray-300 text-black rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      className={
+                        heightLimitError
+                          ? "w-full px-3 py-2 border text-black rounded-lg focus:outline-none border-red-500"
+                          : fieldClass("height", "w-full px-3 py-2 border text-black rounded-lg focus:outline-none")
+                      }
                     />
-                    {heightLimitError ? <p className="mt-1 text-xs text-rose-600">{heightLimitError}</p> : null}
                   </div>
                 </div>
               </div>
@@ -2002,10 +2055,14 @@ function ProductDetailContent() {
                         >
                           <button
                             type="button"
-                            className={`flex w-full items-center justify-between rounded-lg border px-3 py-1.5 text-sm text-left shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 ${
+                            data-field={`modifier:${group.key}`}
+                            aria-invalid={invalidFields.has(`modifier:${group.key}`)}
+                            className={`flex w-full items-center justify-between rounded-lg border px-3 py-1.5 text-sm text-left shadow-sm focus:outline-none ${
                               isGroupDisabledByRule
                                 ? "cursor-not-allowed bg-gray-50 text-gray-400 border-gray-200"
-                                : "border-gray-300 bg-white text-black"
+                                : invalidFields.has(`modifier:${group.key}`)
+                                  ? "border-red-500 bg-white text-black"
+                                  : "border-gray-300 bg-white text-black"
                             }`}
                             disabled={isGroupDisabledByRule}
                             onClick={() =>
@@ -2048,6 +2105,7 @@ function ProductDetailContent() {
                                         ...prev,
                                         [group.key]: optValue,
                                       }));
+                                      clearInvalid(`modifier:${group.key}`);
                                       setOpenModifierKey(null);
                                     }}
                                   >
@@ -2116,8 +2174,16 @@ function ProductDetailContent() {
                           <input
                             type="text"
                             value={job.jobName}
-                            onChange={(e) => updateJob(job.id, { jobName: e.target.value })}
-                            className="box-border h-10 w-full rounded-lg border border-gray-300 px-3 text-sm text-gray-900 placeholder:text-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                            data-field={`job:${job.id}:name`}
+                            aria-invalid={invalidFields.has(`job:${job.id}:name`)}
+                            onChange={(e) => {
+                              updateJob(job.id, { jobName: e.target.value });
+                              clearInvalid(`job:${job.id}:name`);
+                            }}
+                            className={fieldClass(
+                              `job:${job.id}:name`,
+                              "box-border h-10 w-full rounded-lg border px-3 text-sm text-gray-900 placeholder:text-gray-500 focus:outline-none"
+                            )}
                             placeholder="Job Name/PO#"
                             aria-label={`Job ${index + 1} name or PO number`}
                           />
@@ -2127,8 +2193,16 @@ function ProductDetailContent() {
                           <input
                             type="number"
                             value={job.quantity}
-                            onChange={(e) => updateJob(job.id, { quantity: e.target.value })}
-                            className="box-border h-10 w-full rounded-lg border border-gray-300 px-3 text-sm text-black focus:outline-none focus:ring-2 focus:ring-blue-500"
+                            data-field={`job:${job.id}:qty`}
+                            aria-invalid={invalidFields.has(`job:${job.id}:qty`)}
+                            onChange={(e) => {
+                              updateJob(job.id, { quantity: e.target.value });
+                              clearInvalid(`job:${job.id}:qty`);
+                            }}
+                            className={fieldClass(
+                              `job:${job.id}:qty`,
+                              "box-border h-10 w-full rounded-lg border px-3 text-sm text-black focus:outline-none"
+                            )}
                             min={1}
                             step={1}
                             aria-label={`Job ${index + 1} quantity`}
@@ -2304,14 +2378,13 @@ function ProductDetailContent() {
                         <label htmlFor="pdp-fedex-service" className="mb-1 block text-sm font-medium text-gray-700">
                             Shipping service
                         </label>
-                        {fedexRatesError ? <p className="mb-2 text-xs text-rose-600">{fedexRatesError}</p> : null}
                         {fedexRates.length > 0 ? (
                           <div className="relative">
                             <button
                               id="pdp-fedex-service"
                               type="button"
                               onClick={() => setFedexServiceMenuOpen((open) => !open)}
-                              className="flex w-full items-center justify-between gap-3 rounded-md border border-gray-300 bg-white px-3 py-2 text-left text-sm text-gray-800 shadow-sm transition hover:border-gray-400 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
+                              className="flex w-full items-center justify-between gap-3 rounded-md border border-gray-300 bg-white px-3 py-2 text-left text-sm text-gray-800 shadow-sm transition hover:border-gray-400 focus:outline-none"
                               aria-haspopup="listbox"
                               aria-expanded={fedexServiceMenuOpen}
                             >
@@ -2449,9 +2522,6 @@ function ProductDetailContent() {
                   )}
                 </span>
               </div>
-              {isAuthenticated() && taxEstimateError ? (
-                <p className="mb-2 text-xs text-rose-600">{taxEstimateError}</p>
-              ) : null}
               <div className="flex justify-between border-t border-gray-300 pt-2">
                 <span className="font-bold text-gray-900">Total</span>
                 <span className="text-xl font-bold text-gray-900">${totalWithTax.toFixed(2)}</span>
@@ -2460,18 +2530,9 @@ function ProductDetailContent() {
 
             {/* Action Buttons */}
             <div className="space-y-4">
-              {message && (
-                <div className={`p-3 rounded-lg text-sm ${
-                  message.includes("✅") 
-                    ? "bg-green-50 text-green-800 border border-green-200" 
-                    : "bg-red-50 text-red-800 border border-red-200"
-                }`}>
-                  {message}
-                </div>
-              )}
               <button 
                 onClick={handleAddToCart}
-                disabled={addingToCart || missingRequiredModifiers.length > 0}
+                disabled={addingToCart}
                 className="w-full bg-blue-500 hover:bg-blue-700 disabled:bg-blue-400 disabled:cursor-not-allowed text-white font-medium px-6 py-3 rounded-lg transition-colors"
               >
                 {addingToCart ? "Adding to Cart..." : "Add to Cart"}
