@@ -2190,7 +2190,9 @@ export const nexusAPI = {
     apiCall(`/nexus/admin/states/${code}/status`, { method: 'PUT', body: JSON.stringify({ status }) }) as Promise<{
       state: NexusState;
     }>,
-  getAttentionCountAdmin: async (): Promise<{ count: number }> => apiCall('/nexus/admin/attention-count'),
+  /** reached = alert (100%+), warning = close (95%+); count = both. */
+  getAttentionCountAdmin: async (): Promise<{ count: number; reached: number; warning: number }> =>
+    apiCall('/nexus/admin/attention-count'),
 };
 
 export const artworksAPI = {

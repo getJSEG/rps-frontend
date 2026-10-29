@@ -196,6 +196,8 @@ export default function TaxNexusPage() {
   }, [states]);
 
   const needsAction = states.some((s) => s.status === "close_warning" || s.status === "reached");
+  const reachedStates = states.filter((s) => s.status === "reached");
+  const warningStates = states.filter((s) => s.status === "close_warning");
 
   const visible = states
     .filter((s) => tab === "all" || tabFor(s.status) === tab)
@@ -283,6 +285,35 @@ export default function TaxNexusPage() {
 
   return (
     <AdminNavbar title="Sales Tax Nexus" subtitle="Sales per state from completed orders">
+      {(reachedStates.length > 0 || warningStates.length > 0) && (
+        <div className="overflow-hidden rounded-xl border border-slate-200/60 bg-white shadow-sm shadow-slate-900/5" role="alert">
+          {reachedStates.length > 0 && (
+            <div className="flex flex-wrap items-start gap-3 border-l-4 border-rose-500 bg-rose-50 px-5 py-3.5">
+              <WarningIcon className="mt-0.5 h-5 w-5 shrink-0 text-rose-600" />
+              <div className="min-w-0 flex-1 text-sm">
+                <p className="font-semibold text-rose-900">
+                  {reachedStates.length} {reachedStates.length === 1 ? "state has" : "states have"} reached the
+                  threshold: {reachedStates.map((s) => s.name).join(", ")}
+                </p>
+                <p className="mt-0.5 text-rose-800">
+                  Register and set {reachedStates.length === 1 ? "it" : "them"} to Pending registration, Filing, or
+                  Collecting.
+                </p>
+              </div>
+            </div>
+          )}
+          {warningStates.length > 0 && (
+            <div className="flex flex-wrap items-start gap-3 border-l-4 border-yellow-400 bg-yellow-50 px-5 py-3.5">
+              <WarningIcon className="mt-0.5 h-5 w-5 shrink-0 text-yellow-600" />
+              <p className="min-w-0 flex-1 text-sm font-semibold text-yellow-900">
+                {warningStates.length} {warningStates.length === 1 ? "state is" : "states are"} close to the threshold
+                (95%+): {warningStates.map((s) => s.name).join(", ")}
+              </p>
+            </div>
+          )}
+        </div>
+      )}
+
       <div className="overflow-hidden rounded-xl border border-slate-200/60 bg-white shadow-sm shadow-slate-900/5">
         <div className="border-b border-slate-100 px-5 py-5 sm:px-6">
           <div className="flex flex-wrap items-start justify-between gap-3">

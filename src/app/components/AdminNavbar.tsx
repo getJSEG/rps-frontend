@@ -98,8 +98,8 @@ export default function AdminNavbar({
 }: AdminNavbarProps) {
   const router = useRouter();
   const pathname = usePathname() || "";
-  /** States at close warning / reached, shown as a badge on "Tax Nexus". */
-  const [nexusAttention, setNexusAttention] = useState(0);
+  /** States reached (red badge) / close warning (yellow badge) on "Tax Nexus". */
+  const [nexusAttention, setNexusAttention] = useState({ reached: 0, warning: 0 });
 
   useEffect(() => {
     let cancelled = false;
@@ -107,7 +107,9 @@ export default function AdminNavbar({
       nexusAPI
         .getAttentionCountAdmin()
         .then((r) => {
-          if (!cancelled) setNexusAttention(Number(r?.count) || 0);
+          if (!cancelled) {
+            setNexusAttention({ reached: Number(r?.reached) || 0, warning: Number(r?.warning) || 0 });
+          }
         })
         .catch(() => {});
     };
@@ -236,12 +238,24 @@ export default function AdminNavbar({
                   )}
                 </span>
                 {label}
-                {label === "Tax Nexus" && nexusAttention > 0 && (
-                  <span
-                    className="ml-auto inline-flex min-w-5 items-center justify-center rounded-full bg-rose-500 px-1.5 py-0.5 text-[11px] font-semibold leading-none text-white"
-                    title={`${nexusAttention} state(s) close to or past the nexus threshold`}
-                  >
-                    {nexusAttention}
+                {label === "Tax Nexus" && (nexusAttention.reached > 0 || nexusAttention.warning > 0) && (
+                  <span className="ml-auto inline-flex items-center gap-1">
+                    {nexusAttention.reached > 0 && (
+                      <span
+                        className="inline-flex min-w-5 items-center justify-center rounded-full bg-rose-500 px-1.5 py-0.5 text-[11px] font-semibold leading-none text-white"
+                        title={`${nexusAttention.reached} state(s) reached the nexus threshold`}
+                      >
+                        {nexusAttention.reached}
+                      </span>
+                    )}
+                    {nexusAttention.warning > 0 && (
+                      <span
+                        className="inline-flex min-w-5 items-center justify-center rounded-full bg-yellow-400 px-1.5 py-0.5 text-[11px] font-semibold leading-none text-yellow-950"
+                        title={`${nexusAttention.warning} state(s) close to the nexus threshold (95%+)`}
+                      >
+                        {nexusAttention.warning}
+                      </span>
+                    )}
                   </span>
                 )}
               </Link>
