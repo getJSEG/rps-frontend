@@ -8,7 +8,7 @@ export default function ShippingBanner() {
         {/* Banner Graphic Section */}
         <div className="relative w-full bg-gray-100 rounded-lg overflow-hidden h-96 md:h-[500px]">
           <Image
-            src="/oUhg0Opf.PNG"
+            src="/oUhg0Opf.png"
             alt="Shipping banner"
             fill
             priority

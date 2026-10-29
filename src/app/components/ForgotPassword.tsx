@@ -113,7 +113,7 @@ export default function ForgotPassword() {
             <div className="mt-6 border-t border-gray-100 pt-4 text-center">
               <p className="text-sm text-gray-600">
                 Remembered your password?{" "}
-                <Link href="/" className="font-semibold text-[#0B6BCB] hover:underline">
+                <Link href="/login" className="font-semibold text-[#0B6BCB] hover:underline">
                   Sign in
                 </Link>
               </p>

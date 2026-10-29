@@ -1,7 +1,7 @@
 "use client";
 
 import { ReactNode, useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { canAccessAdminPanel, isAuthenticated } from "../../utils/roles";
 import FullScreenLoader from "./FullScreenLoader";
 
@@ -13,13 +13,14 @@ type AuthStatus = "loading" | "authorized" | "unauthenticated" | "forbidden";
  */
 export default function AdminGuard({ children }: { children: ReactNode }) {
   const router = useRouter();
+  const pathname = usePathname();
   const [status, setStatus] = useState<AuthStatus>("loading");
 
   useEffect(() => {
     const check = () => {
       if (!isAuthenticated()) {
         setStatus("unauthenticated");
-        router.replace("/");
+        router.replace(`/login?next=${encodeURIComponent(pathname || "/admin")}`);
         return;
       }
       if (!canAccessAdminPanel()) {
@@ -33,7 +34,7 @@ export default function AdminGuard({ children }: { children: ReactNode }) {
     check();
     window.addEventListener("loginStatusChanged", check);
     return () => window.removeEventListener("loginStatusChanged", check);
-  }, [router]);
+  }, [router, pathname]);
 
   if (status === "authorized") return <>{children}</>;
 
