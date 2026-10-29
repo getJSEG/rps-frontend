@@ -460,6 +460,36 @@ export type Coupon = {
   updatedAt?: string;
 };
 
+export type NexusStatus =
+  | "not_collecting"
+  | "close_warning"
+  | "reached"
+  | "pending_registration"
+  | "filing"
+  | "collecting";
+
+export type NexusState = {
+  code: string;
+  name: string;
+  salesThreshold: number | null;
+  transactionThreshold: number | null;
+  rule: "or" | "and";
+  status: NexusStatus;
+  statusChangedAt: string | null;
+  rollingSales: number;
+  rollingOrders: number;
+  /** Numbers for the requested period (rolling = month-end 12-month totals). */
+  sales: number;
+  orders: number;
+};
+
+export type NexusPeriod = {
+  kind: "rolling" | "month" | "week";
+  start: string | null;
+  end: string | null;
+  calculatedAt?: string | null;
+};
+
 export type CouponPreview = {
   code: string;
   discountType: string;
@@ -2213,6 +2243,40 @@ export const couponsAPI = {
     }>
   ) => apiCall(`/coupons/admin/${id}`, { method: 'PUT', body: JSON.stringify(data) }) as Promise<{ coupon: Coupon }>,
   deleteAdmin: async (id: number | string) => apiCall(`/coupons/admin/${id}`, { method: 'DELETE' }),
+};
+
+/** Fired after a nexus status/threshold change so the admin menu badge refreshes. */
+export const NEXUS_ATTENTION_CHANGED_EVENT = "nexusAttentionChanged";
+
+export const nexusAPI = {
+  /** period: rolling | month (key YYYY-MM) | week (key = Monday YYYY-MM-DD). */
+  getStatesAdmin: async (
+    period: "rolling" | "month" | "week" = "rolling",
+    key?: string
+  ): Promise<{ period: NexusPeriod; states: NexusState[]; attentionCount: number }> => {
+    const params = new URLSearchParams({ period });
+    if (key) params.set("key", key);
+    return apiCall(`/nexus/admin/states?${params.toString()}`);
+  },
+  updateThresholdAdmin: async (
+    code: string,
+    data: {
+      salesThreshold: number | null;
+      transactionThreshold: number | null;
+      rule: "or" | "and";
+      notApplicable: boolean;
+    }
+  ) =>
+    apiCall(`/nexus/admin/states/${code}/threshold`, { method: 'PUT', body: JSON.stringify(data) }) as Promise<{
+      state: NexusState;
+    }>,
+  updateStatusAdmin: async (code: string, status: NexusStatus) =>
+    apiCall(`/nexus/admin/states/${code}/status`, { method: 'PUT', body: JSON.stringify({ status }) }) as Promise<{
+      state: NexusState;
+    }>,
+  /** reached = alert (100%+), warning = close (95%+); count = both. */
+  getAttentionCountAdmin: async (): Promise<{ count: number; reached: number; warning: number }> =>
+    apiCall('/nexus/admin/attention-count'),
 };
 
 export const artworksAPI = {

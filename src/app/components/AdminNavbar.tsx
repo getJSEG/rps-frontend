@@ -3,9 +3,10 @@
 import { useRouter, usePathname } from "next/navigation";
 import Link from "next/link";
 import Image from "next/image";
-import { ReactNode } from "react";
+import { ReactNode, useEffect, useState } from "react";
 import { FiLogOut } from "react-icons/fi";
 import { toast } from "react-toastify";
+import { nexusAPI, NEXUS_ATTENTION_CHANGED_EVENT } from "../../utils/api";
 
 interface AdminNavbarProps {
   children: ReactNode;
@@ -20,6 +21,11 @@ const navItems = [
     href: "/admin/reports",
     label: "Reports",
     match: (p: string) => p === "/admin/reports" || p.startsWith("/admin/reports"),
+  },
+  {
+    href: "/admin/tax-nexus",
+    label: "Tax Nexus",
+    match: (p: string) => p === "/admin/tax-nexus" || p.startsWith("/admin/tax-nexus"),
   },
   {
     href: "/admin",
@@ -97,6 +103,28 @@ export default function AdminNavbar({
 }: AdminNavbarProps) {
   const router = useRouter();
   const pathname = usePathname() || "";
+  /** States reached (red badge) / close warning (yellow badge) on "Tax Nexus". */
+  const [nexusAttention, setNexusAttention] = useState({ reached: 0, warning: 0 });
+
+  useEffect(() => {
+    let cancelled = false;
+    const load = () => {
+      nexusAPI
+        .getAttentionCountAdmin()
+        .then((r) => {
+          if (!cancelled) {
+            setNexusAttention({ reached: Number(r?.reached) || 0, warning: Number(r?.warning) || 0 });
+          }
+        })
+        .catch(() => {});
+    };
+    load();
+    window.addEventListener(NEXUS_ATTENTION_CHANGED_EVENT, load);
+    return () => {
+      cancelled = true;
+      window.removeEventListener(NEXUS_ATTENTION_CHANGED_EVENT, load);
+    };
+  }, []);
 
   const handleLogout = () => {
     localStorage.removeItem("isLoggedIn");
@@ -213,8 +241,33 @@ export default function AdminNavbar({
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
                     </svg>
                   )}
+                  {label === "Tax Nexus" && (
+                    <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a2 2 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0zM15 11a3 3 0 11-6 0 3 3 0 016 0z" />
+                    </svg>
+                  )}
                 </span>
                 {label}
+                {label === "Tax Nexus" && (nexusAttention.reached > 0 || nexusAttention.warning > 0) && (
+                  <span className="ml-auto inline-flex items-center gap-1">
+                    {nexusAttention.reached > 0 && (
+                      <span
+                        className="inline-flex h-5 min-w-5 items-center justify-center rounded-full px-1.5 text-[11px] font-bold leading-none tabular-nums shadow-sm bg-gradient-to-b from-rose-400 to-rose-500 text-white ring-2 ring-slate-800"
+                        title={`${nexusAttention.reached} state(s) reached the nexus threshold`}
+                      >
+                        {nexusAttention.reached}
+                      </span>
+                    )}
+                    {nexusAttention.warning > 0 && (
+                      <span
+                        className="inline-flex h-5 min-w-5 items-center justify-center rounded-full px-1.5 text-[11px] font-bold leading-none tabular-nums shadow-sm bg-gradient-to-b from-amber-200 to-amber-300 text-amber-950 ring-2 ring-slate-800"
+                        title={`${nexusAttention.warning} state(s) close to the nexus threshold (95%+)`}
+                      >
+                        {nexusAttention.warning}
+                      </span>
+                    )}
+                  </span>
+                )}
               </Link>
             );
           })}
