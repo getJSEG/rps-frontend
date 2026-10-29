@@ -23,6 +23,11 @@ const navItems = [
     match: (p: string) => p === "/admin/reports" || p.startsWith("/admin/reports"),
   },
   {
+    href: "/admin/tax-nexus",
+    label: "Tax Nexus",
+    match: (p: string) => p === "/admin/tax-nexus" || p.startsWith("/admin/tax-nexus"),
+  },
+  {
     href: "/admin",
     label: "Orders",
     match: (p: string) =>
@@ -61,11 +66,6 @@ const navItems = [
     href: "/admin/coupons",
     label: "Coupons",
     match: (p: string) => p === "/admin/coupons" || p.startsWith("/admin/coupons"),
-  },
-  {
-    href: "/admin/tax-nexus",
-    label: "Tax Nexus",
-    match: (p: string) => p === "/admin/tax-nexus" || p.startsWith("/admin/tax-nexus"),
   },
   {
     href: "/admin/box-rules",
@@ -252,7 +252,7 @@ export default function AdminNavbar({
                   <span className="ml-auto inline-flex items-center gap-1">
                     {nexusAttention.reached > 0 && (
                       <span
-                        className="inline-flex min-w-5 items-center justify-center rounded-full bg-rose-500 px-1.5 py-0.5 text-[11px] font-semibold leading-none text-white"
+                        className="inline-flex h-5 min-w-5 items-center justify-center rounded-full px-1.5 text-[11px] font-bold leading-none tabular-nums shadow-sm bg-gradient-to-b from-rose-400 to-rose-500 text-white ring-2 ring-slate-800"
                         title={`${nexusAttention.reached} state(s) reached the nexus threshold`}
                       >
                         {nexusAttention.reached}
@@ -260,7 +260,7 @@ export default function AdminNavbar({
                     )}
                     {nexusAttention.warning > 0 && (
                       <span
-                        className="inline-flex min-w-5 items-center justify-center rounded-full bg-yellow-400 px-1.5 py-0.5 text-[11px] font-semibold leading-none text-yellow-950"
+                        className="inline-flex h-5 min-w-5 items-center justify-center rounded-full px-1.5 text-[11px] font-bold leading-none tabular-nums shadow-sm bg-gradient-to-b from-amber-200 to-amber-300 text-amber-950 ring-2 ring-slate-800"
                         title={`${nexusAttention.warning} state(s) close to the nexus threshold (95%+)`}
                       >
                         {nexusAttention.warning}
