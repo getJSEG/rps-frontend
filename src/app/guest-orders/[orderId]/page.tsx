@@ -87,6 +87,7 @@ type GuestOrder = {
   tax_name?: string | null;
   coupon_code?: string | null;
   coupon_discount_amount?: number | string | null;
+  coupon_shipping_discount_amount?: number | string | null;
   coupon_discount_type?: string | null;
   coupon_discount_value?: number | string | null;
   refund_amount?: number | string | null;
@@ -636,8 +637,20 @@ function GuestOrderTrackInner() {
                   <span>
                     Shipping{order.shipping_method?.trim() ? ` (${order.shipping_method})` : ""}
                   </span>
-                  <span>${money(order.shipping_charge)}</span>
+                  <span>
+                    $
+                    {money(
+                      Number(order.shipping_charge || 0) +
+                        (Number(order.coupon_shipping_discount_amount) > 0 ? Number(order.coupon_shipping_discount_amount) : 0)
+                    )}
+                  </span>
                 </div>
+                {Number(order.coupon_shipping_discount_amount) > 0 ? (
+                  <div className="flex justify-between text-emerald-700">
+                    <span>{couponLineLabel(order)}</span>
+                    <span>-${money(order.coupon_shipping_discount_amount)}</span>
+                  </div>
+                ) : null}
                 <div className="flex justify-between text-gray-600">
                   <span>
                     Tax{Number(order.tax_percentage || 0) > 0 ? ` (${money(order.tax_percentage)}%)` : ""}

@@ -23,6 +23,7 @@ import {
   fedexDeliveryEstimateWithProduction,
   maxProductionTimeBusinessDays,
   buildFedexPackagesFromShippableCartItems,
+  shippingTierHint,
   type FedexRateQuote,
   type ShippingMethod,
   type ShippingRates,
@@ -377,6 +378,9 @@ export default function CheckoutPage() {
     discountAmount: number;
     discountType: string;
     discountValue: number;
+    freeShipping?: boolean;
+    /** Percent off shipping for shipping coupons (100 = free shipping); 0 for product coupons. */
+    shippingDiscountPercent?: number;
   } | null>(null);
   const [couponError, setCouponError] = useState<string | null>(null);
   const [couponApplying, setCouponApplying] = useState(false);
@@ -644,17 +648,30 @@ export default function CheckoutPage() {
     !!billingForm.state.trim() &&
     !!billingForm.postcode.trim();
   const guestCheckoutReady = guestEmailOk && guestAddressOk;
-  const shownShipping = (() => {
-    if (clientSecret && orderSummary) return orderSummary.shipping;
+  const couponShippingPercent = Number(appliedCoupon?.shippingDiscountPercent) || 0;
+  /** Amount a shipping coupon takes off a shipping price (same rounding as the server). */
+  const couponShippingDiscountFor = (price: number) =>
+    Math.min(roundMoney2(price), roundMoney2(price * (couponShippingPercent / 100)));
+  /** Shipping price of the chosen service, before a shipping coupon takes its discount off. */
+  const shippingBeforeCoupon = (() => {
+    if (clientSecret && orderSummary) {
+      return roundMoney2(orderSummary.shipping + (Number(orderSummary.couponShippingDiscountAmount) || 0));
+    }
     if (!checkoutRequiresFedexQuote) return shipping;
     if (orderQualifiesForFreeShipping(productSubtotal, freeShippingPolicy, storePickupOrder)) return 0;
     return selectedFedexRate ? Number(selectedFedexRate.totalCharge) || 0 : 0;
   })();
+  const couponShippingDiscount = (() => {
+    if (clientSecret && orderSummary) return Number(orderSummary.couponShippingDiscountAmount) || 0;
+    if (!couponShippingPercent || storePickupOrder) return 0;
+    return couponShippingDiscountFor(shippingBeforeCoupon);
+  })();
+  const shownShipping = roundMoney2(Math.max(0, shippingBeforeCoupon - couponShippingDiscount));
   const shippingAmountPendingFedex =
     checkoutRequiresFedexQuote && !selectedFedexRate;
   const showFreeShippingCheckout =
     !shippingAmountPendingFedex &&
-    shownShipping === 0 &&
+    shippingBeforeCoupon === 0 &&
     freeShippingPolicy.freeShippingEnabled;
   const guestTaxExpected = checkoutRequiresFedexQuote && !clientSecret;
   const guestTaxActive = guestTaxExpected && guestBillingSaved;
@@ -921,12 +938,14 @@ export default function CheckoutPage() {
     setCouponError(null);
     try {
       const original = roundMoney2(orderSummary?.subtotal ?? subtotal);
-      const res = await couponsAPI.preview({ code, subtotal: original });
+      const res = await couponsAPI.preview({ code, subtotal: original, shippingMode });
       setAppliedCoupon({
         code: res.code,
         discountAmount: Number(res.discountAmount) || 0,
         discountType: String(res.discountType || ""),
         discountValue: Number(res.discountValue) || 0,
+        freeShipping: res.freeShipping === true,
+        shippingDiscountPercent: Math.min(100, Math.max(0, Number(res.shippingDiscountPercent) || 0)),
       });
       setCouponInput(res.code);
     } catch (e) {
@@ -1037,6 +1056,7 @@ export default function CheckoutPage() {
             total?: number;
             couponCode?: string | null;
             couponDiscountAmount?: number;
+            couponShippingDiscountAmount?: number;
           };
       if (
         Number.isFinite(Number(res.subtotal)) &&
@@ -1054,6 +1074,7 @@ export default function CheckoutPage() {
           total: Number(res.total),
           couponCode: res.couponCode ?? appliedCoupon?.code ?? null,
           couponDiscountAmount: Number(res.couponDiscountAmount ?? appliedCoupon?.discountAmount ?? 0),
+          couponShippingDiscountAmount: Number(res.couponShippingDiscountAmount ?? 0),
         });
       }
       const guestToken = !loggedInCheckout ? String(res.guestTrackingToken || "").trim() : "";
@@ -1559,10 +1580,30 @@ export default function CheckoutPage() {
                                         : "text-gray-700 hover:bg-gray-50 hover:text-gray-950"
                                     }`}
                                   >
-                                    <span className="min-w-0 truncate">{r.serviceName}</span>
-                                    <span className="shrink-0 text-xs font-medium tabular-nums">
-                                      ${Number(r.totalCharge || 0).toFixed(2)}
+                                    <span className="min-w-0">
+                                      <span className="block truncate">{r.serviceName}</span>
+                                      {shippingTierHint(r) ? (
+                                        <span className="block truncate text-xs text-gray-500">{shippingTierHint(r)}</span>
+                                      ) : null}
                                     </span>
+                                    {couponShippingPercent > 0 ? (
+                                      <span className="shrink-0 text-right text-xs font-medium tabular-nums">
+                                        <span className="block text-gray-400 line-through">
+                                          ${Number(r.totalCharge || 0).toFixed(2)}
+                                        </span>
+                                        <span className="block text-emerald-700">
+                                          {couponShippingPercent >= 100
+                                            ? "Free"
+                                            : `$${roundMoney2(
+                                                Number(r.totalCharge || 0) - couponShippingDiscountFor(Number(r.totalCharge || 0))
+                                              ).toFixed(2)}`}
+                                        </span>
+                                      </span>
+                                    ) : (
+                                      <span className="shrink-0 text-xs font-medium tabular-nums">
+                                        ${Number(r.totalCharge || 0).toFixed(2)}
+                                      </span>
+                                    )}
                                   </button>
                                 );
                               })}
@@ -1593,11 +1634,23 @@ export default function CheckoutPage() {
                         ) : showFreeShippingCheckout ? (
                           <span className="text-emerald-700">Free Shipping</span>
                         ) : (
-                          <span className="text-gray-900">${shownShipping.toFixed(2)}</span>
+                          <span className="text-gray-900">${shippingBeforeCoupon.toFixed(2)}</span>
                         )}
                       </span>
                     </div>
                   )}
+                  {couponShippingDiscount > 0 && !shippingAmountPendingFedex ? (
+                    <div className="flex justify-between text-emerald-700">
+                      <span>
+                        Coupon
+                        {appliedCoupon?.code ? (
+                          <span className="font-semibold font-mono text-[13px]"> ({couponOfferLabel(appliedCoupon)})</span>
+                        ) : null}
+                        :
+                      </span>
+                      <span>-${couponShippingDiscount.toFixed(2)}</span>
+                    </div>
+                  ) : null}
                   <div className="flex justify-between text-gray-700">
                     <span>Tax ({shownTaxPercentage.toFixed(2)}%):</span>
                     <span>

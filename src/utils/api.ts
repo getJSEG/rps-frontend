@@ -125,8 +125,34 @@ export type FreeShippingPolicy = {
   freeShippingThreshold: number;
 };
 
+/** Admin-editable storefront content: Contact Us page, footer contact details, holiday schedule image. */
+export type SiteContent = {
+  contactPhone: string;
+  contactEmail: string;
+  contactHours: string;
+  contactAddress: string;
+  holidayScheduleImageUrl: string | null;
+};
+
 export type AppSettings = {
   emailNotificationsEnabled: boolean;
+} & Partial<SiteContent>;
+
+export type HelpFaq = {
+  id: number;
+  categoryId: number;
+  question: string;
+  answer: string;
+  sortOrder: number;
+  isActive: boolean;
+};
+
+export type HelpCategory = {
+  id: number;
+  name: string;
+  sortOrder: number;
+  isActive: boolean;
+  faqs: HelpFaq[];
 };
 
 export type ShippingRatesResponse = {
@@ -417,12 +443,14 @@ export type CartSummary = {
   total: number;
   couponCode?: string | null;
   couponDiscountAmount?: number;
+  /** Shipping taken off by a shipping coupon (shipping above is already net of it). */
+  couponShippingDiscountAmount?: number;
 };
 
 export type Coupon = {
   id: number;
   code: string;
-  discountType: "percent" | "fixed" | string;
+  discountType: "percent" | "fixed" | "free_shipping" | "shipping_percent" | string;
   discountValue: number;
   minimumPurchaseAmount?: number;
   isActive: boolean;
@@ -467,17 +495,37 @@ export type CouponPreview = {
   discountType: string;
   discountValue: number;
   minimumPurchaseAmount?: number;
+  /** True for free-shipping coupons: products keep full price and the shipping charge is waived. */
+  freeShipping?: boolean;
+  /** Percent taken off the shipping charge by a shipping coupon (100 for free shipping). */
+  shippingDiscountPercent?: number;
   discountAmount: number;
   discountedSubtotal: number;
 };
 
+export type ShippingTier = "economy" | "standard" | "express";
+
 export type FedexRateQuote = {
   serviceType: string;
+  /** Customer-facing tier name (Economy / Standard / Express) for tiered quotes. */
   serviceName: string;
   totalCharge: number;
   currency: string;
   estimatedDelivery?: string | null;
+  tier?: ShippingTier;
+  /** FedEx's own service name behind the tier, e.g. "FedEx Home Delivery®". */
+  carrierServiceName?: string;
 };
+
+const SHIPPING_TIER_HINTS: Record<ShippingTier, string> = {
+  economy: "Slowest, lowest price",
+  standard: "Balanced speed and price",
+  express: "Fastest, highest price",
+};
+
+export function shippingTierHint(rate: Pick<FedexRateQuote, "tier"> | null | undefined): string {
+  return rate?.tier ? SHIPPING_TIER_HINTS[rate.tier] ?? "" : "";
+}
 
 const FEDEX_SERVICE_TRANSIT_BUSINESS_DAYS: Record<string, number> = {
   FIRST_OVERNIGHT: 1,
@@ -2099,8 +2147,36 @@ export const shippingRatesAPI = {
 
 export const appSettingsAPI = {
   get: async (): Promise<AppSettings> => apiCall('/settings'),
-  update: async (payload: AppSettings): Promise<AppSettings> =>
+  /** Partial update: send only the settings being changed. */
+  update: async (payload: Partial<AppSettings>): Promise<AppSettings> =>
     apiCall('/settings', { method: 'PUT', body: JSON.stringify(payload) }),
+  /** Public storefront content (no login needed). */
+  getSiteContent: async (): Promise<SiteContent> => apiCall('/settings/public'),
+};
+
+export const helpCenterAPI = {
+  /** Public: active categories that have active questions. */
+  get: async (): Promise<{ categories: HelpCategory[] }> => apiCall('/help-center'),
+  getAdmin: async (): Promise<{ categories: HelpCategory[] }> => apiCall('/help-center/admin'),
+  createCategory: async (data: { name: string; isActive?: boolean }) =>
+    apiCall('/help-center/admin/categories', { method: 'POST', body: JSON.stringify(data) }),
+  updateCategory: async (id: number, data: Partial<{ name: string; isActive: boolean }>) =>
+    apiCall(`/help-center/admin/categories/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
+  deleteCategory: async (id: number) => apiCall(`/help-center/admin/categories/${id}`, { method: 'DELETE' }),
+  reorderCategories: async (ids: number[]): Promise<{ categories: HelpCategory[] }> =>
+    apiCall('/help-center/admin/categories/reorder', { method: 'PUT', body: JSON.stringify({ ids }) }),
+  createFaq: async (data: { categoryId: number; question: string; answer: string; isActive?: boolean }) =>
+    apiCall('/help-center/admin/faqs', { method: 'POST', body: JSON.stringify(data) }),
+  updateFaq: async (
+    id: number,
+    data: Partial<{ categoryId: number; question: string; answer: string; isActive: boolean }>
+  ) => apiCall(`/help-center/admin/faqs/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
+  deleteFaq: async (id: number) => apiCall(`/help-center/admin/faqs/${id}`, { method: 'DELETE' }),
+  reorderFaqs: async (categoryId: number, ids: number[]): Promise<{ categories: HelpCategory[] }> =>
+    apiCall(`/help-center/admin/categories/${categoryId}/faqs/reorder`, {
+      method: 'PUT',
+      body: JSON.stringify({ ids }),
+    }),
 };
 
 export const shippingBoxesAPI = {
@@ -2136,12 +2212,12 @@ export const taxesAPI = {
 };
 
 export const couponsAPI = {
-  preview: async (data: { code: string; subtotal: number }): Promise<CouponPreview> =>
+  preview: async (data: { code: string; subtotal: number; shippingMode?: string }): Promise<CouponPreview> =>
     apiCall('/coupons/preview', { method: 'POST', body: JSON.stringify(data) }),
   getAdmin: async (): Promise<{ coupons: Coupon[] }> => apiCall('/coupons/admin'),
   createAdmin: async (data: {
     code: string;
-    discountType: "percent" | "fixed";
+    discountType: "percent" | "fixed" | "free_shipping" | "shipping_percent";
     discountValue: number;
     isActive?: boolean;
     expiresOn?: string | null;
@@ -2151,7 +2227,7 @@ export const couponsAPI = {
     id: number | string,
     data: Partial<{
       code: string;
-      discountType: "percent" | "fixed";
+      discountType: "percent" | "fixed" | "free_shipping" | "shipping_percent";
       discountValue: number;
       isActive: boolean;
       expiresOn: string | null;
@@ -2527,6 +2603,8 @@ export const addressesAPI = {
       body: JSON.stringify(addressData),
     });
   },
+
+  remove: async (id: string) => apiCall(`/addresses/${id}`, { method: 'DELETE' }),
 
   setDefault: async (
     id: string,

@@ -1,6 +1,16 @@
-import { redirect } from "next/navigation";
+import { Suspense } from "react";
+import Navbar from "../components/Navbar";
+import LoginPage from "../components/LoginPage";
+import Footer from "../components/Footer";
 
-/** Old /login URLs land on the storefront, where sign-in lives in the navbar. */
 export default function LoginRoutePage() {
-  redirect("/");
+  return (
+    <>
+      <Navbar />
+      <Suspense fallback={<div className="min-h-screen bg-gray-50 pt-24" />}>
+        <LoginPage />
+      </Suspense>
+      <Footer />
+    </>
+  );
 }
