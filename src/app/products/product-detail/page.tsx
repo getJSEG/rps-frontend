@@ -1160,7 +1160,58 @@ function ProductDetailContent() {
     setJobDesigns({});
   }, [twoSided]);
 
+  /**
+   * Templates linked to modifier options open automatically: the template whose ticked options match the
+   * customer's choices (per modifier, any ticked option), else the one with nothing ticked (the default).
+   * Products without linked templates keep the template picker.
+   */
+  const autoTemplateMode = designTemplates.some((t) => (t.modifier_option_ids ?? []).length > 0);
+  const autoTemplate = (() => {
+    if (!autoTemplateMode) return null;
+    const groupKeyByOptionId = new Map<number, string>();
+    const selectedOptionIdByGroup = new Map<string, number>();
+    for (const group of activeModifierGroups) {
+      const options = Array.isArray(group.options) ? group.options : [];
+      for (const o of options) if (o.id != null) groupKeyByOptionId.set(Number(o.id), group.key);
+      const selectedValue = String(selectedModifiers[group.key] || "").trim();
+      const selected = options.find((o) => modifierOptionValue(o) === selectedValue);
+      if (selectedValue && selected?.id != null) selectedOptionIdByGroup.set(group.key, Number(selected.id));
+    }
+    let best: { template: ProductDesignTemplate; groups: number } | null = null;
+    for (const template of designTemplates) {
+      const tickedByGroup = new Map<string, Set<number>>();
+      for (const id of template.modifier_option_ids ?? []) {
+        // Options no longer on this product can never be picked, so their template cannot match.
+        const key = groupKeyByOptionId.get(Number(id)) ?? "\u0000missing";
+        tickedByGroup.set(key, (tickedByGroup.get(key) ?? new Set()).add(Number(id)));
+      }
+      if (tickedByGroup.size === 0) continue;
+      const matches = [...tickedByGroup].every(([key, ids]) => ids.has(selectedOptionIdByGroup.get(key) ?? -1));
+      if (matches && (!best || tickedByGroup.size > best.groups)) best = { template, groups: tickedByGroup.size };
+    }
+    return best?.template ?? designTemplates.find((t) => (t.modifier_option_ids ?? []).length === 0) ?? null;
+  })();
+  // Without a match or default, fall back to the template picker.
+  const flowTemplates = autoTemplate ? [autoTemplate] : designTemplates;
+
+  // A design made on one template doesn't fit another; start over when the chosen template changes.
+  const autoTemplateId = autoTemplate?.id ?? null;
+  const previousAutoTemplateIdRef = useRef(autoTemplateId);
+  useEffect(() => {
+    if (previousAutoTemplateIdRef.current === autoTemplateId) return;
+    previousAutoTemplateIdRef.current = autoTemplateId;
+    setJobDesigns({});
+  }, [autoTemplateId]);
+
   const openDesignFlow = (jobIndex: number) => {
+    // The template follows the customer's options, so they choose them first.
+    if (autoTemplateMode && missingRequiredModifiers.length > 0) {
+      showError(
+        "Choose your product options before starting your design",
+        missingRequiredModifiers.map((group) => `modifier:${group.key}`)
+      );
+      return;
+    }
     if (designTemplates.length === 0 && !skipDimensionsForPrice && !designPrintSize) {
       showError(
         "Enter width and height before starting your design",
@@ -2971,7 +3022,7 @@ function ProductDetailContent() {
           productId={productId}
           jobs={jobs}
           startIndex={Math.min(designFlowStart, jobs.length - 1)}
-          templates={designTemplates}
+          templates={flowTemplates}
           printSize={designTemplates.length > 0 ? null : designPrintSize}
           twoSided={twoSided}
           designs={jobDesigns}

@@ -15,6 +15,8 @@ export type DesignTemplateDraft = Partial<DesignTemplateUpload> & {
   uploading?: boolean;
   /** SVG key the row had when loaded from the server; a different key means an unsaved upload. */
   original_svg_storage_key?: string;
+  /** Modifier options the template is for; empty = the product's default template. */
+  modifier_option_ids?: number[];
 };
 
 const createDraftKey = () =>
@@ -65,19 +67,37 @@ export function designTemplatePayload(drafts: DesignTemplateDraft[]) {
     image_width_px: d.image_width_px,
     image_height_px: d.image_height_px,
     sort_order: index,
+    modifier_option_ids: d.modifier_option_ids ?? [],
   }));
 }
+
+/** The product's modifiers, offered as "use this template when…" options. */
+export type DesignTemplateModifierGroup = {
+  id: number;
+  name: string;
+  options: Array<{ id: number; label: string }>;
+};
 
 type Props = {
   drafts: DesignTemplateDraft[];
   onChange: (updater: (prev: DesignTemplateDraft[]) => DesignTemplateDraft[]) => void;
   showMsg: (type: "success" | "error", text: string) => void;
   inputClass: string;
+  modifierGroups: DesignTemplateModifierGroup[];
 };
 
-export default function DesignTemplatesSection({ drafts, onChange, showMsg, inputClass }: Props) {
+export default function DesignTemplatesSection({ drafts, onChange, showMsg, inputClass, modifierGroups }: Props) {
   const updateRow = (clientKey: string, patch: Partial<DesignTemplateDraft>) => {
     onChange((prev) => prev.map((row) => (row.client_key === clientKey ? { ...row, ...patch } : row)));
+  };
+
+  const toggleModifierOption = (row: DesignTemplateDraft, optionId: number) => {
+    const current = row.modifier_option_ids ?? [];
+    updateRow(row.client_key, {
+      modifier_option_ids: current.includes(optionId)
+        ? current.filter((id) => id !== optionId)
+        : [...current, optionId],
+    });
   };
 
   const addRow = () => {
@@ -126,6 +146,12 @@ export default function DesignTemplatesSection({ drafts, onChange, showMsg, inpu
           <p className="mt-1 text-xs text-slate-500">
             SVG or PNG templates customers open in the design editor. Files are saved as uploaded.
           </p>
+          {modifierGroups.length > 0 ? (
+            <p className="mt-1 text-xs text-slate-500">
+              Tick the options a template is for and it opens automatically when the customer picks them. A
+              template with nothing ticked is the default.
+            </p>
+          ) : null}
         </div>
         <button
           type="button"
@@ -191,6 +217,34 @@ export default function DesignTemplatesSection({ drafts, onChange, showMsg, inpu
                     <FiTrash2 size={17} aria-hidden />
                   </button>
                 </div>
+                {modifierGroups.length > 0 ? (
+                  <div className="mt-3 border-t border-slate-200 pt-3">
+                    <p className="mb-2 text-xs font-medium text-slate-600">
+                      Use this template when the customer picks
+                      {(row.modifier_option_ids ?? []).length === 0 ? (
+                        <span className="ml-1 font-normal text-slate-400">(nothing ticked: default template)</span>
+                      ) : null}
+                    </p>
+                    <div className="space-y-2">
+                      {modifierGroups.map((group) => (
+                        <div key={group.id} className="flex flex-wrap items-center gap-x-4 gap-y-1">
+                          <span className="min-w-[120px] text-xs font-semibold text-slate-700">{group.name}</span>
+                          {group.options.map((opt) => (
+                            <label key={opt.id} className="inline-flex cursor-pointer items-center gap-1.5 text-xs text-slate-700">
+                              <input
+                                type="checkbox"
+                                checked={(row.modifier_option_ids ?? []).includes(opt.id)}
+                                onChange={() => toggleModifierOption(row, opt.id)}
+                                className="h-3.5 w-3.5 accent-slate-900"
+                              />
+                              {opt.label}
+                            </label>
+                          ))}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ) : null}
               </div>
             );
           })}
