@@ -27,7 +27,13 @@ import {
   type TaxEstimateResponse,
 } from "../../../utils/api";
 import DesignFlowModal from "../../components/design/DesignFlowModal";
-import { printSizeKey, type JobDesign, type PrintSize } from "../../components/design/designCanvas";
+import {
+  isTwoSidedOption,
+  printSizeKey,
+  sideDesignKey,
+  type JobDesign,
+  type PrintSize,
+} from "../../components/design/designCanvas";
 import { isAuthenticated } from "../../../utils/roles";
 import { toUsStateCode } from "../../../utils/usState";
 import { SITE_TAB_TITLE, pageTitle } from "../../../utils/tabTitle";
@@ -404,6 +410,8 @@ function ProductDetailContent() {
   const removeJob = (id: string) => {
     setJobs((prev) => (prev.length <= 1 ? prev : prev.filter((j) => j.id !== id)));
     setJobDesignFor(id, null);
+    setJobDesignFor(sideDesignKey(id, 1), null);
+    setJobDesignFor(sideDesignKey(id, 2), null);
   };
 
   const setJobDesignFor = (jobId: string, design: JobDesign | null) => {
@@ -1130,6 +1138,27 @@ function ProductDetailContent() {
       return next;
     });
   }, [designSizeKey]);
+
+  /** A selected two-sided option (see isTwoSidedOption) gives every job a side 1 and a side 2 canvas. */
+  const twoSided = activeModifierGroups.some((group) => {
+    const selectedValue = String(selectedModifiers[group.key] || "").trim();
+    if (!selectedValue) return false;
+    const option = (Array.isArray(group.options) ? group.options : []).find(
+      (o) => modifierOptionValue(o) === selectedValue
+    );
+    return (
+      option != null &&
+      isTwoSidedOption(`${group.name || ""} ${group.key || ""}`, `${option.label || ""} ${option.value || ""}`)
+    );
+  });
+
+  // Designs made for one side don't fit two sides (and the reverse); start over when the choice changes.
+  const previousTwoSidedRef = useRef(twoSided);
+  useEffect(() => {
+    if (previousTwoSidedRef.current === twoSided) return;
+    previousTwoSidedRef.current = twoSided;
+    setJobDesigns({});
+  }, [twoSided]);
 
   const openDesignFlow = (jobIndex: number) => {
     if (designTemplates.length === 0 && !skipDimensionsForPrice && !designPrintSize) {
@@ -2152,7 +2181,7 @@ function ProductDetailContent() {
                           className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-blue-200 px-3 text-sm font-medium text-blue-600 transition-colors hover:border-blue-300 hover:bg-blue-50 hover:text-blue-800 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-400"
                         >
                           <FiPenTool size={14} aria-hidden />
-                          {jobDesign ? "Edit Design" : "Start Design"}
+                          {jobDesign || jobDesigns[sideDesignKey(job.id, 1)] ? "Edit Design" : "Start Design"}
                         </button>
                         {jobs.length > 1 ? (
                           <button
@@ -2944,6 +2973,7 @@ function ProductDetailContent() {
           startIndex={Math.min(designFlowStart, jobs.length - 1)}
           templates={designTemplates}
           printSize={designTemplates.length > 0 ? null : designPrintSize}
+          twoSided={twoSided}
           designs={jobDesigns}
           onDesignChange={setJobDesignFor}
           onClose={() => setDesignFlowStart(null)}

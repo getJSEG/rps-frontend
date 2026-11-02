@@ -25,9 +25,11 @@ import DesignEditor, { type DesignEditorExport } from "./DesignEditor";
 import {
   blankCanvasDataUrl,
   blankCanvasSize,
+  combineSideSvgs,
   isBlankCanvasTooLarge,
   isPdfDesign,
   printSizeKey,
+  sideDesignKey,
   type JobDesign,
   type PrintSize,
 } from "./designCanvas";
@@ -43,8 +45,11 @@ type Props = {
   templates: ProductDesignTemplate[];
   /** Job print size when the customer enters it; used for the blank canvas and shape checks. */
   printSize: PrintSize | null;
+  /** Each job gets a side 1 and a side 2 canvas; both are combined into one design file. */
+  twoSided: boolean;
+  /** Keyed by job id; two-sided jobs also keep each side under `sideDesignKey`. */
   designs: Record<string, JobDesign>;
-  onDesignChange: (jobId: string, design: JobDesign | null) => void;
+  onDesignChange: (designKey: string, design: JobDesign | null) => void;
   onClose: () => void;
   onAddToCart: () => void;
 };
@@ -55,8 +60,15 @@ const REVIEW_CHECKLIST = [
   "Images are sharp with no blurring",
 ];
 
+type Side = 1 | 2;
+
 function jobLabel(job: DesignFlowJob, index: number) {
   return job.jobName.trim() || `Artwork ${index + 1}`;
+}
+
+/** Where the design being edited is kept: the job id, or the side's key on two-sided jobs. */
+function designKeyFor(jobId: string, side: Side, twoSided: boolean) {
+  return twoSided ? sideDesignKey(jobId, side) : jobId;
 }
 
 function DesignPreview({ design, templateId, templates, className }: { design: JobDesign; templateId?: number | null; templates: ProductDesignTemplate[]; className?: string }) {
@@ -125,13 +137,18 @@ export default function DesignFlowModal({
   startIndex,
   templates,
   printSize,
+  twoSided,
   designs,
   onDesignChange,
   onClose,
   onAddToCart,
 }: Props) {
   const [index, setIndex] = useState(startIndex);
-  const [step, setStep] = useState<Step>(() => (designs[jobs[startIndex]?.id] ? "review" : "choose"));
+  const [side, setSide] = useState<Side>(1);
+  const [step, setStep] = useState<Step>(() => {
+    const first = jobs[startIndex];
+    return first && designs[designKeyFor(first.id, 1, twoSided)] ? "review" : "choose";
+  });
   const [templateId, setTemplateId] = useState<number | null>(templates[0]?.id ?? null);
   const [approveChecked, setApproveChecked] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -170,7 +187,7 @@ export default function DesignFlowModal({
   useEffect(() => () => clearUploadedImage(), []);
 
   const job = jobs[index];
-  const design = job ? designs[job.id] : undefined;
+  const design = job ? designs[designKeyFor(job.id, side, twoSided)] : undefined;
   const selectedTemplate = templates.find((t) => t.id === templateId) ?? null;
   // Very large custom sizes are too heavy for the browser editor; those jobs upload print-ready artwork instead.
   const tooLargeToCreate = templates.length === 0 && printSize != null && isBlankCanvasTooLarge(printSize);
@@ -184,7 +201,7 @@ export default function DesignFlowModal({
   useEffect(() => {
     setApproveChecked(false);
     setError(null);
-  }, [index, step]);
+  }, [index, step, side]);
 
   // Keep the editor on the template a previous design was made with.
   useEffect(() => {
@@ -199,7 +216,16 @@ export default function DesignFlowModal({
       return;
     }
     setIndex(nextIndex);
-    setStep(designs[jobs[nextIndex].id] ? "review" : "choose");
+    setSide(1);
+    setStep(designs[designKeyFor(jobs[nextIndex].id, 1, twoSided)] ? "review" : "choose");
+  };
+
+  /** Side 1 / Side 2 buttons on two-sided jobs. */
+  const goToSide = (nextSide: Side) => {
+    if (!job) return;
+    clearUploadedImage();
+    setSide(nextSide);
+    setStep(designs[designKeyFor(job.id, nextSide, twoSided)] ? "review" : "choose");
   };
 
   const saveDesign = async (fields: Omit<DesignUploadFields, "productId">) => {
@@ -213,7 +239,13 @@ export default function DesignFlowModal({
     const { design: saved } = design
       ? await designsAPI.replace(design.id, payload)
       : await designsAPI.create(payload);
-    onDesignChange(job.id, { ...saved, sizeKey });
+    if (twoSided) {
+      // The side's SVG is kept to build the combined file; a changed side makes the old combined file stale.
+      onDesignChange(sideDesignKey(job.id, side), { ...saved, sizeKey, svgFile: fields.file });
+      onDesignChange(job.id, null);
+    } else {
+      onDesignChange(job.id, { ...saved, sizeKey });
+    }
     setStep("review");
   };
 
@@ -225,6 +257,9 @@ export default function DesignFlowModal({
     setError(null);
     const isPdf = file.type === "application/pdf" || file.name.toLowerCase().endsWith(".pdf");
     try {
+      if (isPdf && twoSided) {
+        throw new Error("PDFs can't be used for two-sided designs. Please upload a PNG or JPG for each side.");
+      }
       if (isPdf) {
         // PDFs cannot be edited in the browser editor; save as-is and go to review.
         await saveDesign({ file, fileName: file.name, source: "uploaded" });
@@ -301,7 +336,8 @@ export default function DesignFlowModal({
   const handleClearArtwork = () => {
     setConfirmClearOpen(false);
     if (job) {
-      onDesignChange(job.id, null);
+      onDesignChange(designKeyFor(job.id, side, twoSided), null);
+      if (twoSided) onDesignChange(job.id, null);
     }
     clearUploadedImage();
     setStep("choose");
@@ -309,7 +345,29 @@ export default function DesignFlowModal({
 
   const handleSkip = () => {
     onDesignChange(job.id, null);
+    if (twoSided) {
+      onDesignChange(sideDesignKey(job.id, 1), null);
+      onDesignChange(sideDesignKey(job.id, 2), null);
+    }
     goToJob(index + 1);
+  };
+
+  /** Both sides approved: save them as one combined design, which is what goes to the cart. */
+  const saveCombinedDesign = async (side1: JobDesign, side2: JobDesign) => {
+    if (!side1.svgFile || !side2.svgFile) throw new Error("Please save both sides again.");
+    const file = await combineSideSvgs(side1.svgFile, side2.svgFile);
+    const { design: created } = await designsAPI.create({
+      file,
+      fileName: "design.svg",
+      source: "created",
+      productId,
+      templateId: null,
+      // Two canvases side by side: twice as wide as one side.
+      widthIn: printSize ? printSize.widthIn * 2 : null,
+      heightIn: printSize?.heightIn ?? null,
+    });
+    const { design: approved } = await designsAPI.approve(created.id);
+    onDesignChange(job.id, { ...approved, sizeKey });
   };
 
   const handleContinue = async () => {
@@ -318,8 +376,22 @@ export default function DesignFlowModal({
     setError(null);
     try {
       const { design: approved } = await designsAPI.approve(design.id);
-      onDesignChange(job.id, { ...approved, sizeKey: design.sizeKey });
-      goToJob(index + 1);
+      const approvedDesign: JobDesign = { ...approved, sizeKey: design.sizeKey, svgFile: design.svgFile };
+      onDesignChange(designKeyFor(job.id, side, twoSided), approvedDesign);
+      if (!twoSided) {
+        goToJob(index + 1);
+        return;
+      }
+      const side1 = side === 1 ? approvedDesign : designs[sideDesignKey(job.id, 1)];
+      const side2 = side === 2 ? approvedDesign : designs[sideDesignKey(job.id, 2)];
+      if (!side1?.approved) {
+        goToSide(1);
+      } else if (!side2?.approved) {
+        goToSide(2);
+      } else {
+        await saveCombinedDesign(side1, side2);
+        goToJob(index + 1);
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not approve the design.");
     } finally {
@@ -363,13 +435,13 @@ export default function DesignFlowModal({
     return (
       <div className="fixed inset-0 z-[200] bg-white">
         <DesignEditor
-          key={`${job.id}-${uploadedImage?.url ?? templateId ?? "blank"}`}
+          key={`${job.id}-${side}-${uploadedImage?.url ?? templateId ?? "blank"}`}
           source={editorSource}
           sourceSize={editorSourceSize!}
           initialImageLayer={initialImageLayerToPass} 
           startOnCrop={uploadedImage?.fresh === true && cropRatio != null}
           cropRatio={cropRatio}
-          jobLabel={jobLabel(job, index)}
+          jobLabel={twoSided ? `${jobLabel(job, index)} · Side ${side}` : jobLabel(job, index)}
           initialDesignState={uploadedImage ? uploadedImage.designState : reusableState}
           onBack={() => {
             const freshUpload = uploadedImage?.fresh === true;
@@ -408,7 +480,9 @@ export default function DesignFlowModal({
                 {step === "summary" ? "Your artwork" : job ? jobLabel(job, index) : "Artwork"}
               </p>
               <p className="text-xs text-gray-500">
-                {step === "summary" ? "Final step" : `Artwork ${index + 1} of ${jobs.length}`}
+                {step === "summary"
+                  ? "Final step"
+                  : `Artwork ${index + 1} of ${jobs.length}${twoSided ? ` · Side ${side} of 2` : ""}`}
               </p>
             </div>
           </div>
@@ -436,6 +510,29 @@ export default function DesignFlowModal({
 
         <div className="min-h-0 flex-1 overflow-y-auto p-6">
           {error ? <p className="mb-4 rounded-lg bg-rose-50 px-3 py-2 text-sm text-rose-700">{error}</p> : null}
+
+          {twoSided && job && step !== "summary" ? (
+            <div className="mb-5 flex justify-center gap-2" role="tablist" aria-label="Design side">
+              {([1, 2] as const).map((s) => (
+                <button
+                  key={s}
+                  type="button"
+                  role="tab"
+                  aria-selected={side === s}
+                  disabled={busy}
+                  onClick={() => goToSide(s)}
+                  className={`inline-flex h-10 items-center gap-1.5 rounded-lg border px-5 text-sm font-semibold transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-400 disabled:opacity-60 ${
+                    side === s
+                      ? "border-blue-600 bg-blue-600 text-white"
+                      : "border-gray-200 text-gray-700 hover:border-blue-500 hover:text-blue-600"
+                  }`}
+                >
+                  Side {s}
+                  {designs[sideDesignKey(job.id, s)]?.approved ? <FiCheck size={14} aria-label="approved" /> : null}
+                </button>
+              ))}
+            </div>
+          ) : null}
 
           {step === "choose" && job ? (
             <div className="mx-auto w-full max-w-2xl py-2">
@@ -471,7 +568,11 @@ export default function DesignFlowModal({
               <input
                 ref={fileInputRef}
                 type="file"
-                accept=".png,.jpg,.jpeg,.pdf,image/png,image/jpeg,application/pdf"
+                accept={
+                  twoSided
+                    ? ".png,.jpg,.jpeg,image/png,image/jpeg"
+                    : ".png,.jpg,.jpeg,.pdf,image/png,image/jpeg,application/pdf"
+                }
                 className="hidden"
                 onChange={(e) => void handleUpload(e)}
               />
@@ -489,7 +590,9 @@ export default function DesignFlowModal({
                     <span className="mt-3 text-sm font-semibold text-gray-900">
                       {busy ? "Uploading…" : "Upload from this device"}
                     </span>
-                    <span className="mt-1 text-xs text-gray-500">PNG, JPG or single-page PDF, up to 50MB</span>
+                    <span className="mt-1 text-xs text-gray-500">
+                      {twoSided ? "PNG or JPG, up to 50MB" : "PNG, JPG or single-page PDF, up to 50MB"}
+                    </span>
                   </button>
                 ) : null}
                 {canCreate ? (
@@ -540,7 +643,33 @@ export default function DesignFlowModal({
                 <span className="absolute left-3 top-3 z-99 rounded-full bg-white px-2.5 py-0.5 text-[11px] font-semibold uppercase tracking-wide text-gray-500 shadow-sm ring-1 ring-gray-200">
                   Preview
                 </span>
-                <DesignPreview design={design} templateId={templateId} templates={templates} />
+                {twoSided ? (
+                  // Both sides next to each other, as they are combined into one file.
+                  <div className="grid h-full w-full grid-cols-2 gap-3 pt-6">
+                    {([1, 2] as const).map((s) => {
+                      const sideDesign = designs[sideDesignKey(job.id, s)];
+                      return (
+                        <div
+                          key={s}
+                          className={`relative flex h-full min-h-0 flex-col items-center gap-1 rounded-lg p-1 ${
+                            s === side ? "ring-2 ring-blue-400" : ""
+                          }`}
+                        >
+                          <span className="text-[11px] font-semibold uppercase tracking-wide text-gray-500">Side {s}</span>
+                          <div className="relative min-h-0 w-full flex-1">
+                            {sideDesign ? (
+                              <DesignPreview design={sideDesign} templateId={sideDesign.templateId} templates={templates} />
+                            ) : (
+                              <span className="flex h-full items-center justify-center text-xs text-gray-400">Not designed yet</span>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                ) : (
+                  <DesignPreview design={design} templateId={templateId} templates={templates} />
+                )}
               </div>
 
               <div className="flex flex-col">
@@ -578,7 +707,11 @@ export default function DesignFlowModal({
                     onClick={() => void handleContinue()}
                     className="inline-flex h-11 w-full items-center justify-center gap-1.5 rounded-lg bg-blue-600 px-4 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-blue-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-400 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
                   >
-                    {busy ? "Saving…" : "Continue"}
+                    {busy
+                      ? "Saving…"
+                      : twoSided && !designs[sideDesignKey(job.id, side === 1 ? 2 : 1)]?.approved
+                        ? `Continue to Side ${side === 1 ? 2 : 1}`
+                        : "Continue"}
                     {busy ? null : <FiArrowRight size={16} aria-hidden />}
                   </button>
                   <button
@@ -655,6 +788,8 @@ export default function DesignFlowModal({
                 {jobs.map((j, i) => {
                   const d = designs[j.id];
                   const ready = d?.approved;
+                  // Two-sided job with sides started but not yet combined.
+                  const started = twoSided && designs[sideDesignKey(j.id, 1)] != null;
                   return (
                     <li
                       key={j.id}
@@ -678,9 +813,9 @@ export default function DesignFlowModal({
                               <FiCheck size={12} aria-hidden />
                               Design approved
                             </span>
-                          ) : d ? (
+                          ) : d || started ? (
                             <span className="rounded-full bg-amber-50 px-2 py-0.5 font-semibold text-amber-700">
-                              Not approved yet
+                              {twoSided ? "Approve both sides" : "Not approved yet"}
                             </span>
                           ) : (
                             <span className="inline-flex items-center gap-1 rounded-full bg-gray-100 px-2 py-0.5 font-semibold text-gray-600">
@@ -694,7 +829,8 @@ export default function DesignFlowModal({
                         type="button"
                         onClick={() => {
                           setIndex(i);
-                          setStep(d ? "review" : "choose");
+                          setSide(1);
+                          setStep(designs[designKeyFor(j.id, 1, twoSided)] ? "review" : "choose");
                         }}
                         className="inline-flex h-9 shrink-0 items-center gap-1.5 rounded-lg border border-blue-500 px-3 text-sm font-semibold text-blue-600 transition-colors hover:bg-blue-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-400"
                       >
