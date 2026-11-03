@@ -28,6 +28,7 @@ import {
 } from "../../../utils/api";
 import DesignFlowModal from "../../components/design/DesignFlowModal";
 import {
+  isSidesModifier,
   isTwoSidedOption,
   printSizeKey,
   sideDesignKey,
@@ -1165,12 +1166,24 @@ function ProductDetailContent() {
    * customer's choices (per modifier, any ticked option), else the one with nothing ticked (the default).
    * Products without linked templates keep the template picker.
    */
-  const autoTemplateMode = designTemplates.some((t) => (t.modifier_option_ids ?? []).length > 0);
+  // Sides never pick a template (2 sides gives two canvases by itself); sides options a template may still have
+  // ticked are ignored.
+  const sidesOptionIds = new Set<number>(
+    activeModifierGroups
+      .filter((group) => isSidesModifier(group))
+      .flatMap((group) => (Array.isArray(group.options) ? group.options : []))
+      .filter((o) => o.id != null)
+      .map((o) => Number(o.id))
+  );
+  const templateOptionIds = (t: ProductDesignTemplate) =>
+    (t.modifier_option_ids ?? []).filter((id) => !sidesOptionIds.has(Number(id)));
+  const autoTemplateMode = designTemplates.some((t) => templateOptionIds(t).length > 0);
   const autoTemplate = (() => {
     if (!autoTemplateMode) return null;
     const groupKeyByOptionId = new Map<number, string>();
     const selectedOptionIdByGroup = new Map<string, number>();
     for (const group of activeModifierGroups) {
+      if (isSidesModifier(group)) continue;
       const options = Array.isArray(group.options) ? group.options : [];
       for (const o of options) if (o.id != null) groupKeyByOptionId.set(Number(o.id), group.key);
       const selectedValue = String(selectedModifiers[group.key] || "").trim();
@@ -1180,7 +1193,7 @@ function ProductDetailContent() {
     let best: { template: ProductDesignTemplate; groups: number } | null = null;
     for (const template of designTemplates) {
       const tickedByGroup = new Map<string, Set<number>>();
-      for (const id of template.modifier_option_ids ?? []) {
+      for (const id of templateOptionIds(template)) {
         // Options no longer on this product can never be picked, so their template cannot match.
         const key = groupKeyByOptionId.get(Number(id)) ?? "\u0000missing";
         tickedByGroup.set(key, (tickedByGroup.get(key) ?? new Set()).add(Number(id)));
@@ -1189,7 +1202,7 @@ function ProductDetailContent() {
       const matches = [...tickedByGroup].every(([key, ids]) => ids.has(selectedOptionIdByGroup.get(key) ?? -1));
       if (matches && (!best || tickedByGroup.size > best.groups)) best = { template, groups: tickedByGroup.size };
     }
-    return best?.template ?? designTemplates.find((t) => (t.modifier_option_ids ?? []).length === 0) ?? null;
+    return best?.template ?? designTemplates.find((t) => templateOptionIds(t).length === 0) ?? null;
   })();
   // Without a match or default, fall back to the template picker.
   const flowTemplates = autoTemplate ? [autoTemplate] : designTemplates;

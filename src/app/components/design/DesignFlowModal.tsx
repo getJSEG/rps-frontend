@@ -66,6 +66,15 @@ function jobLabel(job: DesignFlowJob, index: number) {
   return job.jobName.trim() || `Artwork ${index + 1}`;
 }
 
+/**
+ * Template image through the API. The server lets browsers cache it, so the file's key is added: a replaced
+ * template file gets a new URL instead of showing the old cached image.
+ */
+function templateImageUrl(template: ProductDesignTemplate) {
+  const version = encodeURIComponent(template.image_storage_key || template.image_url || "");
+  return `${getBackendBaseUrl()}/api/products/design-templates/${template.id}/image?v=${version}`;
+}
+
 /** Where the design being edited is kept: the job id, or the side's key on two-sided jobs. */
 function designKeyFor(jobId: string, side: Side, twoSided: boolean) {
   return twoSided ? sideDesignKey(jobId, side) : jobId;
@@ -97,7 +106,7 @@ function DesignPreview({ design, templateId, templates, className }: { design: J
       {template && (
         // eslint-disable-next-line @next/next/no-img-element
         <img
-          src={`${getBackendBaseUrl()}/api/products/design-templates/${template.id}/image`}
+          src={templateImageUrl(template)}
           alt="Template Guide"
           className="absolute max-h-full max-w-full object-contain z-10 pointer-events-none"
         />
@@ -258,7 +267,7 @@ export default function DesignFlowModal({
     const isPdf = file.type === "application/pdf" || file.name.toLowerCase().endsWith(".pdf");
     try {
       if (isPdf && twoSided) {
-        throw new Error("PDFs can't be used for two-sided designs. Please upload a PNG or JPG for each side.");
+        throw new Error("PDFs can't be used for two-sided designs. Please upload a PNG, JPG or SVG for each side.");
       }
       if (isPdf) {
         // PDFs cannot be edited in the browser editor; save as-is and go to review.
@@ -283,7 +292,7 @@ export default function DesignFlowModal({
     const size = await new Promise<{ width: number; height: number }>((resolve, reject) => {
       const img = new Image();
       img.onload = () => resolve({ width: img.naturalWidth, height: img.naturalHeight });
-      img.onerror = () => reject(new Error("Could not read this image. Use a PNG or JPG file."));
+      img.onerror = () => reject(new Error("Could not read this image. Use a PNG, JPG or SVG file."));
       img.src = url;
     }).catch((err) => {
       URL.revokeObjectURL(url);
@@ -400,7 +409,7 @@ export default function DesignFlowModal({
   };
 
   const baseTemplateUrl = selectedTemplate?.id != null
-    ? `${getBackendBaseUrl()}/api/products/design-templates/${selectedTemplate.id}/image`
+    ? templateImageUrl(selectedTemplate)
     : blankSource;
 
   // We explicitly preserve the template as the canvas source frame, defaulting to user's uploaded image if no templates/blanks exist
@@ -442,6 +451,7 @@ export default function DesignFlowModal({
           startOnCrop={uploadedImage?.fresh === true && cropRatio != null}
           cropRatio={cropRatio}
           jobLabel={twoSided ? `${jobLabel(job, index)} · Side ${side}` : jobLabel(job, index)}
+          sideLabel={twoSided ? `Side ${side} of 2` : undefined}
           initialDesignState={uploadedImage ? uploadedImage.designState : reusableState}
           onBack={() => {
             const freshUpload = uploadedImage?.fresh === true;
@@ -512,25 +522,49 @@ export default function DesignFlowModal({
           {error ? <p className="mb-4 rounded-lg bg-rose-50 px-3 py-2 text-sm text-rose-700">{error}</p> : null}
 
           {twoSided && job && step !== "summary" ? (
-            <div className="mb-5 flex justify-center gap-2" role="tablist" aria-label="Design side">
-              {([1, 2] as const).map((s) => (
-                <button
-                  key={s}
-                  type="button"
-                  role="tab"
-                  aria-selected={side === s}
-                  disabled={busy}
-                  onClick={() => goToSide(s)}
-                  className={`inline-flex h-10 items-center gap-1.5 rounded-lg border px-5 text-sm font-semibold transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-400 disabled:opacity-60 ${
-                    side === s
-                      ? "border-blue-600 bg-blue-600 text-white"
-                      : "border-gray-200 text-gray-700 hover:border-blue-500 hover:text-blue-600"
-                  }`}
-                >
-                  Side {s}
-                  {designs[sideDesignKey(job.id, s)]?.approved ? <FiCheck size={14} aria-label="approved" /> : null}
-                </button>
-              ))}
+            <div className="mb-6 flex justify-center">
+              <div className="inline-flex gap-1 rounded-xl bg-gray-100 p-1" role="tablist" aria-label="Design side">
+                {([1, 2] as const).map((s) => {
+                  const sideDesign = designs[sideDesignKey(job.id, s)];
+                  const active = side === s;
+                  const status = sideDesign?.approved ? "Approved" : sideDesign ? "Added" : "Not started";
+                  return (
+                    <button
+                      key={s}
+                      type="button"
+                      role="tab"
+                      aria-selected={active}
+                      disabled={busy}
+                      onClick={() => goToSide(s)}
+                      className={`flex min-w-[150px] items-center gap-2.5 rounded-lg px-4 py-2 text-left transition focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-400 disabled:opacity-60 ${
+                        active ? "bg-white shadow-sm ring-1 ring-gray-200" : "hover:bg-white/60"
+                      }`}
+                    >
+                      <span
+                        className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-xs font-bold ${
+                          sideDesign?.approved
+                            ? "bg-emerald-500 text-white"
+                            : active
+                              ? "bg-blue-600 text-white"
+                              : "bg-white text-gray-500 ring-1 ring-gray-300"
+                        }`}
+                      >
+                        {sideDesign?.approved ? <FiCheck size={14} aria-hidden /> : s}
+                      </span>
+                      <span className="flex flex-col leading-tight">
+                        <span className={`text-sm font-semibold ${active ? "text-gray-900" : "text-gray-600"}`}>Side {s}</span>
+                        <span
+                          className={`text-[11px] ${
+                            sideDesign?.approved ? "text-emerald-600" : sideDesign ? "text-blue-600" : "text-gray-400"
+                          }`}
+                        >
+                          {status}
+                        </span>
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
             </div>
           ) : null}
 
@@ -570,8 +604,8 @@ export default function DesignFlowModal({
                 type="file"
                 accept={
                   twoSided
-                    ? ".png,.jpg,.jpeg,image/png,image/jpeg"
-                    : ".png,.jpg,.jpeg,.pdf,image/png,image/jpeg,application/pdf"
+                    ? ".png,.jpg,.jpeg,.svg,image/png,image/jpeg,image/svg+xml"
+                    : ".png,.jpg,.jpeg,.svg,.pdf,image/png,image/jpeg,image/svg+xml,application/pdf"
                 }
                 className="hidden"
                 onChange={(e) => void handleUpload(e)}
@@ -591,7 +625,7 @@ export default function DesignFlowModal({
                       {busy ? "Uploading…" : "Upload from this device"}
                     </span>
                     <span className="mt-1 text-xs text-gray-500">
-                      {twoSided ? "PNG or JPG, up to 50MB" : "PNG, JPG or single-page PDF, up to 50MB"}
+                      {twoSided ? "PNG, JPG or SVG, up to 50MB" : "PNG, JPG, SVG or single-page PDF, up to 50MB"}
                     </span>
                   </button>
                 ) : null}
@@ -832,10 +866,14 @@ export default function DesignFlowModal({
                           setSide(1);
                           setStep(designs[designKeyFor(j.id, 1, twoSided)] ? "review" : "choose");
                         }}
-                        className="inline-flex h-9 shrink-0 items-center gap-1.5 rounded-lg border border-blue-500 px-3 text-sm font-semibold text-blue-600 transition-colors hover:bg-blue-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-400"
+                        className={`inline-flex h-10 shrink-0 items-center gap-2 rounded-full px-4 text-sm font-semibold transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-400 focus-visible:ring-offset-1 ${
+                          d
+                            ? "bg-blue-50 text-blue-700 hover:bg-blue-100"
+                            : "bg-blue-600 text-white shadow-sm hover:bg-blue-700"
+                        }`}
                       >
-                        {d ? <FiPenTool size={14} aria-hidden /> : <FiUploadCloud size={14} aria-hidden />}
-                        {d ? "Edit" : "Add design"}
+                        {d ? <FiPenTool size={15} aria-hidden /> : <FiUploadCloud size={15} aria-hidden />}
+                        {d ? "Edit design" : "Add design"}
                       </button>
                     </li>
                   );

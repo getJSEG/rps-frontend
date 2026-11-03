@@ -1436,6 +1436,8 @@ export default function App(props) {
           </div>
 
           <div className="flex items-center gap-2">
+            {/* Two-sided jobs: which side is being edited. */}
+            {props.sideLabel ? <span className="px-3 py-1 rounded-full bg-blue-50 text-blue-700 text-[11px] font-semibold border border-blue-200">{props.sideLabel}</span> : null}
             <button onClick={props.onBack} className="flex items-center gap-1.5 px-4 py-1.5 bg-white hover:bg-slate-50 text-slate-700 text-[11px] font-semibold rounded border border-slate-200 shadow-sm transition-colors">Back</button>
             <button onClick={() => handleExportSVG(true)} disabled={isExporting} className="flex items-center gap-1.5 px-4 py-1.5 bg-blue-600 hover:bg-blue-700 disabled:opacity-60 text-white text-[11px] font-semibold rounded shadow-sm transition-colors">{isExporting ? 'Saving…' : 'Save & Next'}</button>
           </div>
