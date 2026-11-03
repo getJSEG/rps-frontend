@@ -25,6 +25,7 @@ import DesignTemplatesSection, {
   type DesignTemplateDraft,
   type DesignTemplateModifierGroup,
 } from "./DesignTemplatesSection";
+import { isSidesModifier } from "../../components/design/designCanvas";
 
 type Tab = "products" | "categories" | "subcategories";
 
@@ -1488,8 +1489,12 @@ export default function AdminProductsPage() {
     ) return false;
     return true;
   });
-  /** The product's modifiers and their enabled options, for linking design templates to options. */
+  /**
+   * The product's modifiers and their enabled options, for linking design templates to options. Sides modifiers
+   * are left out: 2 sides gives the customer two canvases by itself and does not pick a template.
+   */
   const designTemplateModifierGroups: DesignTemplateModifierGroup[] = assignedModifierGroups
+    .filter((group) => !isSidesModifier(group))
     .map((group) => {
       const enabledIds = new Set(
         (prodModifierAssignments[group.key]?.options ?? []).map((o) => Number(o.option_id)).filter((id) => id > 0)
