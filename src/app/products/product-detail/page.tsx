@@ -15,6 +15,7 @@ import {
   addressesAPI,
   shippingRatesAPI,
   effectiveOrderShipping,
+  orderQualifiesForFreeShipping,
   fedexDeliveryEstimateWithProduction,
   productionTimeBusinessDaysForQuantity,
   buildFedexPackagesForProductConfigure,
@@ -1311,6 +1312,17 @@ function ProductDetailContent() {
     freeShippingPolicy.freeShippingEnabled &&
     effectiveShippingPdp === 0 &&
     (freeShippingPolicy.freeShippingThreshold <= 0 || subtotal >= freeShippingPolicy.freeShippingThreshold);
+  /** Free-shipping orders ship with the FedEx service that costs the shop least; the customer does not choose. */
+  const freeShippingAppliesPdp = orderQualifiesForFreeShipping(subtotal, freeShippingPolicy, false);
+  useEffect(() => {
+    if (!freeShippingAppliesPdp || fedexRates.length === 0) return;
+    const shopCost = (r: (typeof fedexRates)[number]) => Number(r.originalCharge ?? r.totalCharge) || 0;
+    const cheapest = [...fedexRates].sort((a, b) => shopCost(a) - shopCost(b))[0];
+    if (cheapest && cheapest.serviceType !== selectedFedexServiceType) {
+      setSelectedFedexServiceType(cheapest.serviceType);
+      setFedexServiceMenuOpen(false);
+    }
+  }, [freeShippingAppliesPdp, fedexRates, selectedFedexServiceType]);
   const activeTaxPercentage = Number(taxEstimate?.taxPercentage ?? 0);
   const taxAmount = Number(taxEstimate?.tax ?? 0);
   const totalWithTax = Number(taxEstimate?.total ?? subtotal + effectiveShippingPdp + taxAmount);
@@ -2469,9 +2481,11 @@ function ProductDetailContent() {
                     <div className="flex flex-wrap items-end gap-4">
                       <div className="min-w-0 flex-1">
                         <label htmlFor="pdp-fedex-service" className="mb-1 block text-sm font-medium text-gray-700">
-                            Shipping service
+                            {freeShippingAppliesPdp ? "Shipping" : "Shipping service"}
                         </label>
-                        {fedexRates.length > 0 ? (
+                        {fedexRates.length > 0 && freeShippingAppliesPdp ? (
+                          <p className="py-2 text-sm text-emerald-700">This order qualifies for free shipping.</p>
+                        ) : fedexRates.length > 0 ? (
                           <div className="relative">
                             <button
                               id="pdp-fedex-service"
@@ -2514,8 +2528,13 @@ function ProductDetailContent() {
                                           <span className="block truncate text-xs text-gray-500">{shippingTierHint(r)}</span>
                                         ) : null}
                                       </span>
-                                      <span className="shrink-0 text-xs font-medium tabular-nums">
-                                        ${Number(r.totalCharge || 0).toFixed(2)}
+                                      <span className="shrink-0 text-right text-xs font-medium tabular-nums">
+                                        {Number(r.originalCharge) > Number(r.totalCharge || 0) ? (
+                                          <span className="block text-gray-400 line-through">
+                                            ${Number(r.originalCharge).toFixed(2)}
+                                          </span>
+                                        ) : null}
+                                        <span className="block">${Number(r.totalCharge || 0).toFixed(2)}</span>
                                       </span>
                                     </button>
                                   );
@@ -2543,6 +2562,8 @@ function ProductDetailContent() {
                                 <span className="pdp-fedex-rates-indeterminate-bar" />
                               </span>
                             </span>
+                          ) : selectedFedexRatePdp && freeShippingAppliesPdp ? (
+                            <span className="text-emerald-700">Free</span>
                           ) : selectedFedexRatePdp ? (
                             `$${Number(selectedFedexRatePdp.totalCharge).toFixed(2)}`
                           ) : (

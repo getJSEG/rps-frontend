@@ -17,7 +17,6 @@ import {
   perLineMergedShippingAllocations,
   cartHasShippingQuotePending,
   cartLineFedexQuotedAmount,
-  type ShippingMethod,
   type ShippingRates,
   type FreeShippingPolicy,
   type CartSummary,
@@ -210,7 +209,6 @@ export default function CartPage() {
   const [loading, setLoading] = useState(true);
   const [orderSummary, setOrderSummary] = useState<CartSummary | null>(null);
   const [shippingRates, setShippingRates] = useState<ShippingRates | null>(null);
-  const [shippingMethods, setShippingMethods] = useState<ShippingMethod[]>([]);
   const [freeShippingPolicy, setFreeShippingPolicy] = useState<FreeShippingPolicy>({
     freeShippingEnabled: false,
     freeShippingThreshold: 0,
@@ -272,7 +270,6 @@ export default function CartPage() {
         const res = await shippingRatesAPI.get();
         if (!c && res?.rates) setShippingRates(res.rates);
         if (!c) {
-          setShippingMethods(Array.isArray(res?.methods) ? res.methods : []);
           setFreeShippingPolicy({
             freeShippingEnabled: !!res?.freeShippingEnabled,
             freeShippingThreshold: Math.max(0, Number(res?.freeShippingThreshold) || 0),
@@ -329,7 +326,6 @@ export default function CartPage() {
       const globalFree = orderQualifiesForFreeShipping(subAll, freeShippingPolicy, shipMode === "store_pickup");
       const allocMap = perLineMergedShippingAllocations(
         nextItems,
-        shippingMethods,
         shippingRates,
         shipMode === "store_pickup"
       );
@@ -390,13 +386,11 @@ export default function CartPage() {
   const storePickupOrder = cartShippingMode === "store_pickup";
   const stackedShippingSum = stackedShippingFromCartItems(
     cartItems,
-    shippingMethods,
     shippingRates,
     storePickupOrder
   );
   const mergedShippingSum = mergedShippingFromCartItems(
     cartItems,
-    shippingMethods,
     shippingRates,
     storePickupOrder
   );
@@ -418,7 +412,6 @@ export default function CartPage() {
     stackedShippingSum > mergedShippingSum + 0.005;
   const lineAllocations = perLineMergedShippingAllocations(
     cartItems,
-    shippingMethods,
     shippingRates,
     storePickupOrder
   );

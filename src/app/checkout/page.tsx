@@ -25,7 +25,6 @@ import {
   buildFedexPackagesFromShippableCartItems,
   shippingTierHint,
   type FedexRateQuote,
-  type ShippingMethod,
   type ShippingRates,
   type FreeShippingPolicy,
   type CartSummary,
@@ -359,7 +358,6 @@ export default function CheckoutPage() {
   const [guestSaveError, setGuestSaveError] = useState<string | null>(null);
   const [savingAddress, setSavingAddress] = useState(false);
   const [shippingRates, setShippingRates] = useState<ShippingRates | null>(null);
-  const [shippingMethods, setShippingMethods] = useState<ShippingMethod[]>([]);
   const [freeShippingPolicy, setFreeShippingPolicy] = useState<FreeShippingPolicy>({
     freeShippingEnabled: false,
     freeShippingThreshold: 0,
@@ -468,7 +466,6 @@ export default function CheckoutPage() {
         const res = await shippingRatesAPI.get();
         if (!c && res?.rates) setShippingRates(res.rates);
         if (!c) {
-          setShippingMethods(Array.isArray(res?.methods) ? res.methods : []);
           setFreeShippingPolicy({
             freeShippingEnabled: !!res?.freeShippingEnabled,
             freeShippingThreshold: Math.max(0, Number(res?.freeShippingThreshold) || 0),
@@ -627,7 +624,7 @@ export default function CheckoutPage() {
     : roundMoney2(Math.max(0, (orderSummary?.subtotal ?? subtotal) - couponDiscount));
   const displaySubtotal = roundMoney2(productSubtotal + couponDiscount);
   const shipping = effectiveOrderShipping(
-    mergedShippingFromCartItems(cartItems, shippingMethods, shippingRates, storePickupOrder),
+    mergedShippingFromCartItems(cartItems, shippingRates, storePickupOrder),
     productSubtotal,
     freeShippingPolicy,
     storePickupOrder
@@ -641,6 +638,17 @@ export default function CheckoutPage() {
     !cartShippableLinesAllFedexQuoted(cartItems);
   const selectedFedexRate =
     fedexRates.find((r) => r.serviceType === selectedFedexServiceType) || null;
+  /** Free-shipping orders ship with the FedEx service that costs the shop least; the customer does not choose. */
+  const freeShippingApplies = orderQualifiesForFreeShipping(productSubtotal, freeShippingPolicy, storePickupOrder);
+  useEffect(() => {
+    if (!freeShippingApplies || fedexRates.length === 0) return;
+    const shopCost = (r: (typeof fedexRates)[number]) => Number(r.originalCharge ?? r.totalCharge) || 0;
+    const cheapest = [...fedexRates].sort((a, b) => shopCost(a) - shopCost(b))[0];
+    if (cheapest && cheapest.serviceType !== selectedFedexServiceType) {
+      setSelectedFedexServiceType(cheapest.serviceType);
+      setFedexServiceMenuOpen(false);
+    }
+  }, [freeShippingApplies, fedexRates, selectedFedexServiceType]);
   const guestEmailOk = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(guestEmail.trim());
   const guestAddressOk =
     !!billingForm.streetAddress.trim() &&
@@ -1531,7 +1539,9 @@ export default function CheckoutPage() {
                   {checkoutRequiresFedexQuote && (
                     <div className="rounded-md border border-gray-200 bg-gray-50 p-3 text-sm">
                       <div className="mb-2 flex items-center justify-between gap-2">
-                        <span className="font-medium text-gray-700">Shipping Service</span>
+                        <span className="font-medium text-gray-700">
+                          {freeShippingApplies ? "Shipping" : "Shipping Service"}
+                        </span>
                         {fedexRatesLoading ? (
                           <span className="w-20 shrink-0" aria-hidden>
                             <span className="sr-only">Loading shipping services</span>
@@ -1544,7 +1554,9 @@ export default function CheckoutPage() {
                       {fedexRatesError ? (
                         <p className="mb-2 text-xs text-rose-600">{fedexRatesError}</p>
                       ) : null}
-                      {fedexRates.length > 0 ? (
+                      {fedexRates.length > 0 && freeShippingApplies ? (
+                        <p className="text-sm text-emerald-700">Your order qualifies for free shipping.</p>
+                      ) : fedexRates.length > 0 ? (
                         <div className="relative">
                           <button
                             type="button"
@@ -1600,8 +1612,13 @@ export default function CheckoutPage() {
                                         </span>
                                       </span>
                                     ) : (
-                                      <span className="shrink-0 text-xs font-medium tabular-nums">
-                                        ${Number(r.totalCharge || 0).toFixed(2)}
+                                      <span className="shrink-0 text-right text-xs font-medium tabular-nums">
+                                        {Number(r.originalCharge) > Number(r.totalCharge || 0) ? (
+                                          <span className="block text-gray-400 line-through">
+                                            ${Number(r.originalCharge).toFixed(2)}
+                                          </span>
+                                        ) : null}
+                                        <span className="block">${Number(r.totalCharge || 0).toFixed(2)}</span>
                                       </span>
                                     )}
                                   </button>

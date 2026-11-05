@@ -155,24 +155,20 @@ export type HelpCategory = {
   faqs: HelpFaq[];
 };
 
+/** Site-wide % off shipping for each tier, set in Admin → Shipping Discounts. */
+export type ShippingTierDiscounts = { economy: number; standard: number; express: number };
+
 export type ShippingRatesResponse = {
   rates: ShippingRates;
-  methods?: ShippingMethod[];
   freeShippingEnabled?: boolean;
   freeShippingThreshold?: number;
+  tierDiscounts?: ShippingTierDiscounts;
 };
 
 export type ShippingRatesAdminPayload = ShippingRates & {
   freeShippingEnabled?: boolean;
   freeShippingThreshold?: number;
-};
-
-export type ShippingMethod = {
-  id: number;
-  name: string;
-  price: number;
-  is_active?: boolean;
-  sort_order?: number;
+  tierDiscounts?: Partial<ShippingTierDiscounts>;
 };
 
 export type ShippingBox = {
@@ -517,6 +513,9 @@ export type FedexRateQuote = {
   tier?: ShippingTier;
   /** FedEx's own service name behind the tier, e.g. "FedEx Home Delivery®". */
   carrierServiceName?: string;
+  /** FedEx price before the admin's tier discount; set only when a discount applies. */
+  originalCharge?: number;
+  discountPercent?: number;
 };
 
 const SHIPPING_TIER_HINTS: Record<ShippingTier, string> = {
@@ -769,18 +768,6 @@ export function shippingAmountForService(
   if (s === "express") return Number(r.express) || 0;
   if (s === "overnight") return Number(r.overnight) || 0;
   return 0;
-}
-
-export function shippingAmountForMethod(
-  methods: ShippingMethod[] | null | undefined,
-  serviceLabel: string | undefined,
-  fallbackRates?: ShippingRates | null
-): number {
-  const label = String(serviceLabel || "").trim().toLowerCase();
-  const list = Array.isArray(methods) ? methods : [];
-  const matched = list.find((m) => String(m?.name || "").trim().toLowerCase() === label);
-  if (matched) return Number(matched.price) || 0;
-  return shippingAmountForService(fallbackRates, serviceLabel);
 }
 
 function roundMoney2Client(n: number): number {
@@ -1378,7 +1365,6 @@ export function buildFedexPackagesForProductConfigure(options: {
 /** Sum of list shipping if each line were charged separately (non-pickup lines only). */
 export function stackedShippingFromCartItems(
   items: CartLineShippingInput[],
-  methods: ShippingMethod[] | null | undefined,
   rates: ShippingRates | null | undefined,
   storePickupOrder: boolean
 ): number {
@@ -1393,7 +1379,7 @@ export function stackedShippingFromCartItems(
       sum += amt != null ? amt : 0;
       continue;
     }
-    sum += shippingAmountForMethod(methods, it.shippingService ?? it.shipping_service, rates);
+    sum += shippingAmountForService(rates, it.shippingService ?? it.shipping_service);
   }
   return roundMoney2Client(sum);
 }
@@ -1401,7 +1387,6 @@ export function stackedShippingFromCartItems(
 /** One charge per distinct shipping method among shippable lines (Scenario 1 & 2). */
 export function mergedShippingFromCartItems(
   items: CartLineShippingInput[],
-  methods: ShippingMethod[] | null | undefined,
   rates: ShippingRates | null | undefined,
   storePickupOrder: boolean
 ): number {
@@ -1419,7 +1404,7 @@ export function mergedShippingFromCartItems(
       sum += amt != null ? amt : 0;
       continue;
     }
-    sum += shippingAmountForMethod(methods, it.shippingService ?? it.shipping_service, rates);
+    sum += shippingAmountForService(rates, it.shippingService ?? it.shipping_service);
   }
   return roundMoney2Client(sum);
 }
@@ -1427,7 +1412,6 @@ export function mergedShippingFromCartItems(
 /** Per line: full list price for that method, and this line's share when the method is shared (for UI). */
 export function perLineMergedShippingAllocations(
   items: CartLineShippingInput[],
-  methods: ShippingMethod[] | null | undefined,
   rates: ShippingRates | null | undefined,
   storePickupOrder: boolean
 ): Map<string, { rawLine: number; mergedShare: number }> {
@@ -1464,11 +1448,7 @@ export function perLineMergedShippingAllocations(
       const amt = cartLineFedexQuotedAmount(rep);
       linePrice = amt != null ? amt : 0;
     } else {
-      linePrice = shippingAmountForMethod(
-        methods,
-        rep.shippingService ?? rep.shipping_service,
-        rates
-      );
+      linePrice = shippingAmountForService(rates, rep.shippingService ?? rep.shipping_service);
     }
     const n = group.length;
     const totalCents = Math.round(linePrice * 100);
@@ -2145,14 +2125,6 @@ export const shippingRatesAPI = {
   get: async (): Promise<ShippingRatesResponse> => apiCall('/shipping-rates'),
   update: async (payload: ShippingRatesAdminPayload) =>
     apiCall('/shipping-rates', { method: 'PUT', body: JSON.stringify(payload) }),
-  getAdminMethods: async (): Promise<{ methods: ShippingMethod[] }> => apiCall('/shipping-rates/admin'),
-  createAdminMethod: async (data: { name: string; price: number; isActive?: boolean }) =>
-    apiCall('/shipping-rates/admin', { method: 'POST', body: JSON.stringify(data) }),
-  updateAdminMethod: async (
-    id: number | string,
-    data: { name?: string; price?: number; isActive?: boolean }
-  ) => apiCall(`/shipping-rates/admin/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
-  deleteAdminMethod: async (id: number | string) => apiCall(`/shipping-rates/admin/${id}`, { method: 'DELETE' }),
 };
 
 export const appSettingsAPI = {
