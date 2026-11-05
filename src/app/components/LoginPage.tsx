@@ -5,12 +5,20 @@ import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { toast } from "react-toastify";
 import { authAPI } from "../../utils/api";
+import { getUserRole } from "../../utils/roles";
 
 /** Only same-site paths are allowed after login, never another site or the login page itself. */
 export function safeNextPath(raw: string | null | undefined): string | null {
   const next = String(raw ?? "").trim();
   if (!next.startsWith("/") || next.startsWith("//") || next.startsWith("/login")) return null;
   return next;
+}
+
+/** Admins land on reports unless they were sent here from an admin page; everyone else returns where they were. */
+function postLoginPath(nextPath: string | null, role: unknown): string {
+  const isAdmin = String(role || "").toLowerCase() === "admin";
+  if (isAdmin) return nextPath?.startsWith("/admin") ? nextPath : "/admin/reports";
+  return nextPath ?? "/";
 }
 
 export default function LoginPage() {
@@ -26,7 +34,7 @@ export default function LoginPage() {
   useEffect(() => {
     // Already signed in: nothing to do here.
     if (localStorage.getItem("isLoggedIn") === "true" && localStorage.getItem("token")) {
-      router.replace(nextPath ?? "/");
+      router.replace(postLoginPath(nextPath, getUserRole()));
       return;
     }
     // Email typed during registration, so the customer doesn't have to type it again.
@@ -60,8 +68,7 @@ export default function LoginPage() {
         router.push("/account-pending-deletion");
         return;
       }
-      const isAdmin = String(response.user?.role || "").toLowerCase() === "admin";
-      router.push(nextPath ?? (isAdmin ? "/admin/reports" : "/"));
+      router.push(postLoginPath(nextPath, response.user?.role));
     } catch (err) {
       setError(err instanceof Error && err.message ? err.message : "Invalid email or password");
     } finally {
