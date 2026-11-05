@@ -27,7 +27,14 @@ import {
   type TaxEstimateResponse,
 } from "../../../utils/api";
 import DesignFlowModal from "../../components/design/DesignFlowModal";
-import { printSizeKey, type JobDesign, type PrintSize } from "../../components/design/designCanvas";
+import {
+  isSidesModifier,
+  isTwoSidedOption,
+  printSizeKey,
+  sideDesignKey,
+  type JobDesign,
+  type PrintSize,
+} from "../../components/design/designCanvas";
 import { isAuthenticated } from "../../../utils/roles";
 import { toUsStateCode } from "../../../utils/usState";
 import { SITE_TAB_TITLE, pageTitle } from "../../../utils/tabTitle";
@@ -404,6 +411,8 @@ function ProductDetailContent() {
   const removeJob = (id: string) => {
     setJobs((prev) => (prev.length <= 1 ? prev : prev.filter((j) => j.id !== id)));
     setJobDesignFor(id, null);
+    setJobDesignFor(sideDesignKey(id, 1), null);
+    setJobDesignFor(sideDesignKey(id, 2), null);
   };
 
   const setJobDesignFor = (jobId: string, design: JobDesign | null) => {
@@ -1131,7 +1140,91 @@ function ProductDetailContent() {
     });
   }, [designSizeKey]);
 
+  /** A selected two-sided option (see isTwoSidedOption) gives every job a side 1 and a side 2 canvas. */
+  const twoSided = activeModifierGroups.some((group) => {
+    const selectedValue = String(selectedModifiers[group.key] || "").trim();
+    if (!selectedValue) return false;
+    const option = (Array.isArray(group.options) ? group.options : []).find(
+      (o) => modifierOptionValue(o) === selectedValue
+    );
+    return (
+      option != null &&
+      isTwoSidedOption(`${group.name || ""} ${group.key || ""}`, `${option.label || ""} ${option.value || ""}`)
+    );
+  });
+
+  // Designs made for one side don't fit two sides (and the reverse); start over when the choice changes.
+  const previousTwoSidedRef = useRef(twoSided);
+  useEffect(() => {
+    if (previousTwoSidedRef.current === twoSided) return;
+    previousTwoSidedRef.current = twoSided;
+    setJobDesigns({});
+  }, [twoSided]);
+
+  /**
+   * Templates linked to modifier options open automatically: the template whose ticked options match the
+   * customer's choices (per modifier, any ticked option), else the one with nothing ticked (the default).
+   * Products without linked templates keep the template picker.
+   */
+  // Sides never pick a template (2 sides gives two canvases by itself); sides options a template may still have
+  // ticked are ignored.
+  const sidesOptionIds = new Set<number>(
+    activeModifierGroups
+      .filter((group) => isSidesModifier(group))
+      .flatMap((group) => (Array.isArray(group.options) ? group.options : []))
+      .filter((o) => o.id != null)
+      .map((o) => Number(o.id))
+  );
+  const templateOptionIds = (t: ProductDesignTemplate) =>
+    (t.modifier_option_ids ?? []).filter((id) => !sidesOptionIds.has(Number(id)));
+  const autoTemplateMode = designTemplates.some((t) => templateOptionIds(t).length > 0);
+  const autoTemplate = (() => {
+    if (!autoTemplateMode) return null;
+    const groupKeyByOptionId = new Map<number, string>();
+    const selectedOptionIdByGroup = new Map<string, number>();
+    for (const group of activeModifierGroups) {
+      if (isSidesModifier(group)) continue;
+      const options = Array.isArray(group.options) ? group.options : [];
+      for (const o of options) if (o.id != null) groupKeyByOptionId.set(Number(o.id), group.key);
+      const selectedValue = String(selectedModifiers[group.key] || "").trim();
+      const selected = options.find((o) => modifierOptionValue(o) === selectedValue);
+      if (selectedValue && selected?.id != null) selectedOptionIdByGroup.set(group.key, Number(selected.id));
+    }
+    let best: { template: ProductDesignTemplate; groups: number } | null = null;
+    for (const template of designTemplates) {
+      const tickedByGroup = new Map<string, Set<number>>();
+      for (const id of templateOptionIds(template)) {
+        // Options no longer on this product can never be picked, so their template cannot match.
+        const key = groupKeyByOptionId.get(Number(id)) ?? "\u0000missing";
+        tickedByGroup.set(key, (tickedByGroup.get(key) ?? new Set()).add(Number(id)));
+      }
+      if (tickedByGroup.size === 0) continue;
+      const matches = [...tickedByGroup].every(([key, ids]) => ids.has(selectedOptionIdByGroup.get(key) ?? -1));
+      if (matches && (!best || tickedByGroup.size > best.groups)) best = { template, groups: tickedByGroup.size };
+    }
+    return best?.template ?? designTemplates.find((t) => templateOptionIds(t).length === 0) ?? null;
+  })();
+  // Without a match or default, fall back to the template picker.
+  const flowTemplates = autoTemplate ? [autoTemplate] : designTemplates;
+
+  // A design made on one template doesn't fit another; start over when the chosen template changes.
+  const autoTemplateId = autoTemplate?.id ?? null;
+  const previousAutoTemplateIdRef = useRef(autoTemplateId);
+  useEffect(() => {
+    if (previousAutoTemplateIdRef.current === autoTemplateId) return;
+    previousAutoTemplateIdRef.current = autoTemplateId;
+    setJobDesigns({});
+  }, [autoTemplateId]);
+
   const openDesignFlow = (jobIndex: number) => {
+    // The template follows the customer's options, so they choose them first.
+    if (autoTemplateMode && missingRequiredModifiers.length > 0) {
+      showError(
+        "Choose your product options before starting your design",
+        missingRequiredModifiers.map((group) => `modifier:${group.key}`)
+      );
+      return;
+    }
     if (designTemplates.length === 0 && !skipDimensionsForPrice && !designPrintSize) {
       showError(
         "Enter width and height before starting your design",
@@ -2152,7 +2245,7 @@ function ProductDetailContent() {
                           className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-blue-200 px-3 text-sm font-medium text-blue-600 transition-colors hover:border-blue-300 hover:bg-blue-50 hover:text-blue-800 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-400"
                         >
                           <FiPenTool size={14} aria-hidden />
-                          {jobDesign ? "Edit Design" : "Start Design"}
+                          {jobDesign || jobDesigns[sideDesignKey(job.id, 1)] ? "Edit Design" : "Start Design"}
                         </button>
                         {jobs.length > 1 ? (
                           <button
@@ -2942,8 +3035,9 @@ function ProductDetailContent() {
           productId={productId}
           jobs={jobs}
           startIndex={Math.min(designFlowStart, jobs.length - 1)}
-          templates={designTemplates}
+          templates={flowTemplates}
           printSize={designTemplates.length > 0 ? null : designPrintSize}
+          twoSided={twoSided}
           designs={jobDesigns}
           onDesignChange={setJobDesignFor}
           onClose={() => setDesignFlowStart(null)}

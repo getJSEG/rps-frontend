@@ -23,7 +23,9 @@ import DesignTemplatesSection, {
   designTemplatePayload,
   validateDesignTemplateDrafts,
   type DesignTemplateDraft,
+  type DesignTemplateModifierGroup,
 } from "./DesignTemplatesSection";
+import { isSidesModifier } from "../../components/design/designCanvas";
 
 type Tab = "products" | "categories" | "subcategories";
 
@@ -1487,6 +1489,28 @@ export default function AdminProductsPage() {
     ) return false;
     return true;
   });
+  /**
+   * The product's modifiers and their enabled options, for linking design templates to options. Sides modifiers
+   * are left out: 2 sides gives the customer two canvases by itself and does not pick a template.
+   */
+  const designTemplateModifierGroups: DesignTemplateModifierGroup[] = assignedModifierGroups
+    .filter((group) => !isSidesModifier(group))
+    .map((group) => {
+      const enabledIds = new Set(
+        (prodModifierAssignments[group.key]?.options ?? []).map((o) => Number(o.option_id)).filter((id) => id > 0)
+      );
+      return {
+        id: Number(group.id),
+        name: group.name,
+        options: (Array.isArray(group.options) ? group.options : [])
+          .filter((o) => o.id != null && (enabledIds.size === 0 || enabledIds.has(Number(o.id))))
+          .map((o) => ({
+            id: Number(o.id),
+            label: o.value && o.value !== o.label ? `${o.label} - ${o.value}` : o.label || o.value,
+          })),
+      };
+    })
+    .filter((group) => group.id > 0 && group.options.length > 0);
   const findModifierGroupById = (id: number | null | undefined) =>
     assignedModifierGroups.find((g) => Number(g.id) === Number(id));
   const findModifierOptionById = (groupId: number | null | undefined, optionId: number | null | undefined) =>
@@ -4186,6 +4210,7 @@ export default function AdminProductsPage() {
                         onChange={setProdDesignTemplates}
                         showMsg={showMsg}
                         inputClass={inputClass}
+                        modifierGroups={designTemplateModifierGroups}
                       />
 
                       <CollapsibleSection title={`Description${WORD_STYLE_LABEL_SUFFIX}`}>

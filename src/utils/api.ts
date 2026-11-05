@@ -267,6 +267,8 @@ export type ProductDesignTemplate = DesignTemplateUpload & {
   id?: number;
   name: string;
   sort_order?: number;
+  /** Modifier options this template is for; empty = the product's default template. */
+  modifier_option_ids?: number[];
 };
 
 export type ModifierOption = {
