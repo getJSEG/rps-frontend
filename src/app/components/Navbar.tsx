@@ -11,6 +11,8 @@ import {
   IoBookOutline,
   IoLogOutOutline,
   IoImageOutline,
+  IoMenu,
+  IoClose,
 } from "react-icons/io5";
 import { toast } from "react-toastify";
 import { ordersAPI } from "../../utils/api";
@@ -114,6 +116,7 @@ export default function Navbar() {
   const pathname = usePathname();
   const [isUserDropdownOpen, setIsUserDropdownOpen] = useState(false);
   const [isSearchOpen, setIsSearchOpen] = useState(false);
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   // SSR + first client render must match — never read localStorage in useState initializers.
   const [isLoggedIn, setIsLoggedIn] = useState(false);
@@ -121,6 +124,7 @@ export default function Navbar() {
   const [cartCount, setCartCount] = useState(0);
   const userDropdownRef = useRef<HTMLDivElement>(null);
   const searchRef = useRef<HTMLDivElement>(null);
+  const mobileMenuRef = useRef<HTMLDivElement>(null);
   const didInitialCartFetchRef = useRef(false);
   const loginCheckInvocationRef = useRef(0);
   const [categories, setCategories] = useState<Category[]>([]);
@@ -206,6 +210,11 @@ export default function Navbar() {
       window.removeEventListener("storage", onStorageChange);
     };
   }, []);
+
+  // Close the mobile menu after navigating.
+  useEffect(() => {
+    setIsMobileMenuOpen(false);
+  }, [pathname]);
 
   /** Red dot on Upload when the same pending jobs exist as on /upload-approval. */
   useEffect(() => {
@@ -303,16 +312,19 @@ export default function Navbar() {
       if (searchRef.current && !searchRef.current.contains(event.target as Node)) {
         setIsSearchOpen(false);
       }
+      if (mobileMenuRef.current && !mobileMenuRef.current.contains(event.target as Node)) {
+        setIsMobileMenuOpen(false);
+      }
     };
 
-    if (isUserDropdownOpen || isSearchOpen) {
+    if (isUserDropdownOpen || isSearchOpen || isMobileMenuOpen) {
       document.addEventListener("mousedown", handleClickOutside);
     }
 
     return () => {
       document.removeEventListener("mousedown", handleClickOutside);
     };
-  }, [isUserDropdownOpen, isSearchOpen]);
+  }, [isUserDropdownOpen, isSearchOpen, isMobileMenuOpen]);
 
   // Keep only the first 7 parent categories (preserve API order = "first created").
   const parentCategories = categories.filter((c) => c.parent_id == null);
@@ -331,7 +343,8 @@ export default function Navbar() {
     <>
       <nav
         className={`fixed top-0 left-0 right-0 nav-bg border-b border-slate-200 shadow-sm z-50 transition-transform duration-300 ${
-          isLoggedIn ? "overflow-visible" : "overflow-hidden"
+          // Guests on phones need overflow visible so the burger card can slide out below the bar.
+          isLoggedIn ? "overflow-visible" : "overflow-visible sm:overflow-hidden"
         }`}
       >
         <div className="mx-auto w-full max-w-full px-3 py-2.5 sm:px-4">
@@ -339,13 +352,13 @@ export default function Navbar() {
             {/* Left Section - Logo and White Label */}
             <div className="flex items-center gap-3 shrink-0">
               <Link href="/" className="flex items-center">
+                {/* Guests on phones get a slightly smaller logo so burger + cart fit. */}
                 <Image
                   src="/rps-logo.png"
                   alt="Logo"
                   width={160}
                   height={40}
-                  className="rounded-lg object-contain"
-                  style={{ width: "auto", height: "40px" }}
+                  className={`w-auto rounded-lg object-contain ${!isLoggedIn ? "h-8 sm:h-10" : "h-8 md:h-10"}`}
                   priority
                 />
               </Link>
@@ -380,6 +393,7 @@ export default function Navbar() {
             {/* Right Section - Login Form or User Actions */}
             {!isLoggedIn ? (
               <div className="ml-auto flex flex-none shrink-0 items-center gap-2">
+                <div className="hidden items-center gap-2 sm:flex">
                 <Link
                   href={loginHrefFor(pathname || "/")}
                   onClick={(e) => {
@@ -397,10 +411,55 @@ export default function Navbar() {
                 >
                   Register
                 </Link>
+                </div>
                 <CartIconLink count={cartCount} />
+                <div className="relative sm:hidden" ref={mobileMenuRef}>
+                  <button
+                    type="button"
+                    onClick={() => setIsMobileMenuOpen((o) => !o)}
+                    aria-expanded={isMobileMenuOpen}
+                    aria-controls="guest-mobile-menu"
+                    aria-label={isMobileMenuOpen ? "Close menu" : "Open menu"}
+                    className="inline-flex items-center justify-center rounded-md p-1.5 text-slate-700 transition-colors hover:bg-slate-100"
+                  >
+                    {isMobileMenuOpen ? <IoClose className="h-6 w-6" /> : <IoMenu className="h-6 w-6" />}
+                  </button>
+
+                  {/* Guest mobile menu: small card under the burger */}
+                  <div
+                      id="guest-mobile-menu"
+                      aria-hidden={!isMobileMenuOpen}
+                      className={`absolute right-0 top-full z-50 mt-3 w-52 space-y-2 rounded-lg border border-slate-200 bg-white p-3 shadow-lg shadow-slate-900/10 transition-all duration-200 ease-out ${
+                        isMobileMenuOpen
+                          ? "visible translate-y-0 opacity-100"
+                          : "pointer-events-none invisible -translate-y-2 opacity-0"
+                      }`}
+                    >
+                      <Link
+                        href={loginHrefFor(pathname || "/")}
+                        onClick={(e) => {
+                          e.preventDefault();
+                          setIsMobileMenuOpen(false);
+                          router.push(loginHrefFor(window.location.pathname + window.location.search));
+                        }}
+                        className="block w-full rounded-sm border border-[#0B6BCB] bg-[#0B6BCB] px-4 py-2 text-center text-sm font-semibold text-white transition-colors hover:bg-blue-700"
+                      >
+                        Sign In
+                      </Link>
+                      <Link
+                        href="/register"
+                        onClick={() => setIsMobileMenuOpen(false)}
+                        className="block w-full rounded-sm border border-red-500 bg-red-500 px-4 py-2 text-center text-sm font-semibold text-white transition-colors hover:bg-red-600"
+                      >
+                        Register
+                      </Link>
+                    </div>
+                </div>
               </div>
             ) : (
-              <div className="flex min-w-0 shrink-0 items-center gap-4">
+              <div className="ml-auto flex min-w-0 shrink-0 items-center gap-2 md:gap-4">
+                {/* Full bar (768px and up); phones use the burger card below. */}
+                <div className="hidden items-center gap-4 md:flex">
                 {/* Search Icon */}
                 <div className="relative" ref={searchRef}>
                   <button
@@ -524,8 +583,110 @@ export default function Navbar() {
                     </div>
                   )}
                 </div>
+                </div>
 
                 <CartIconLink count={cartCount} />
+
+                {/* Logged-in mobile menu (below 768px) */}
+                <div className="relative md:hidden" ref={mobileMenuRef}>
+                  <button
+                    type="button"
+                    onClick={() => setIsMobileMenuOpen((o) => !o)}
+                    aria-expanded={isMobileMenuOpen}
+                    aria-controls="user-mobile-menu"
+                    aria-label={isMobileMenuOpen ? "Close menu" : "Open menu"}
+                    className="relative inline-flex items-center justify-center rounded-md p-1.5 text-slate-700 transition-colors hover:bg-slate-100"
+                  >
+                    {isMobileMenuOpen ? <IoClose className="h-6 w-6" /> : <IoMenu className="h-6 w-6" />}
+                    {uploadPendingDot && !isMobileMenuOpen ? (
+                      <span
+                        className="absolute right-1 top-1 h-2 w-2 rounded-full bg-red-500 ring-2 ring-white"
+                        aria-hidden
+                      />
+                    ) : null}
+                  </button>
+
+                  <div
+                    id="user-mobile-menu"
+                    aria-hidden={!isMobileMenuOpen}
+                    className={`absolute right-0 top-full z-50 mt-3 w-max min-w-[13rem] max-w-[80vw] rounded-lg border border-slate-200 bg-white p-2 shadow-lg shadow-slate-900/10 transition-all duration-200 ease-out ${
+                      isMobileMenuOpen
+                        ? "visible translate-y-0 opacity-100"
+                        : "pointer-events-none invisible -translate-y-2 opacity-0"
+                    }`}
+                  >
+                    <div className="border-b border-slate-100 px-2 pb-2 pt-1">
+                      {userName ? (
+                        <span className="flex min-w-0 items-center gap-2 text-sm font-semibold text-gray-900">
+                          <IoPersonCircleOutline className="h-6 w-6 shrink-0 text-blue-400" aria-hidden />
+                          <span className="truncate">{userName}</span>
+                        </span>
+                      ) : (
+                        <Link
+                          href="/estimates"
+                          onClick={() => setIsMobileMenuOpen(false)}
+                          className="block text-sm font-medium text-gray-700 hover:text-gray-900"
+                        >
+                          Estimate
+                        </Link>
+                      )}
+                    </div>
+
+                    <div className="space-y-0.5 border-b border-slate-100 py-2">
+                      <Link
+                        href="/upload-approval"
+                        onClick={() => setIsMobileMenuOpen(false)}
+                        className="flex items-center gap-2 rounded-sm px-2 py-1.5 text-sm font-medium text-gray-700 hover:bg-slate-100 hover:text-gray-900"
+                        aria-label={uploadPendingDot ? "Upload (pending artwork or approval)" : "Upload"}
+                      >
+                        Upload
+                        {uploadPendingDot ? (
+                          <span className="h-2 w-2 rounded-full bg-red-500" aria-hidden />
+                        ) : null}
+                      </Link>
+                      <Link
+                        href="/orders"
+                        onClick={() => setIsMobileMenuOpen(false)}
+                        className="block rounded-sm px-2 py-1.5 text-sm font-medium text-gray-700 hover:bg-slate-100 hover:text-gray-900"
+                      >
+                        Orders
+                      </Link>
+                    </div>
+
+                    <div className="space-y-0.5 border-b border-slate-100 py-2">
+                      <Link href="/account-settings" onClick={() => setIsMobileMenuOpen(false)} className="flex items-center gap-2 rounded-sm px-2 py-1.5 text-sm text-[#0B6BCB] hover:bg-slate-100 hover:text-blue-800">
+                        <IoSettingsOutline className="h-4 w-4 shrink-0 opacity-90" aria-hidden />
+                        Account Settings
+                      </Link>
+                      <Link href="/change-password" onClick={() => setIsMobileMenuOpen(false)} className="flex items-center gap-2 rounded-sm px-2 py-1.5 text-sm text-[#0B6BCB] hover:bg-slate-100 hover:text-blue-800">
+                        <IoKeyOutline className="h-4 w-4 shrink-0 opacity-90" aria-hidden />
+                        Change Password
+                      </Link>
+                      <Link href="/address-book" onClick={() => setIsMobileMenuOpen(false)} className="flex items-center gap-2 rounded-sm px-2 py-1.5 text-sm text-[#0B6BCB] hover:bg-slate-100 hover:text-blue-800">
+                        <IoBookOutline className="h-4 w-4 shrink-0 opacity-90" aria-hidden />
+                        Address Book
+                      </Link>
+                      <Link href="/my-artworks" onClick={() => setIsMobileMenuOpen(false)} className="flex items-center gap-2 rounded-sm px-2 py-1.5 text-sm text-[#0B6BCB] hover:bg-slate-100 hover:text-blue-800">
+                        <IoImageOutline className="h-4 w-4 shrink-0 opacity-90" aria-hidden />
+                        My Artworks
+                      </Link>
+                    </div>
+
+                    <div className="pt-2">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setIsMobileMenuOpen(false);
+                          handleLogout();
+                        }}
+                        className="flex w-full justify-center gap-3 rounded-sm border border-red-500 bg-red-500 px-4 py-2 text-sm text-white transition-colors hover:border-red-600 hover:bg-red-600"
+                      >
+                        <IoLogOutOutline className="h-5 w-5 shrink-0 text-white" aria-hidden />
+                        Logout
+                      </button>
+                    </div>
+                  </div>
+                </div>
               </div>
             )}
           </div>

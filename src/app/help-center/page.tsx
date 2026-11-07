@@ -17,15 +17,22 @@ function FaqItem({ faq, open, onToggle }: { faq: HelpFaq; open: boolean; onToggl
       >
         <span className="font-medium text-gray-900">{faq.question}</span>
         <FiChevronDown
-          className={`shrink-0 text-gray-500 transition-transform ${open ? "rotate-180" : ""}`}
+          className={`shrink-0 text-gray-500 transition-transform duration-300 ${open ? "rotate-180" : ""}`}
           aria-hidden
         />
       </button>
-      {open ? (
-        <div className="border-t border-gray-100 px-4 py-3">
-          <p className="whitespace-pre-wrap text-sm leading-relaxed text-gray-700">{faq.answer}</p>
+      <div
+        className={`grid transition-[grid-template-rows,opacity] duration-300 ease-in-out ${
+          open ? "grid-rows-[1fr] opacity-100" : "grid-rows-[0fr] opacity-0"
+        }`}
+        aria-hidden={!open}
+      >
+        <div className="overflow-hidden">
+          <div className="border-t border-gray-100 px-4 py-3">
+            <p className="whitespace-pre-wrap text-sm leading-relaxed text-gray-700">{faq.answer}</p>
+          </div>
         </div>
-      ) : null}
+      </div>
     </div>
   );
 }
