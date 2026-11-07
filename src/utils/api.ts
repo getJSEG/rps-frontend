@@ -255,6 +255,9 @@ export type DesignTemplateUpload = {
   image_storage_key: string;
   image_width_px: number;
   image_height_px: number;
+  /** Real print size in inches, read from the SVG; null when the file has none. */
+  width_in?: number | null;
+  height_in?: number | null;
   original_name?: string;
 };
 

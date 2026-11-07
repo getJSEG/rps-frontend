@@ -36,9 +36,11 @@ const FONT_URLS = {
 };
 
 const generateId = () => Math.random().toString(36).substr(2, 9);
-const pxToInches = (px) => (px / PPI).toFixed(2);
 
 export default function App(props) {
+  // Pixels per inch of this canvas: templates pass their real size (pxPerInch); blank canvases use PPI.
+  const ppi = props.pxPerInch > 0 ? props.pxPerInch : PPI;
+  const toInches = (px) => (px / ppi).toFixed(2);
   const [isInitializing, setIsInitializing] = useState(true);
   const [elements, setElements] = useState([]);
   const [selectedIds, setSelectedIds] = useState([]);
@@ -132,7 +134,7 @@ export default function App(props) {
 
   const handleArtboardSubmit = (e) => {
     e.preventDefault();
-    setCanvasSize({ width: artboardInput.w * PPI, height: artboardInput.h * PPI });
+    setCanvasSize({ width: artboardInput.w * ppi, height: artboardInput.h * ppi });
     setIsEditingArtboard(false);
     handleFitToScreen();
   };
@@ -1402,8 +1404,8 @@ export default function App(props) {
                 <button type="submit" className="ml-1 bg-blue-100 hover:bg-blue-200 text-blue-700 px-2 py-0.5 rounded text-[10px] font-bold">OK</button>
               </form>
             ) : (
-              <span onClick={() => { setArtboardInput({ w: parseFloat(pxToInches(canvasSize.width)), h: parseFloat(pxToInches(canvasSize.height)) }); setIsEditingArtboard(true); }} className="hidden md:inline cursor-pointer hover:text-blue-600 transition-colors" title="Click to manually edit artboard size">
-                 Artboard: <span className="text-slate-800 font-bold border-b border-dashed border-slate-400 hover:border-blue-600 pb-0.5">{pxToInches(canvasSize.width)}" x {pxToInches(canvasSize.height)}"</span>
+              <span onClick={() => { setArtboardInput({ w: parseFloat(toInches(canvasSize.width)), h: parseFloat(toInches(canvasSize.height)) }); setIsEditingArtboard(true); }} className="hidden md:inline cursor-pointer hover:text-blue-600 transition-colors" title="Click to manually edit artboard size">
+                 Artboard: <span className="text-slate-800 font-bold border-b border-dashed border-slate-400 hover:border-blue-600 pb-0.5">{toInches(canvasSize.width)}" x {toInches(canvasSize.height)}"</span>
               </span>
             )}
              */}
@@ -1458,13 +1460,13 @@ export default function App(props) {
                 <div style={{ position: 'absolute', left: 0, height: 10, width: 1, backgroundColor: '#64748b' }} />
                 <div style={{ width: '100%', height: 1, backgroundColor: '#64748b' }} />
                 <div style={{ position: 'absolute', right: 0, height: 10, width: 1, backgroundColor: '#64748b' }} />
-                <div style={{ position: 'absolute', backgroundColor: '#e2e8f0', padding: '0 8px', borderRadius: '4px', fontSize: '11px', fontWeight: 'bold', color: '#475569' }}>{pxToInches(canvasSize.width)}"</div>
+                <div style={{ position: 'absolute', backgroundColor: '#e2e8f0', padding: '0 8px', borderRadius: '4px', fontSize: '11px', fontWeight: 'bold', color: '#475569' }}>{toInches(canvasSize.width)}"</div>
               </div>
               <div style={{ position: 'absolute', top: 0, left: -30, height: '100%', width: 20, display: 'flex', alignItems: 'center', justifyContent: 'center', pointerEvents: 'none', zIndex: 10 }}>
                 <div style={{ position: 'absolute', top: 0, width: 10, height: 1, backgroundColor: '#64748b' }} />
                 <div style={{ height: '100%', width: 1, backgroundColor: '#64748b' }} />
                 <div style={{ position: 'absolute', bottom: 0, width: 10, height: 1, backgroundColor: '#64748b' }} />
-                <div style={{ position: 'absolute', backgroundColor: '#e2e8f0', padding: '2px 8px', borderRadius: '4px', fontSize: '11px', fontWeight: 'bold', color: '#475569', transform: 'rotate(-90deg)', whiteSpace: 'nowrap' }}>{pxToInches(canvasSize.height)}"</div>
+                <div style={{ position: 'absolute', backgroundColor: '#e2e8f0', padding: '2px 8px', borderRadius: '4px', fontSize: '11px', fontWeight: 'bold', color: '#475569', transform: 'rotate(-90deg)', whiteSpace: 'nowrap' }}>{toInches(canvasSize.height)}"</div>
               </div>
 
               <div id="design-artboard" ref={canvasRef} style={{ width: '100%', height: '100%', position: 'relative', backgroundColor: backgroundColor, overflow: 'hidden'}}>
@@ -1473,7 +1475,7 @@ export default function App(props) {
                   <div style={{
                     position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, pointerEvents: 'none',
                     backgroundImage: `linear-gradient(to right, rgba(0,0,0,0.1) 1px, transparent 1px), linear-gradient(to bottom, rgba(0,0,0,0.1) 1px, transparent 1px)`,
-                    backgroundSize: `${PPI * zoomLevel}px ${PPI * zoomLevel}px`, zIndex: 5
+                    backgroundSize: `${ppi * zoomLevel}px ${ppi * zoomLevel}px`, zIndex: 5
                   }} />
                 )}
 
@@ -1627,7 +1629,7 @@ export default function App(props) {
                       </React.Fragment>
                     );
                   } else if (el.type === 'image') {
-                    const isLowRes = el.origImgWidth && (el.origImgWidth / (el.width / PPI)) < 100;
+                    const isLowRes = el.origImgWidth && (el.origImgWidth / (el.width / ppi)) < 100;
 
                     elementContent = (
                       <React.Fragment key={el.id}>
