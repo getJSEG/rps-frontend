@@ -69,6 +69,8 @@ export function designTemplatePayload(drafts: DesignTemplateDraft[]) {
     image_storage_key: d.image_storage_key,
     image_width_px: d.image_width_px,
     image_height_px: d.image_height_px,
+    width_in: d.width_in ?? null,
+    height_in: d.height_in ?? null,
     sort_order: index,
     modifier_option_ids: d.modifier_option_ids ?? [],
   }));
@@ -217,6 +219,8 @@ export default function DesignTemplatesSection({ drafts, onChange, showMsg, inpu
         image_storage_key: uploaded.image_storage_key,
         image_width_px: uploaded.image_width_px,
         image_height_px: uploaded.image_height_px,
+        width_in: uploaded.width_in ?? null,
+        height_in: uploaded.height_in ?? null,
         name: row.name || file.name.replace(/\.(svg|png)$/i, ""),
         uploading: false,
       });

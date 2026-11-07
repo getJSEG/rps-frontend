@@ -75,6 +75,18 @@ function templateImageUrl(template: ProductDesignTemplate) {
   return `${getBackendBaseUrl()}/api/products/design-templates/${template.id}/image?v=${version}`;
 }
 
+/**
+ * Canvas pixels per real inch for a template, so the editor's ruler and image quality check use the true print
+ * size. Templates without a known size (uploaded before sizes were read) return undefined and keep the default.
+ */
+function templatePxPerInch(template: ProductDesignTemplate | null) {
+  const widthIn = Number(template?.width_in);
+  const heightIn = Number(template?.height_in);
+  if (!template || !(widthIn > 0) || !(heightIn > 0)) return undefined;
+  // The longest side has the least rounding.
+  return widthIn >= heightIn ? template.image_width_px / widthIn : template.image_height_px / heightIn;
+}
+
 /** Where the design being edited is kept: the job id, or the side's key on two-sided jobs. */
 function designKeyFor(jobId: string, side: Side, twoSided: boolean) {
   return twoSided ? sideDesignKey(jobId, side) : jobId;
@@ -447,6 +459,7 @@ export default function DesignFlowModal({
           key={`${job.id}-${side}-${uploadedImage?.url ?? templateId ?? "blank"}`}
           source={editorSource}
           sourceSize={editorSourceSize!}
+          pxPerInch={templatePxPerInch(selectedTemplate)}
           initialImageLayer={initialImageLayerToPass} 
           startOnCrop={uploadedImage?.fresh === true && cropRatio != null}
           cropRatio={cropRatio}
