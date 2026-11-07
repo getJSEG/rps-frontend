@@ -4,7 +4,7 @@ import { useRouter, usePathname } from "next/navigation";
 import Link from "next/link";
 import Image from "next/image";
 import { ReactNode, useEffect, useState } from "react";
-import { FiLogOut } from "react-icons/fi";
+import { FiLogOut, FiMenu, FiX } from "react-icons/fi";
 import { toast } from "react-toastify";
 import { nexusAPI, NEXUS_ATTENTION_CHANGED_EVENT } from "../../utils/api";
 
@@ -105,6 +105,24 @@ export default function AdminNavbar({
   const pathname = usePathname() || "";
   /** States reached (red badge) / close warning (yellow badge) on "Tax Nexus". */
   const [nexusAttention, setNexusAttention] = useState({ reached: 0, warning: 0 });
+  /** Sidebar drawer on screens below 768px. */
+  const [drawerOpen, setDrawerOpen] = useState(false);
+  const hasNexusAttention = nexusAttention.reached > 0 || nexusAttention.warning > 0;
+
+  // While the drawer is open: Escape closes it and the page behind doesn't scroll.
+  useEffect(() => {
+    if (!drawerOpen) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setDrawerOpen(false);
+    };
+    const prevOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    window.addEventListener("keydown", onKey);
+    return () => {
+      document.body.style.overflow = prevOverflow;
+      window.removeEventListener("keydown", onKey);
+    };
+  }, [drawerOpen]);
 
   useEffect(() => {
     let cancelled = false;
@@ -140,8 +158,31 @@ export default function AdminNavbar({
 
   return (
     <div className="admin-app min-h-screen flex bg-slate-100 text-slate-900">
-      <aside className="flex w-52 shrink-0 flex-col border-r border-slate-700/50 bg-slate-800 text-slate-200 sm:w-56">
-        <div className="p-5 border-b border-slate-700/50">
+      {/* Dark overlay behind the drawer (below 768px) */}
+      <div
+        className={`fixed inset-0 z-40 bg-slate-900/50 transition-opacity duration-300 md:hidden ${
+          drawerOpen ? "opacity-100" : "pointer-events-none opacity-0"
+        }`}
+        onClick={() => setDrawerOpen(false)}
+        aria-hidden
+      />
+
+      {/* Sidebar: fixed column from 768px, slide-in drawer below */}
+      <aside
+        id="admin-sidebar"
+        className={`fixed inset-y-0 left-0 z-50 flex w-64 shrink-0 flex-col overflow-y-auto border-r border-slate-700/50 bg-slate-800 text-slate-200 transition-[translate,visibility] duration-300 ease-out md:visible md:static md:z-auto md:w-56 md:translate-x-0 md:overflow-visible ${
+          drawerOpen ? "visible translate-x-0" : "invisible -translate-x-full"
+        }`}
+      >
+        <div className="relative p-5 border-b border-slate-700/50">
+          <button
+            type="button"
+            onClick={() => setDrawerOpen(false)}
+            aria-label="Close menu"
+            className="absolute right-2 top-2 rounded-md p-1.5 text-slate-300 transition-colors hover:bg-slate-700 hover:text-white md:hidden"
+          >
+            <FiX className="h-5 w-5" aria-hidden />
+          </button>
           <div className="flex items-center justify-center rounded-xl bg-white/95 p-2.5 shadow-sm ring-1 ring-black/5">
             <Image
               src="/rps-logo.png"
@@ -163,6 +204,7 @@ export default function AdminNavbar({
               <Link
                 key={href}
                 href={href}
+                onClick={() => setDrawerOpen(false)}
                 className={`flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors ${
                   active
                     ? "bg-slate-700 text-white shadow-sm"
@@ -278,14 +320,34 @@ export default function AdminNavbar({
       </aside>
 
       <div className="flex min-w-0 flex-1 flex-col">
-        <header className="sticky top-0 z-30 flex flex-wrap items-center justify-between gap-4 border-b border-slate-200/80 bg-white/90 px-5 py-4 backdrop-blur-md sm:px-8">
-          <div className="min-w-0">
+        <header className="sticky top-0 z-30 flex flex-wrap items-center justify-between gap-4 border-b border-slate-200/80 bg-white/90 px-4 py-4 backdrop-blur-md sm:px-8">
+          <div className="flex min-w-0 flex-1 items-center gap-3">
+            <button
+              type="button"
+              onClick={() => setDrawerOpen(true)}
+              aria-label="Open menu"
+              aria-expanded={drawerOpen}
+              aria-controls="admin-sidebar"
+              className="relative shrink-0 rounded-md p-2 text-slate-700 transition-colors hover:bg-slate-100 md:hidden"
+            >
+              <FiMenu className="h-6 w-6" aria-hidden />
+              {hasNexusAttention ? (
+                <span
+                  className={`absolute right-1 top-1 h-2.5 w-2.5 rounded-full ring-2 ring-white ${
+                    nexusAttention.reached > 0 ? "bg-rose-500" : "bg-amber-400"
+                  }`}
+                  aria-hidden
+                />
+              ) : null}
+            </button>
+            <div className="min-w-0">
             <h1 className="truncate text-xl font-semibold tracking-tight text-slate-900 sm:text-2xl">
               {title}
             </h1>
             {subtitle ? (
               <p className="mt-0.5 truncate text-sm text-slate-500">{subtitle}</p>
             ) : null}
+            </div>
           </div>
           <div className="flex flex-wrap items-center gap-3">
             {onSearchChange && (
@@ -316,10 +378,11 @@ export default function AdminNavbar({
             <button
               type="button"
               onClick={handleLogout}
-              className="inline-flex h-10 items-center gap-2 rounded-sm border border-red-500 bg-red-500 px-4 text-sm font-semibold text-white shadow-sm transition-colors hover:border-red-600 hover:bg-red-600"
+              aria-label="Logout"
+              className="inline-flex h-10 items-center gap-2 rounded-sm border border-red-500 bg-red-500 px-3 text-sm font-semibold text-white shadow-sm transition-colors hover:border-red-600 hover:bg-red-600 md:px-4"
             >
               <FiLogOut className="h-4 w-4 text-white" aria-hidden />
-              Logout
+              <span className="hidden md:inline">Logout</span>
             </button>
           </div>
         </header>
