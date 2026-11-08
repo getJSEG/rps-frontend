@@ -2528,12 +2528,8 @@ function ProductDetailContent() {
                                           <span className="block truncate text-xs text-gray-500">{shippingTierHint(r)}</span>
                                         ) : null}
                                       </span>
+                                      {/* The admin's shipping discount is already in totalCharge; it is not shown to customers. */}
                                       <span className="shrink-0 text-right text-xs font-medium tabular-nums">
-                                        {Number(r.originalCharge) > Number(r.totalCharge || 0) ? (
-                                          <span className="block text-gray-400 line-through">
-                                            ${Number(r.originalCharge).toFixed(2)}
-                                          </span>
-                                        ) : null}
                                         <span className="block">${Number(r.totalCharge || 0).toFixed(2)}</span>
                                       </span>
                                     </button>
