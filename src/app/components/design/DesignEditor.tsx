@@ -4,10 +4,10 @@ import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { 
   Palette, MousePointer, Hand, Pencil, Type, Square, Circle as CircleIcon, 
   Star, Triangle, Plus, ArrowRight, Compass, Shield, Sun, ImagePlus, Lock, 
-  Maximize, ZoomOut, ZoomIn, Layers, X, 
+  Maximize, ZoomOut, ZoomIn, Layers, X, Menu,
   Image as ImageIcon, EyeOff, Eye, Unlock, Trash2, AlignLeft, AlignCenter, 
   AlignRight, AlignJustify, ArrowDown, RotateCw, AlertTriangle, QrCode, Grid3X3,
-  List, ListOrdered, Copy, Crop, FlipHorizontal, FlipVertical, LayoutGrid, ChevronDown, Undo2, Redo2
+  List, ListOrdered, Copy, Crop, FlipHorizontal, FlipVertical, LayoutGrid, ChevronDown, Undo2, Redo2, Sliders
 } from 'lucide-react';
 
 export type DesignEditorExport = { file: Blob; designState: Record<string, unknown> };
@@ -62,6 +62,8 @@ export default function App(props) {
 
   const [isMobileToolsOpen, setIsMobileToolsOpen] = useState(false);
   const [isMobileLayersOpen, setIsMobileLayersOpen] = useState(false);
+  const [isMobilePropertiesOpen, setIsMobilePropertiesOpen] = useState(false);
+  const [isMobileHeaderMenuOpen, setIsMobileHeaderMenuOpen] = useState(false);
   const [draggedLayerId, setDraggedLayerId] = useState(null);
   
   const [isQRModalOpen, setIsQRModalOpen] = useState(false);
@@ -374,7 +376,6 @@ export default function App(props) {
             if (font) {
               let textPaths = '';
               
-              // Apply programmatic Word-Wrapping logic inside SVG export Engine
               let lines = [];
               const hardLines = el.text.split('\n');
               
@@ -394,7 +395,7 @@ export default function App(props) {
                   
                   if (testWidth > el.width && currentLine !== prefix) {
                     lines.push(currentLine);
-                    currentLine = word; // break down to next line
+                    currentLine = word; 
                   } else {
                     currentLine = testLine;
                   }
@@ -435,7 +436,6 @@ export default function App(props) {
               }
               elementSvg = textPaths;
             } else {
-               // Fallback: If opentype fails (network error) we apply the same word wrap behavior logic via Canvas context
                let lines = [];
                const tempCanvas = document.createElement('canvas');
                const ctx = tempCanvas.getContext('2d');
@@ -561,7 +561,10 @@ export default function App(props) {
     setSelectedIds([newElement.id]);
     setShowShapeMenu(false);
     setActiveTool('select');
-    if(window.innerWidth < 768) setIsMobileToolsOpen(false);
+    if(window.innerWidth < 768) {
+      setIsMobileToolsOpen(false);
+      setIsMobilePropertiesOpen(true);
+    }
     if (!menuState.props) toggleMenu('props');
   };
 
@@ -581,7 +584,10 @@ export default function App(props) {
     setIsQRModalOpen(false);
     setQrInputValue('');
     setActiveTool('select');
-    if(window.innerWidth < 768) setIsMobileToolsOpen(false);
+    if(window.innerWidth < 768) {
+      setIsMobileToolsOpen(false);
+      setIsMobilePropertiesOpen(true);
+    }
   };
 
   const addElement = (type) => {
@@ -609,7 +615,10 @@ export default function App(props) {
     insertElementUnderTemplates(newElement);
     setSelectedIds([newElement.id]);
     setActiveTool('select');
-    if(window.innerWidth < 768) setIsMobileToolsOpen(false);
+    if(window.innerWidth < 768) {
+      setIsMobileToolsOpen(false);
+      setIsMobilePropertiesOpen(true);
+    }
     if (!menuState.props) toggleMenu('props');
   };
 
@@ -646,7 +655,10 @@ export default function App(props) {
         if (!menuState.props) toggleMenu('props');
       }
       setActiveTool('select');
-      if(window.innerWidth < 768) setIsMobileToolsOpen(false);
+      if(window.innerWidth < 768) {
+        setIsMobileToolsOpen(false);
+        setIsMobilePropertiesOpen(true);
+      }
     };
 
     if (file.type === 'image/svg+xml' || file.name.endsWith('.svg')) {
@@ -784,6 +796,7 @@ export default function App(props) {
 
   const handleContainerPointerDown = (e) => {
     setActiveTooltip(null);
+    setIsMobileHeaderMenuOpen(false);
     if (activePointers.current.size > 1) return;
 
     if (activeTool === 'pan' || (e.button === 1) || e.altKey || (e.pointerType === 'touch' && activeTool === 'select')) { 
@@ -871,6 +884,14 @@ export default function App(props) {
           if (dragAction.direction.includes('w')) { dw = -localDx; newW += dw; }
           if (dragAction.direction.includes('s')) { dh = localDy; newH += dh; }
           if (dragAction.direction.includes('n')) { dh = -localDy; newH += dh; }
+
+          if (['nw', 'ne', 'sw', 'se'].includes(dragAction.direction) && ['shape', 'image', 'pattern', 'qr'].includes(el.type)) {
+            const scale = Math.abs(dw) > Math.abs(dh) ? newW / orig.w : newH / orig.h;
+            newW = orig.w * scale;
+            newH = orig.h * scale;
+            dw = newW - orig.w;
+            dh = newH - orig.h;
+          }
 
           const MIN_SIZE = 20;
           if (newW < MIN_SIZE) { dw += (MIN_SIZE - newW); newW = MIN_SIZE; }
@@ -995,6 +1016,219 @@ export default function App(props) {
 
   const selectedElement = selectedIds.length === 1 ? elements.find((el) => el.id === selectedIds[0]) : null;
 
+  // Shared properties content for sidebar & bottom sheet (with text-[16px] md:text-[11px] to prevent mobile auto-zoom)
+  const renderPropertiesContent = () => {
+    if (!selectedElement || selectedIds.length !== 1) {
+      return (
+        <div className="text-center py-8 text-slate-400 text-xs font-medium">
+          Select an element on the canvas to edit its properties.
+        </div>
+      );
+    }
+    return (
+      <div className="p-4 space-y-4">
+        {selectedElement.type !== 'image' && (selectedElement.type !== 'pattern' || selectedElement.patternType !== 'custom') && selectedElement.type !== 'qr' && (
+          <div className="flex items-center justify-between">
+            <span className="text-[11px] text-slate-500 font-medium">Color / Fill</span>
+            <div className="flex items-center gap-2">
+              <input type="color" value={selectedElement.fill || (selectedElement.type === 'drawing' ? selectedElement.stroke : '#3b82f6')} onChange={(e) => updateElements(selectedIds, selectedElement.type === 'drawing' ? {stroke: e.target.value} : { fill: e.target.value })} className="w-7 h-7 p-0 border-0 rounded cursor-pointer shadow-sm" />
+            </div>
+          </div>
+        )}
+
+        <div>
+          <div className="flex items-center justify-between mb-1">
+            <span className="text-[11px] text-slate-500 font-medium">Rotation</span>
+            <span className="text-[10px] font-mono">{selectedElement.rotation || 0}°</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <input type="range" min="0" max="360" value={selectedElement.rotation || 0} onChange={(e) => updateElements(selectedIds, { rotation: parseInt(e.target.value) })} className="w-full" />
+            <button onClick={() => updateElements(selectedIds, { rotation: ((selectedElement.rotation || 0) + 90) % 360 })} className="p-1.5 border rounded hover:bg-slate-50 text-slate-500" title="Rotate 90deg"><RotateCw size={14} /></button>
+          </div>
+        </div>
+
+        {selectedElement.type === 'qr' && (
+          <div className="bg-slate-50 p-3 rounded-lg border border-slate-200 space-y-3">
+            <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block">QR Code Settings</span>
+            <div>
+              <span className="text-[10px] text-slate-500 block mb-1">URL / Data</span>
+              <input type="text" value={selectedElement.qrData || ''} onChange={(e) => updateElements(selectedIds, { qrData: e.target.value })} className="w-full text-[16px] md:text-[11px] p-1.5 border border-slate-300 rounded bg-white outline-none focus:ring-1 focus:ring-blue-500" />
+            </div>
+            <div className="grid grid-cols-2 gap-2">
+              <div className="flex items-center justify-between bg-white p-1.5 rounded border border-slate-200">
+                <span className="text-[10px] text-slate-500">QR Color</span>
+                <input type="color" value={selectedElement.qrColor || '#000000'} onChange={(e) => updateElements(selectedIds, { qrColor: e.target.value })} className="w-5 h-5 p-0 border-0 rounded cursor-pointer" />
+              </div>
+              <div className="flex items-center justify-between bg-white p-1.5 rounded border border-slate-200">
+                <span className="text-[10px] text-slate-500">Background</span>
+                <input type="color" value={selectedElement.qrBgColor || '#ffffff'} onChange={(e) => updateElements(selectedIds, { qrBgColor: e.target.value })} className="w-5 h-5 p-0 border-0 rounded cursor-pointer" />
+              </div>
+            </div>
+            <div className="space-y-2 pt-1 border-t border-slate-200">
+              <div className="flex items-center justify-between">
+                <span className="text-[10px] text-slate-500">Border Stroke Color</span>
+                <input type="color" value={selectedElement.strokeColor || '#000000'} onChange={(e) => updateElements(selectedIds, { strokeColor: e.target.value })} className="w-5 h-5 p-0 border-0 rounded cursor-pointer" />
+              </div>
+              <div>
+                <div className="flex items-center justify-between mb-1">
+                  <span className="text-[10px] text-slate-500">Border Width</span>
+                  <span className="text-[10px] font-mono">{selectedElement.strokeWidth || 0}px</span>
+                </div>
+                <input type="range" min="0" max="30" value={selectedElement.strokeWidth || 0} onChange={(e) => updateElements(selectedIds, { strokeWidth: parseInt(e.target.value) })} className="w-full" />
+              </div>
+              <div>
+                <div className="flex items-center justify-between mb-1">
+                  <span className="text-[10px] text-slate-500">Corner Radius</span>
+                  <span className="text-[10px] font-mono">{selectedElement.cornerRadius || 0}px</span>
+                </div>
+                <input type="range" min="0" max="50" value={selectedElement.cornerRadius || 0} onChange={(e) => updateElements(selectedIds, { cornerRadius: parseInt(e.target.value) })} className="w-full" />
+              </div>
+            </div>
+          </div>
+        )}
+
+        {selectedElement.type === 'text' && (
+          <>
+            <div>
+              <span className="text-[11px] text-slate-500 font-medium block mb-1">Text Content</span>
+              <textarea value={selectedElement.text} onChange={(e) => updateElements(selectedIds, { text: e.target.value })} className="w-full text-[16px] md:text-[11px] p-2 border border-slate-300 rounded focus:ring-2 focus:ring-blue-500 outline-none resize-none" rows={3} />
+            </div>
+            <div className="flex gap-2">
+              <div className="flex-1">
+                <span className="text-[11px] text-slate-500 font-medium block mb-1">Font</span>
+                <select value={selectedElement.fontFamily || 'Inter'} onChange={(e) => updateElements(selectedIds, { fontFamily: e.target.value })} className="w-full text-[16px] md:text-[11px] p-1.5 border border-slate-300 rounded bg-white">
+                  {GOOGLE_FONTS.map(font => <option key={font} value={font} style={{ fontFamily: font }}>{font}</option>)}
+                </select>
+              </div>
+              <div className="w-16">
+                <span className="text-[11px] text-slate-500 font-medium block mb-1">Size(pt)</span>
+                <input type="number" min="4" max="500" value={selectedElement.fontSize || 32} onChange={(e) => updateElements(selectedIds, { fontSize: parseInt(e.target.value) || 4 })} className="w-full text-[16px] md:text-[11px] p-1.5 border border-slate-300 rounded bg-white text-center" />
+              </div>
+            </div>
+
+            <div className="bg-slate-50 p-2 rounded-lg border border-slate-200">
+              <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block mb-2">Typography & Layout</span>
+              
+              <div className="flex gap-2 mb-3">
+                <div className="flex-1 bg-white p-1 rounded border border-slate-200 flex">
+                  {['left', 'center', 'right', 'justify'].map(align => (
+                    <button key={align} onClick={() => updateElements(selectedIds, { textAlign: align })} className={`flex-1 flex justify-center p-1 rounded transition-colors ${selectedElement.textAlign === align ? 'bg-blue-50 text-blue-600 shadow-sm' : 'text-slate-400 hover:text-slate-600 hover:bg-slate-50'}`} title={align}>
+                      {align === 'left' && <AlignLeft size={12} />}
+                      {align === 'center' && <AlignCenter size={12} />}
+                      {align === 'right' && <AlignRight size={12} />}
+                      {align === 'justify' && <AlignJustify size={12} />}
+                    </button>
+                  ))}
+                </div>
+                <div className="flex bg-white p-1 rounded border border-slate-200">
+                  <button onClick={() => updateElements(selectedIds, { listType: 'none' })} className={`px-2 flex justify-center p-1 rounded transition-colors ${!selectedElement.listType || selectedElement.listType === 'none' ? 'bg-blue-50 text-blue-600 shadow-sm' : 'text-slate-400 hover:text-slate-600'}`} title="No List"><AlignLeft size={12} /></button>
+                  <button onClick={() => updateElements(selectedIds, { listType: 'bullet' })} className={`px-2 flex justify-center p-1 rounded transition-colors ${selectedElement.listType === 'bullet' ? 'bg-blue-50 text-blue-600 shadow-sm' : 'text-slate-400 hover:text-slate-600'}`} title="Bullet List"><List size={12} /></button>
+                  <button onClick={() => updateElements(selectedIds, { listType: 'number' })} className={`px-2 flex justify-center p-1 rounded transition-colors ${selectedElement.listType === 'number' ? 'bg-blue-50 text-blue-600 shadow-sm' : 'text-slate-400 hover:text-slate-600'}`} title="Numbered List"><ListOrdered size={12} /></button>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-x-3 gap-y-2 mb-2">
+                <div>
+                  <span className="text-[10px] text-slate-500 block mb-1">Line Height</span>
+                  <input type="range" min="0.5" max="3" step="0.1" value={selectedElement.lineHeight || 1.2} onChange={(e) => updateElements(selectedIds, { lineHeight: parseFloat(e.target.value) })} className="w-full" />
+                </div>
+                <div>
+                  <span className="text-[10px] text-slate-500 block mb-1">Letter Spac</span>
+                  <input type="range" min="-10" max="50" step="1" value={selectedElement.letterSpacing || 0} onChange={(e) => updateElements(selectedIds, { letterSpacing: parseInt(e.target.value) })} className="w-full" />
+                </div>
+              </div>
+              
+              <button onClick={() => updateElements(selectedIds, { vertical: !selectedElement.vertical })} className={`w-full mt-2 flex items-center justify-center gap-2 p-1.5 rounded border text-[10px] font-medium transition-colors ${selectedElement.vertical ? 'bg-blue-100 border-blue-300 text-blue-700' : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-100'}`}>
+                <ArrowDown size={12} /> {selectedElement.vertical ? 'Vertical Text ON' : 'Vertical Text OFF'}
+              </button>
+            </div>
+
+            <div className="bg-slate-50 p-3 rounded-lg border border-slate-200">
+               <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block mb-2">Text Stroke Outline</span>
+               <div className="flex items-center gap-2 mb-2">
+                 <input type="color" value={selectedElement.strokeColor || '#000000'} onChange={(e) => updateElements(selectedIds, { strokeColor: e.target.value })} className="w-6 h-6 p-0 border-0 rounded cursor-pointer shrink-0" />
+                 <input type="range" min="0" max="50" step="0.5" value={selectedElement.strokeWidth || 0} onChange={(e) => updateElements(selectedIds, { strokeWidth: parseFloat(e.target.value) })} className="w-full" />
+                 <span className="text-[10px] font-mono w-8 text-right">{selectedElement.strokeWidth || 0}</span>
+               </div>
+               <div className="flex items-center gap-2">
+                 <span className="text-[10px] text-slate-500 w-12">Position:</span>
+                 <select value={selectedElement.strokePosition || 'outside'} onChange={(e) => updateElements(selectedIds, { strokePosition: e.target.value })} className="flex-1 text-[16px] md:text-[11px] p-1 border border-slate-300 rounded bg-white">
+                   <option value="outside">Outside</option><option value="center">Center</option><option value="inside">Inside</option>
+                 </select>
+               </div>
+            </div>
+
+            <div className="bg-slate-50 p-3 rounded-lg border border-slate-200">
+               <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block mb-2">Drop Shadow</span>
+               <div className="grid grid-cols-2 gap-x-2 gap-y-3">
+                 <div className="flex items-center gap-2">
+                   <span className="text-[10px] text-slate-500 w-6">Col</span>
+                   <input type="color" value={selectedElement.shadowColor || '#000000'} onChange={(e) => updateElements(selectedIds, { shadowColor: e.target.value })} className="flex-1 h-5 p-0 border-0 rounded cursor-pointer" />
+                 </div>
+                 <div className="flex items-center gap-2">
+                   <span className="text-[10px] text-slate-500 w-6">Blur</span>
+                   <input type="range" min="0" max="30" value={selectedElement.shadowBlur || 0} onChange={(e) => updateElements(selectedIds, { shadowBlur: parseInt(e.target.value) })} className="w-full" />
+                 </div>
+                 <div className="flex items-center gap-2">
+                   <span className="text-[10px] text-slate-500 w-6">X</span>
+                   <input type="range" min="-30" max="30" value={selectedElement.shadowX || 0} onChange={(e) => updateElements(selectedIds, { shadowX: parseInt(e.target.value) })} className="w-full" />
+                 </div>
+                 <div className="flex items-center gap-2">
+                   <span className="text-[10px] text-slate-500 w-6">Y</span>
+                   <input type="range" min="-30" max="30" value={selectedElement.shadowY || 0} onChange={(e) => updateElements(selectedIds, { shadowY: parseInt(e.target.value) })} className="w-full" />
+                 </div>
+               </div>
+            </div>
+          </>
+        )}
+
+        {selectedElement.type === 'pattern' && (
+          <div className="bg-slate-50 p-3 rounded-lg border border-slate-200">
+            <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block mb-2">Pattern Density (1x - 20x)</span>
+            <div className="flex items-center gap-2">
+              <input type="range" min="0.5" max="20" step="0.5" value={selectedElement.patternScale || 1} onChange={(e) => updateElements(selectedIds, { patternScale: parseFloat(e.target.value) })} className="w-full" />
+              <span className="text-[10px] font-mono w-8 text-right">{(selectedElement.patternScale || 1).toFixed(1)}x</span>
+            </div>
+          </div>
+        )}
+
+        {selectedElement.type === 'image' && !selectedElement.isTemplate && (
+          <div className="bg-slate-50 p-3 rounded-lg border border-slate-200 space-y-2">
+            <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider flex items-center gap-1.5"><Crop size={12}/> Crop Image</span>
+            {['Top', 'Right', 'Bottom', 'Left'].map(side => {
+              const propName = `crop${side.charAt(0)}`;
+              return (
+                <div key={side} className="flex items-center gap-2">
+                  <span className="text-[10px] text-slate-500 w-10">{side}</span>
+                  <input type="range" min="0" max="90" value={selectedElement[propName] || 0} onChange={(e) => updateElements(selectedIds, { [propName]: parseInt(e.target.value) })} className="w-full" />
+                  <span className="text-[10px] font-mono w-6 text-right">{selectedElement[propName] || 0}%</span>
+                </div>
+              )
+            })}
+          </div>
+        )}
+
+        <div className="pt-2 border-t border-slate-200">
+          <span className="text-[11px] text-slate-500 font-medium block mb-2">Flip Content</span>
+          <div className="flex bg-slate-100 p-1 rounded border border-slate-200 mb-4">
+            <button onClick={() => updateElements(selectedIds, { flipX: !selectedElement.flipX })} className={`flex-1 flex justify-center p-1.5 rounded transition-colors ${selectedElement.flipX ? 'bg-white shadow-sm text-blue-600' : 'text-slate-500 hover:bg-slate-200'}`} title="Flip Horizontal">
+              <FlipHorizontal size={16} />
+            </button>
+            <button onClick={() => updateElements(selectedIds, { flipY: !selectedElement.flipY })} className={`flex-1 flex justify-center p-1.5 rounded transition-colors ${selectedElement.flipY ? 'bg-white shadow-sm text-blue-600' : 'text-slate-500 hover:bg-slate-200'}`} title="Flip Vertical">
+              <FlipVertical size={16} />
+            </button>
+          </div>
+
+          <div className="flex items-center justify-between mb-1">
+            <span className="text-[11px] text-slate-500 font-medium">Transparency</span>
+            <span className="text-[10px] font-mono">{Math.round((selectedElement.opacity !== undefined ? selectedElement.opacity : 1) * 100)}%</span>
+          </div>
+          <input type="range" min="0" max="1" step="0.05" value={selectedElement.opacity !== undefined ? selectedElement.opacity : 1} onChange={(e) => updateElements(selectedIds, { opacity: parseFloat(e.target.value) })} className="w-full" />
+        </div>
+      </div>
+    );
+  };
+
   return (
     <div className="flex h-screen w-full bg-slate-100 font-sans text-slate-800 overflow-hidden touch-none">
 
@@ -1005,8 +1239,9 @@ export default function App(props) {
         </div>
       )}
 
-      {(isMobileToolsOpen || isMobileLayersOpen) && (
-        <div className="md:hidden fixed inset-0 bg-black/40 backdrop-blur-sm z-40" onClick={() => {setIsMobileToolsOpen(false); setIsMobileLayersOpen(false);}} />
+      {/* Clean overlay without harsh blur */}
+      {(isMobileToolsOpen || isMobileLayersOpen || isMobilePropertiesOpen) && (
+        <div className="md:hidden fixed inset-0 bg-black/25 z-40 transition-opacity" onClick={() => {setIsMobileToolsOpen(false); setIsMobileLayersOpen(false); setIsMobilePropertiesOpen(false);}} />
       )}
 
       {isQRModalOpen && (
@@ -1019,7 +1254,7 @@ export default function App(props) {
             <p className="text-xs text-slate-500 mb-3">Enter a website URL or text to generate a scannable QR code.</p>
             <input 
               type="text" placeholder="https://example.com" value={qrInputValue} onChange={(e) => setQrInputValue(e.target.value)}
-              className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm mb-4 focus:ring-2 focus:ring-blue-500 outline-none"
+              className="w-full border border-slate-300 rounded-lg px-3 py-2 text-[16px] md:text-sm mb-4 focus:ring-2 focus:ring-blue-500 outline-none"
             />
             <button onClick={handleAddQR} className="w-full bg-blue-600 hover:bg-blue-700 text-white font-medium py-2 rounded-lg transition-colors">
               Add QR
@@ -1140,224 +1375,26 @@ export default function App(props) {
             </div>
           )}
 
-          {selectedElement && selectedIds.length === 1 && activeTool !== 'draw' && (
-            <div className="bg-white">
-              <button onClick={() => toggleMenu('props')} className="w-full p-3 flex items-center justify-between hover:bg-slate-50 transition-colors border-b border-slate-200">
-                 <h2 className="text-[11px] font-bold text-slate-500 uppercase tracking-wider flex items-center gap-2">
-                    Properties <span className="bg-blue-100 text-blue-700 px-1.5 py-0.5 rounded text-[9px] capitalize">{selectedElement.type}</span>
-                 </h2>
-                 <ChevronDown size={14} className={`text-slate-400 transition-transform ${menuState.props ? 'rotate-180' : ''}`} />
-              </button>
-              
-              {menuState.props && (
-                <div className="p-4 space-y-4">
-                  {selectedElement.type !== 'image' && (selectedElement.type !== 'pattern' || selectedElement.patternType !== 'custom') && selectedElement.type !== 'qr' && (
-                    <div className="flex items-center justify-between">
-                      <span className="text-[11px] text-slate-500 font-medium">Color / Fill</span>
-                      <div className="flex items-center gap-2">
-                        <input type="color" value={selectedElement.fill || (selectedElement.type === 'drawing' ? selectedElement.stroke : '#3b82f6')} onChange={(e) => updateElements(selectedIds, selectedElement.type === 'drawing' ? {stroke: e.target.value} : { fill: e.target.value })} className="w-7 h-7 p-0 border-0 rounded cursor-pointer shadow-sm" />
-                      </div>
-                    </div>
-                  )}
+          {/* Desktop Properties Panel in Sidebar */}
+          <div className="hidden md:block">
+            {selectedElement && selectedIds.length === 1 && activeTool !== 'draw' && (
+              <div className="bg-white">
+                <button onClick={() => toggleMenu('props')} className="w-full p-3 flex items-center justify-between hover:bg-slate-50 transition-colors border-b border-slate-200">
+                   <h2 className="text-[11px] font-bold text-slate-500 uppercase tracking-wider flex items-center gap-2">
+                      Properties <span className="bg-blue-100 text-blue-700 px-1.5 py-0.5 rounded text-[9px] capitalize">{selectedElement.type}</span>
+                   </h2>
+                   <ChevronDown size={14} className={`text-slate-400 transition-transform ${menuState.props ? 'rotate-180' : ''}`} />
+                </button>
+                {menuState.props && renderPropertiesContent()}
+              </div>
+            )}
+          </div>
 
-                  <div>
-                    <div className="flex items-center justify-between mb-1">
-                      <span className="text-[11px] text-slate-500 font-medium">Rotation</span>
-                      <span className="text-[10px] font-mono">{selectedElement.rotation || 0}°</span>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <input type="range" min="0" max="360" value={selectedElement.rotation || 0} onChange={(e) => updateElements(selectedIds, { rotation: parseInt(e.target.value) })} className="w-full" />
-                      <button onClick={() => updateElements(selectedIds, { rotation: ((selectedElement.rotation || 0) + 90) % 360 })} className="p-1.5 border rounded hover:bg-slate-50 text-slate-500" title="Rotate 90deg"><RotateCw size={14} /></button>
-                    </div>
-                  </div>
-
-                  {selectedElement.type === 'qr' && (
-                    <div className="bg-slate-50 p-3 rounded-lg border border-slate-200 space-y-3">
-                      <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block">QR Code Settings</span>
-                      <div>
-                        <span className="text-[10px] text-slate-500 block mb-1">URL / Data</span>
-                        <input type="text" value={selectedElement.qrData || ''} onChange={(e) => updateElements(selectedIds, { qrData: e.target.value })} className="w-full text-[11px] p-1.5 border border-slate-300 rounded bg-white outline-none focus:ring-1 focus:ring-blue-500" />
-                      </div>
-                      <div className="grid grid-cols-2 gap-2">
-                        <div className="flex items-center justify-between bg-white p-1.5 rounded border border-slate-200">
-                          <span className="text-[10px] text-slate-500">QR Color</span>
-                          <input type="color" value={selectedElement.qrColor || '#000000'} onChange={(e) => updateElements(selectedIds, { qrColor: e.target.value })} className="w-5 h-5 p-0 border-0 rounded cursor-pointer" />
-                        </div>
-                        <div className="flex items-center justify-between bg-white p-1.5 rounded border border-slate-200">
-                          <span className="text-[10px] text-slate-500">Background</span>
-                          <input type="color" value={selectedElement.qrBgColor || '#ffffff'} onChange={(e) => updateElements(selectedIds, { qrBgColor: e.target.value })} className="w-5 h-5 p-0 border-0 rounded cursor-pointer" />
-                        </div>
-                      </div>
-                      <div className="space-y-2 pt-1 border-t border-slate-200">
-                        <div className="flex items-center justify-between">
-                          <span className="text-[10px] text-slate-500">Border Stroke Color</span>
-                          <input type="color" value={selectedElement.strokeColor || '#000000'} onChange={(e) => updateElements(selectedIds, { strokeColor: e.target.value })} className="w-5 h-5 p-0 border-0 rounded cursor-pointer" />
-                        </div>
-                        <div>
-                          <div className="flex items-center justify-between mb-1">
-                            <span className="text-[10px] text-slate-500">Border Width</span>
-                            <span className="text-[10px] font-mono">{selectedElement.strokeWidth || 0}px</span>
-                          </div>
-                          <input type="range" min="0" max="30" value={selectedElement.strokeWidth || 0} onChange={(e) => updateElements(selectedIds, { strokeWidth: parseInt(e.target.value) })} className="w-full" />
-                        </div>
-                        <div>
-                          <div className="flex items-center justify-between mb-1">
-                            <span className="text-[10px] text-slate-500">Corner Radius</span>
-                            <span className="text-[10px] font-mono">{selectedElement.cornerRadius || 0}px</span>
-                          </div>
-                          <input type="range" min="0" max="50" value={selectedElement.cornerRadius || 0} onChange={(e) => updateElements(selectedIds, { cornerRadius: parseInt(e.target.value) })} className="w-full" />
-                        </div>
-                      </div>
-                    </div>
-                  )}
-
-                  {selectedElement.type === 'text' && (
-                    <>
-                      <div>
-                        <span className="text-[11px] text-slate-500 font-medium block mb-1">Text Content</span>
-                        <textarea value={selectedElement.text} onChange={(e) => updateElements(selectedIds, { text: e.target.value })} className="w-full text-[11px] p-2 border border-slate-300 rounded focus:ring-2 focus:ring-blue-500 outline-none resize-none" rows={3} />
-                      </div>
-                      <div className="flex gap-2">
-                        <div className="flex-1">
-                          <span className="text-[11px] text-slate-500 font-medium block mb-1">Font</span>
-                          <select value={selectedElement.fontFamily || 'Inter'} onChange={(e) => updateElements(selectedIds, { fontFamily: e.target.value })} className="w-full text-[11px] p-1.5 border border-slate-300 rounded bg-white">
-                            {GOOGLE_FONTS.map(font => <option key={font} value={font} style={{ fontFamily: font }}>{font}</option>)}
-                          </select>
-                        </div>
-                        <div className="w-16">
-                          <span className="text-[11px] text-slate-500 font-medium block mb-1">Size(pt)</span>
-                          <input type="number" min="4" max="500" value={selectedElement.fontSize || 32} onChange={(e) => updateElements(selectedIds, { fontSize: parseInt(e.target.value) || 4 })} className="w-full text-[11px] p-1.5 border border-slate-300 rounded bg-white text-center" />
-                        </div>
-                      </div>
-
-                      <div className="bg-slate-50 p-2 rounded-lg border border-slate-200">
-                        <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block mb-2">Typography & Layout</span>
-                        
-                        <div className="flex gap-2 mb-3">
-                          <div className="flex-1 bg-white p-1 rounded border border-slate-200 flex">
-                            {['left', 'center', 'right', 'justify'].map(align => (
-                              <button key={align} onClick={() => updateElements(selectedIds, { textAlign: align })} className={`flex-1 flex justify-center p-1 rounded transition-colors ${selectedElement.textAlign === align ? 'bg-blue-50 text-blue-600 shadow-sm' : 'text-slate-400 hover:text-slate-600 hover:bg-slate-50'}`} title={align}>
-                                {align === 'left' && <AlignLeft size={12} />}
-                                {align === 'center' && <AlignCenter size={12} />}
-                                {align === 'right' && <AlignRight size={12} />}
-                                {align === 'justify' && <AlignJustify size={12} />}
-                              </button>
-                            ))}
-                          </div>
-                          <div className="flex bg-white p-1 rounded border border-slate-200">
-                            <button onClick={() => updateElements(selectedIds, { listType: 'none' })} className={`px-2 flex justify-center p-1 rounded transition-colors ${!selectedElement.listType || selectedElement.listType === 'none' ? 'bg-blue-50 text-blue-600 shadow-sm' : 'text-slate-400 hover:text-slate-600'}`} title="No List"><AlignLeft size={12} /></button>
-                            <button onClick={() => updateElements(selectedIds, { listType: 'bullet' })} className={`px-2 flex justify-center p-1 rounded transition-colors ${selectedElement.listType === 'bullet' ? 'bg-blue-50 text-blue-600 shadow-sm' : 'text-slate-400 hover:text-slate-600'}`} title="Bullet List"><List size={12} /></button>
-                            <button onClick={() => updateElements(selectedIds, { listType: 'number' })} className={`px-2 flex justify-center p-1 rounded transition-colors ${selectedElement.listType === 'number' ? 'bg-blue-50 text-blue-600 shadow-sm' : 'text-slate-400 hover:text-slate-600'}`} title="Numbered List"><ListOrdered size={12} /></button>
-                          </div>
-                        </div>
-
-                        <div className="grid grid-cols-2 gap-x-3 gap-y-2 mb-2">
-                          <div>
-                            <span className="text-[10px] text-slate-500 block mb-1">Line Height</span>
-                            <input type="range" min="0.5" max="3" step="0.1" value={selectedElement.lineHeight || 1.2} onChange={(e) => updateElements(selectedIds, { lineHeight: parseFloat(e.target.value) })} className="w-full" />
-                          </div>
-                          <div>
-                            <span className="text-[10px] text-slate-500 block mb-1">Letter Spac</span>
-                            <input type="range" min="-10" max="50" step="1" value={selectedElement.letterSpacing || 0} onChange={(e) => updateElements(selectedIds, { letterSpacing: parseInt(e.target.value) })} className="w-full" />
-                          </div>
-                        </div>
-                        
-                        <button onClick={() => updateElements(selectedIds, { vertical: !selectedElement.vertical })} className={`w-full mt-2 flex items-center justify-center gap-2 p-1.5 rounded border text-[10px] font-medium transition-colors ${selectedElement.vertical ? 'bg-blue-100 border-blue-300 text-blue-700' : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-100'}`}>
-                          <ArrowDown size={12} /> {selectedElement.vertical ? 'Vertical Text ON' : 'Vertical Text OFF'}
-                        </button>
-                      </div>
-
-                      <div className="bg-slate-50 p-3 rounded-lg border border-slate-200">
-                         <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block mb-2">Text Stroke Outline</span>
-                         <div className="flex items-center gap-2 mb-2">
-                           <input type="color" value={selectedElement.strokeColor || '#000000'} onChange={(e) => updateElements(selectedIds, { strokeColor: e.target.value })} className="w-6 h-6 p-0 border-0 rounded cursor-pointer shrink-0" />
-                           <input type="range" min="0" max="50" step="0.5" value={selectedElement.strokeWidth || 0} onChange={(e) => updateElements(selectedIds, { strokeWidth: parseFloat(e.target.value) })} className="w-full" />
-                           <span className="text-[10px] font-mono w-8 text-right">{selectedElement.strokeWidth || 0}</span>
-                         </div>
-                         <div className="flex items-center gap-2">
-                           <span className="text-[10px] text-slate-500 w-12">Position:</span>
-                           <select value={selectedElement.strokePosition || 'outside'} onChange={(e) => updateElements(selectedIds, { strokePosition: e.target.value })} className="flex-1 text-[11px] p-1 border border-slate-300 rounded bg-white">
-                             <option value="outside">Outside</option><option value="center">Center</option><option value="inside">Inside</option>
-                           </select>
-                         </div>
-                      </div>
-
-                      <div className="bg-slate-50 p-3 rounded-lg border border-slate-200">
-                         <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block mb-2">Drop Shadow</span>
-                         <div className="grid grid-cols-2 gap-x-2 gap-y-3">
-                           <div className="flex items-center gap-2">
-                             <span className="text-[10px] text-slate-500 w-6">Col</span>
-                             <input type="color" value={selectedElement.shadowColor || '#000000'} onChange={(e) => updateElements(selectedIds, { shadowColor: e.target.value })} className="flex-1 h-5 p-0 border-0 rounded cursor-pointer" />
-                           </div>
-                           <div className="flex items-center gap-2">
-                             <span className="text-[10px] text-slate-500 w-6">Blur</span>
-                             <input type="range" min="0" max="30" value={selectedElement.shadowBlur || 0} onChange={(e) => updateElements(selectedIds, { shadowBlur: parseInt(e.target.value) })} className="w-full" />
-                           </div>
-                           <div className="flex items-center gap-2">
-                             <span className="text-[10px] text-slate-500 w-6">X</span>
-                             <input type="range" min="-30" max="30" value={selectedElement.shadowX || 0} onChange={(e) => updateElements(selectedIds, { shadowX: parseInt(e.target.value) })} className="w-full" />
-                           </div>
-                           <div className="flex items-center gap-2">
-                             <span className="text-[10px] text-slate-500 w-6">Y</span>
-                             <input type="range" min="-30" max="30" value={selectedElement.shadowY || 0} onChange={(e) => updateElements(selectedIds, { shadowY: parseInt(e.target.value) })} className="w-full" />
-                           </div>
-                         </div>
-                      </div>
-                    </>
-                  )}
-
-                  {selectedElement.type === 'pattern' && (
-                    <div className="bg-slate-50 p-3 rounded-lg border border-slate-200">
-                      <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block mb-2">Pattern Density (1x - 20x)</span>
-                      <div className="flex items-center gap-2">
-                        <input type="range" min="0.5" max="20" step="0.5" value={selectedElement.patternScale || 1} onChange={(e) => updateElements(selectedIds, { patternScale: parseFloat(e.target.value) })} className="w-full" />
-                        <span className="text-[10px] font-mono w-8 text-right">{(selectedElement.patternScale || 1).toFixed(1)}x</span>
-                      </div>
-                    </div>
-                  )}
-
-                  {selectedElement.type === 'image' && !selectedElement.isTemplate && (
-                    <div className="bg-slate-50 p-3 rounded-lg border border-slate-200 space-y-2">
-                      <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider flex items-center gap-1.5"><Crop size={12}/> Crop Image</span>
-                      {['Top', 'Right', 'Bottom', 'Left'].map(side => {
-                        const propName = `crop${side.charAt(0)}`;
-                        return (
-                          <div key={side} className="flex items-center gap-2">
-                            <span className="text-[10px] text-slate-500 w-10">{side}</span>
-                            <input type="range" min="0" max="90" value={selectedElement[propName] || 0} onChange={(e) => updateElements(selectedIds, { [propName]: parseInt(e.target.value) })} className="w-full" />
-                            <span className="text-[10px] font-mono w-6 text-right">{selectedElement[propName] || 0}%</span>
-                          </div>
-                        )
-                      })}
-                    </div>
-                  )}
-
-                  <div className="pt-2 border-t border-slate-200">
-                    <span className="text-[11px] text-slate-500 font-medium block mb-2">Flip Content</span>
-                    <div className="flex bg-slate-100 p-1 rounded border border-slate-200 mb-4">
-                      <button onClick={() => updateElements(selectedIds, { flipX: !selectedElement.flipX })} className={`flex-1 flex justify-center p-1.5 rounded transition-colors ${selectedElement.flipX ? 'bg-white shadow-sm text-blue-600' : 'text-slate-500 hover:bg-slate-200'}`} title="Flip Horizontal">
-                        <FlipHorizontal size={16} />
-                      </button>
-                      <button onClick={() => updateElements(selectedIds, { flipY: !selectedElement.flipY })} className={`flex-1 flex justify-center p-1.5 rounded transition-colors ${selectedElement.flipY ? 'bg-white shadow-sm text-blue-600' : 'text-slate-500 hover:bg-slate-200'}`} title="Flip Vertical">
-                        <FlipVertical size={16} />
-                      </button>
-                    </div>
-
-                    <div className="flex items-center justify-between mb-1">
-                      <span className="text-[11px] text-slate-500 font-medium">Transparency</span>
-                      <span className="text-[10px] font-mono">{Math.round((selectedElement.opacity !== undefined ? selectedElement.opacity : 1) * 100)}%</span>
-                    </div>
-                    <input type="range" min="0" max="1" step="0.05" value={selectedElement.opacity !== undefined ? selectedElement.opacity : 1} onChange={(e) => updateElements(selectedIds, { opacity: parseFloat(e.target.value) })} className="w-full" />
-                  </div>
-                </div>
-              )}
-            </div>
-          )}
         </div>
       </aside>
 
       <main 
-        className="flex-1 flex flex-col h-full relative pb-14 md:pb-0" 
+        className="flex-1 flex flex-col h-full relative pb-20 md:pb-0" 
         onPointerDownCapture={(e) => {
           activePointers.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
           if (activePointers.current.size === 2) {
@@ -1392,43 +1429,60 @@ export default function App(props) {
         onPointerMove={handlePointerMove} 
         onPointerUp={handlePointerUp}
       >
-        <header className="h-14 bg-white border-b border-slate-200 flex items-center justify-between px-3 md:px-6 shadow-sm z-10 shrink-0">
+        {/* Top Header Menu Bar with iPhone Notch Safe Area Padding */}
+        <header 
+          className="bg-white border-b border-slate-200 flex items-center justify-between px-3 md:px-6 shadow-sm z-10 shrink-0 md:h-14"
+          style={{ paddingTop: 'max(14px, env(safe-area-inset-top, 14px))', paddingBottom: '12px' }}
+        >
           <div className="flex items-center gap-2 md:gap-4 text-[11px] font-semibold text-slate-500">
-            {/* {isEditingArtboard ? (
-              <form onSubmit={handleArtboardSubmit} className="hidden md:flex items-center gap-1 bg-white border border-blue-400 rounded px-2 py-0.5 shadow-sm">
-                <input type="number" step="0.1" value={artboardInput.w} onChange={(e) => setArtboardInput({...artboardInput, w: parseFloat(e.target.value) || 0})} className="w-12 text-center outline-none text-blue-700 font-bold bg-transparent" />
-                <span className="text-slate-400">"</span>
-                <span className="mx-1">x</span>
-                <input type="number" step="0.1" value={artboardInput.h} onChange={(e) => setArtboardInput({...artboardInput, h: parseFloat(e.target.value) || 0})} className="w-12 text-center outline-none text-blue-700 font-bold bg-transparent" />
-                <span className="text-slate-400">"</span>
-                <button type="submit" className="ml-1 bg-blue-100 hover:bg-blue-200 text-blue-700 px-2 py-0.5 rounded text-[10px] font-bold">OK</button>
-              </form>
-            ) : (
-              <span onClick={() => { setArtboardInput({ w: parseFloat(toInches(canvasSize.width)), h: parseFloat(toInches(canvasSize.height)) }); setIsEditingArtboard(true); }} className="hidden md:inline cursor-pointer hover:text-blue-600 transition-colors" title="Click to manually edit artboard size">
-                 Artboard: <span className="text-slate-800 font-bold border-b border-dashed border-slate-400 hover:border-blue-600 pb-0.5">{toInches(canvasSize.width)}" x {toInches(canvasSize.height)}"</span>
-              </span>
-            )}
-             */}
-            <div className="flex items-center bg-slate-100 p-0.5 rounded border border-slate-200">
+            {/* Desktop View Controls */}
+            <div className="hidden md:flex items-center bg-slate-100 p-0.5 rounded border border-slate-200">
               <button onClick={() => setShowTemplate(!showTemplate)} className={`px-2 py-1 hover:bg-white rounded flex items-center gap-1 ${showTemplate ? 'text-blue-600 font-medium' : 'text-slate-400'}`} title="Toggle Guides Visibility">
-                {showTemplate ? <Eye size={12} /> : <EyeOff size={12} />} <span className="hidden md:inline">Guides</span>
+                {showTemplate ? <Eye size={12} /> : <EyeOff size={12} />} <span>Guides</span>
               </button>
               <div className="w-px h-3 bg-slate-300 mx-1"></div>
               <button onClick={() => setShowGrid(!showGrid)} className={`px-2 py-1 hover:bg-white rounded flex items-center gap-1 ${showGrid ? 'text-indigo-600 font-medium' : 'text-slate-400'}`} title="Toggle Grid">
-                <Grid3X3 size={12} /> <span className="hidden md:inline">Grid</span>
+                <Grid3X3 size={12} /> <span>Grid</span>
               </button>
             </div>
 
-            <div className="flex items-center bg-slate-100 p-0.5 rounded border border-slate-200 ml-2">
+            {/* Mobile Hamburger Menu */}
+            <div className="md:hidden relative">
+              <button 
+                onClick={() => setIsMobileHeaderMenuOpen(!isMobileHeaderMenuOpen)} 
+                className={`p-2 rounded-lg border transition-colors ${isMobileHeaderMenuOpen ? 'bg-blue-50 border-blue-300 text-blue-600' : 'bg-slate-100 border-slate-200 text-slate-600'}`}
+                title="Canvas Options Menu"
+              >
+                <Menu size={18} />
+              </button>
+              
+              {isMobileHeaderMenuOpen && (
+                <div className="absolute top-full left-0 mt-2 w-48 bg-white border border-slate-200 rounded-xl shadow-xl p-2 space-y-1.5 z-50 animate-fadeIn">
+                  <div className="text-[9px] font-bold text-slate-400 uppercase tracking-wider px-2 py-1">Canvas Settings</div>
+                  <button onClick={() => { setShowTemplate(!showTemplate); setIsMobileHeaderMenuOpen(false); }} className="w-full flex items-center justify-between p-2 rounded-lg text-xs hover:bg-slate-50 text-slate-700">
+                    <span className="flex items-center gap-2"><Eye size={14}/> Guides</span>
+                    <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${showTemplate ? 'bg-blue-100 text-blue-700' : 'bg-slate-100 text-slate-500'}`}>{showTemplate ? 'ON' : 'OFF'}</span>
+                  </button>
+                  <button onClick={() => { setShowGrid(!showGrid); setIsMobileHeaderMenuOpen(false); }} className="w-full flex items-center justify-between p-2 rounded-lg text-xs hover:bg-slate-50 text-slate-700">
+                    <span className="flex items-center gap-2"><Grid3X3 size={14}/> Grid Overlay</span>
+                    <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${showGrid ? 'bg-indigo-100 text-indigo-700' : 'bg-slate-100 text-slate-500'}`}>{showGrid ? 'ON' : 'OFF'}</span>
+                  </button>
+                </div>
+              )}
+            </div>
+
+            {/* Undo / Redo Actions directly visible on top bar for Mobile and Desktop */}
+            <div className="flex items-center bg-slate-100 p-0.5 rounded border border-slate-200">
               <button onClick={handleUndo} disabled={historyIndex === 0} className={`px-2 py-1 rounded flex items-center gap-1 ${historyIndex === 0 ? 'text-slate-300 cursor-not-allowed' : 'text-slate-600 hover:bg-white hover:text-blue-600'}`} title="Undo (Ctrl+Z)">
-                <Undo2 size={14} />
+                <Undo2 size={16} />
               </button>
               <div className="w-px h-3 bg-slate-300 mx-1"></div>
               <button onClick={handleRedo} disabled={historyIndex === history.length - 1} className={`px-2 py-1 rounded flex items-center gap-1 ${historyIndex === history.length - 1 ? 'text-slate-300 cursor-not-allowed' : 'text-slate-600 hover:bg-white hover:text-blue-600'}`} title="Redo (Ctrl+Y)">
-                <Redo2 size={14} />
+                <Redo2 size={16} />
               </button>
             </div>
             
+            {/* Desktop Zoom controls */}
             <div className="hidden sm:flex items-center bg-slate-100 p-0.5 rounded border border-slate-200">
               <button onClick={handleFitToScreen} className="px-2 py-1 hover:bg-white rounded text-slate-500" title="Fit to Screen"><Maximize size={12} /></button>
               <button onClick={() => setZoomLevel(Math.max(0.05, zoomLevel / 1.25))} className="px-2 py-1 hover:bg-white rounded" title="Zoom Out"><ZoomOut size={12} /></button>
@@ -1438,10 +1492,9 @@ export default function App(props) {
           </div>
 
           <div className="flex items-center gap-2">
-            {/* Two-sided jobs: which side is being edited. */}
             {props.sideLabel ? <span className="px-3 py-1 rounded-full bg-blue-50 text-blue-700 text-[11px] font-semibold border border-blue-200">{props.sideLabel}</span> : null}
-            <button onClick={props.onBack} className="flex items-center gap-1.5 px-4 py-1.5 bg-white hover:bg-slate-50 text-slate-700 text-[11px] font-semibold rounded border border-slate-200 shadow-sm transition-colors">Back</button>
-            <button onClick={() => handleExportSVG(true)} disabled={isExporting} className="flex items-center gap-1.5 px-4 py-1.5 bg-blue-600 hover:bg-blue-700 disabled:opacity-60 text-white text-[11px] font-semibold rounded shadow-sm transition-colors">{isExporting ? 'Saving…' : 'Save & Next'}</button>
+            <button onClick={props.onBack} className="flex items-center gap-1.5 px-3 md:px-4 py-1.5 bg-white hover:bg-slate-50 text-slate-700 text-[11px] font-semibold rounded border border-slate-200 shadow-sm transition-colors">Back</button>
+            <button onClick={() => handleExportSVG(true)} disabled={isExporting} className="flex items-center gap-1.5 px-3 md:px-4 py-1.5 bg-blue-600 hover:bg-blue-700 disabled:opacity-60 text-white text-[11px] font-semibold rounded shadow-sm transition-colors">{isExporting ? 'Saving…' : 'Save & Next'}</button>
           </div>
         </header>
 
@@ -1452,6 +1505,22 @@ export default function App(props) {
               <p className="text-sm font-medium text-slate-600">Generating Vector SVG…</p>
             </div>
           )}
+
+          {/* In-Canvas Floating Mobile Zoom Controls */}
+          <div className="md:hidden fixed bottom-24 right-4 z-30 bg-white/90 backdrop-blur border border-slate-200 rounded-full shadow-lg flex items-center p-1 gap-1">
+            <button onClick={() => setZoomLevel(Math.max(0.05, zoomLevel / 1.25))} className="p-1.5 text-slate-600 hover:bg-slate-100 rounded-full" title="Zoom Out">
+              <ZoomOut size={16} />
+            </button>
+            <span className="text-[10px] font-mono px-1 font-bold text-slate-700">{Math.round(zoomLevel * 100)}%</span>
+            <button onClick={() => setZoomLevel(Math.min(5, zoomLevel * 1.25))} className="p-1.5 text-slate-600 hover:bg-slate-100 rounded-full" title="Zoom In">
+              <ZoomIn size={16} />
+            </button>
+            <div className="w-px h-4 bg-slate-200 mx-0.5" />
+            <button onClick={handleFitToScreen} className="p-1.5 text-blue-600 hover:bg-blue-50 rounded-full" title="Fit Screen">
+              <Maximize size={14} />
+            </button>
+          </div>
+
           <div style={{ position: 'absolute', top: '50%', left: '50%', transform: `translate(calc(-50% + ${panOffset.x}px), calc(-50% + ${panOffset.y}px))` }}>
             
             <div style={{ position: 'relative', width: canvasSize.width * zoomLevel, height: canvasSize.height * zoomLevel }}>
@@ -1484,8 +1553,27 @@ export default function App(props) {
                   if (el.isTemplate && (!showTemplate || isExporting)) return null;
 
                   const isSelected = selectedIds.includes(el.id) && activeTool !== 'draw';
-                  const isOutOfBounds = el.type === 'text' && (el.x < 0 || el.y < 0 || el.x + el.width > canvasSize.width || el.y + el.height > canvasSize.height);
-                  
+                  let isOutOfBounds = false;
+                  if (el.type === 'text') {
+                    const angleRad = (el.rotation || 0) * (Math.PI / 180);
+                    const cx = el.x + el.width / 2;
+                    const cy = el.y + el.height / 2;
+                    const hw = el.width / 2;
+                    const hh = el.height / 2;
+
+                    const corners = [
+                      { x: -hw, y: -hh },
+                      { x: hw, y: -hh },
+                      { x: hw, y: hh },
+                      { x: -hw, y: hh }
+                    ];
+
+                    isOutOfBounds = corners.some(c => {
+                      const rotatedX = cx + (c.x * Math.cos(angleRad) - c.y * Math.sin(angleRad));
+                      const rotatedY = cy + (c.x * Math.sin(angleRad) + c.y * Math.cos(angleRad));
+                      return rotatedX < 0 || rotatedX > canvasSize.width || rotatedY < 0 || rotatedY > canvasSize.height;
+                    });
+                  }
                   const baseStyle = {
                     position: 'absolute', left: el.isTemplate ? 0 : el.x * zoomLevel, top: el.isTemplate ? 0 : el.y * zoomLevel, 
                     width: (el.isTemplate ? canvasSize.width : el.width) * zoomLevel, height: (el.isTemplate ? canvasSize.height : el.height) * zoomLevel,
@@ -1527,7 +1615,7 @@ export default function App(props) {
                             backgroundColor: el.qrBgColor || '#ffffff'
                           }}
                         >
-                          <img src={qrImgUrl} alt="QR Code" style={{ width: '100%', height: '100%', objectFit: 'contain', pointerEvents: 'none' }} draggable={false} />
+                          <img src={qrImgUrl} alt="QR Code" style={{ width: '100%', height: '100%', objectFit: 'fill', pointerEvents: 'none' }} draggable={false} />
                         </div>
                       </div>
                     );
@@ -1637,7 +1725,7 @@ export default function App(props) {
                           <img 
                             src={el.src} alt={el.name} 
                             style={{ 
-                              ...contentWrapperStyle, objectFit: el.isTemplate ? 'fill' : 'cover', pointerEvents: 'none',
+                              ...contentWrapperStyle, objectFit: 'fill', pointerEvents: 'none',
                               clipPath: (el.cropT || el.cropR || el.cropB || el.cropL) ? `inset(${el.cropT || 0}% ${el.cropR || 0}% ${el.cropB || 0}% ${el.cropL || 0}%)` : 'none'
                             }} draggable={false} 
                           />
@@ -1757,7 +1845,7 @@ export default function App(props) {
                                 position: 'absolute', top: isMobileUI ? -64 : -35, left: '50%', marginLeft: isMobileUI ? -16 : -12, 
                                 width: isMobileUI ? 32 : 24, height: isMobileUI ? 32 : 24, backgroundColor: '#ffffff', border: '2px solid #3b82f6', 
                                 borderRadius: '50%', cursor: 'grab', zIndex: 20, pointerEvents: 'auto', 
-                                display: 'flex', alignItems: 'center', justifyContent: 'center', 
+                                display: 'flex', items: 'center', justifyContent: 'center', 
                                 boxShadow: '0 2px 4px rgba(0,0,0,0.15)', color: '#3b82f6' 
                               }}
                             >
@@ -1837,12 +1925,37 @@ export default function App(props) {
         </div>
       </aside>
 
-      <div className="md:hidden fixed bottom-0 left-0 w-full h-14 bg-white border-t border-slate-200 flex items-center justify-around z-40 shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.1)] pb-safe">
-        <button onClick={() => {setIsMobileToolsOpen(!isMobileToolsOpen); setIsMobileLayersOpen(false);}} className={`flex flex-col items-center p-2 w-20 rounded-lg transition-colors ${isMobileToolsOpen ? 'text-blue-600 bg-blue-50' : 'text-slate-500 hover:bg-slate-50'}`}>
+      {/* Mobile Properties Bottom Drawer (Height Reduced & Scrollable) */}
+      {isMobilePropertiesOpen && (
+        <div className="md:hidden fixed bottom-24 left-3 right-3 max-h-[50vh] h-auto bg-white rounded-2xl shadow-2xl border border-slate-200 z-50 flex flex-col overflow-hidden animate-fadeIn pb-safe">
+          <div className="p-3 border-b border-slate-200 flex items-center justify-between bg-slate-50 shrink-0">
+            <div className="flex items-center gap-2">
+              <Sliders size={16} className="text-blue-600" />
+              <h3 className="text-xs font-bold text-slate-700 uppercase tracking-wider">
+                Properties {selectedElement ? <span className="bg-blue-100 text-blue-700 px-1.5 py-0.5 rounded text-[9px] capitalize ml-1">{selectedElement.type}</span> : ''}
+              </h3>
+            </div>
+            <button onClick={() => setIsMobilePropertiesOpen(false)} className="p-1 text-slate-400 hover:text-slate-600 rounded-full bg-white border shadow-sm">
+              <X size={16} />
+            </button>
+          </div>
+          <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain">
+            {renderPropertiesContent()}
+          </div>
+        </div>
+      )}
+
+      {/* Floating Mobile Bottom Navigation Bar */}
+      <div className="md:hidden fixed bottom-4 left-4 right-4 bg-white border border-slate-200 rounded-2xl shadow-xl flex items-center justify-around z-40 h-16 px-2 pb-safe">
+        <button onClick={() => {setIsMobileToolsOpen(!isMobileToolsOpen); setIsMobileLayersOpen(false); setIsMobilePropertiesOpen(false);}} className={`flex flex-col items-center justify-center p-2 w-24 rounded-xl transition-colors ${isMobileToolsOpen ? 'text-blue-600 bg-blue-50 font-semibold' : 'text-slate-500 hover:bg-slate-50'}`}>
           <Palette size={20} />
           <span className="text-[9px] mt-1 font-bold tracking-wider uppercase">Tools</span>
         </button>
-        <button onClick={() => {setIsMobileLayersOpen(!isMobileLayersOpen); setIsMobileToolsOpen(false);}} className={`flex flex-col items-center p-2 w-20 rounded-lg transition-colors ${isMobileLayersOpen ? 'text-blue-600 bg-blue-50' : 'text-slate-500 hover:bg-slate-50'}`}>
+        <button onClick={() => {setIsMobilePropertiesOpen(!isMobilePropertiesOpen); setIsMobileToolsOpen(false); setIsMobileLayersOpen(false);}} className={`flex flex-col items-center justify-center p-2 w-24 rounded-xl transition-colors ${isMobilePropertiesOpen ? 'text-blue-600 bg-blue-50 font-semibold' : 'text-slate-500 hover:bg-slate-50'}`}>
+          <Sliders size={20} />
+          <span className="text-[9px] mt-1 font-bold tracking-wider uppercase">Properties</span>
+        </button>
+        <button onClick={() => {setIsMobileLayersOpen(!isMobileLayersOpen); setIsMobileToolsOpen(false); setIsMobilePropertiesOpen(false);}} className={`flex flex-col items-center justify-center p-2 w-24 rounded-xl transition-colors ${isMobileLayersOpen ? 'text-blue-600 bg-blue-50 font-semibold' : 'text-slate-500 hover:bg-slate-50'}`}>
           <Layers size={20} />
           <span className="text-[9px] mt-1 font-bold tracking-wider uppercase">Layers</span>
         </button>

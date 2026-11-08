@@ -149,3 +149,9 @@ body {
   background: linear-gradient(90deg, #0b6bcb, #38bdf8, #0b6bcb);
   animation: pdp-fedex-rates-indeterminate 1.15s ease-in-out infinite alternate;
 }
+
+@layer base {
+  input, select, textarea {
+    font-size: 16px !important;
+  }
+}

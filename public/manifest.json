@@ -1,0 +1,9 @@
+{
+  "name": "Resourceful Print Solution",
+  "short_name": "Print Solution",
+  "description": "Resourceful Print Solution App",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#000000"
+}

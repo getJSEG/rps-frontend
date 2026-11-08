@@ -338,14 +338,14 @@ export default function Navbar() {
     "min-[1480px]:inline-flex",
     "min-[1560px]:inline-flex",
   ];
-
+  
   return (
     <>
       <nav
-        className={`fixed top-0 left-0 right-0 nav-bg border-b border-slate-200 shadow-sm z-50 transition-transform duration-300 ${
+        className={`fixed top-0 left-0 right-0 nav-bg border-b border-slate-200 shadow-sm z-50 transition-transform duration-300 pt-[max(0px,env(safe-area-inset-top))] ${
           // Guests on phones need overflow visible so the burger card can slide out below the bar.
           isLoggedIn ? "overflow-visible" : "overflow-visible sm:overflow-hidden"
-        }`}
+    }`}
       >
         <div className="mx-auto w-full max-w-full px-3 py-2.5 sm:px-4">
           <div className="flex items-center justify-between gap-3 sm:gap-4">
