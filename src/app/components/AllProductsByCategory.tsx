@@ -111,7 +111,8 @@ export default function AllProductsByCategory() {
   return (
     <section className="min-h-screen bg-white px-4 py-8 pt-24 sm:px-6 lg:px-8">
       <div className="mx-auto w-full max-w-none">
-        <div className="flex gap-8">
+        {/* Phones/tablets: categories above the products; side by side from lg. */}
+        <div className="flex flex-col gap-8 lg:flex-row">
           <Sidebar />
           <div className="flex-1 min-w-0 overflow-x-hidden">
             <div className="mb-10">
