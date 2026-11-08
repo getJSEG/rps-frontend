@@ -229,7 +229,7 @@ export default function ProductDetailPage({ params }: { params: Promise<{ produc
       <Navbar />
       <section className="py-8 px-4 bg-white min-h-screen pt-24">
         <div className="w-full max-w-none mx-auto">
-          <div className="flex gap-8">
+          <div className="flex flex-col gap-8 lg:flex-row">
             {/* Sidebar - Left */}
             <Sidebar showAllProductsButton={false} />
 
