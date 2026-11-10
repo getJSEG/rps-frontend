@@ -30,17 +30,6 @@ export function isTwoSidedOption(groupName: string, optionName: string): boolean
   return /\bsides?\b/i.test(groupName) && /\b(2|two)[\s-]*sid(e|es|ed)\b/i.test(optionName);
 }
 
-/** A modifier with a two-sided option (e.g. "# of Sides"); it gives two canvases and never picks a template. */
-export function isSidesModifier(group: {
-  name?: string;
-  key?: string;
-  options?: Array<{ label?: string; value?: string }>;
-}): boolean {
-  return (group.options ?? []).some((o) =>
-    isTwoSidedOption(`${group.name || ""} ${group.key || ""}`, `${o.label || ""} ${o.value || ""}`)
-  );
-}
-
 /** One SVG with side 1 on the left and side 2 on the right; ids are prefixed per side so they cannot clash. */
 export async function combineSideSvgs(side1: Blob, side2: Blob): Promise<Blob> {
   const sides = await Promise.all(
