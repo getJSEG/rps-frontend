@@ -442,7 +442,7 @@ function ProductDetailContent() {
   const purchaseOptions = Array.isArray(product?.purchase_options) ? product.purchase_options : [];
   const hasPurchaseOptions = purchaseOptions.length > 0;
   const productPricingMode = inferPricingModeForProduct(product ?? null);
-  const fixedPriceShippingOnly = !isGraphicScenario && !hasPurchaseOptions && productPricingMode === "fixed";
+  const fixedPriceShippingOnly = !!product && !isGraphicScenario && !hasPurchaseOptions && productPricingMode === "fixed";
 
   // Determine the effective scope key for modifier filtering
   const effectiveScopeKey: string | null = hasPurchaseOptions
@@ -801,6 +801,13 @@ function ProductDetailContent() {
       setFedexRatesLoading(false);
       return cleanup;
     }
+    // Product still loading: shipping config (purchase options, box rules) is unknown yet.
+    if (!product) {
+      setFedexRates([]);
+      setSelectedFedexServiceType("");
+      setFedexRatesError(null);
+      return cleanup;
+    }
     if (widthLimitError || heightLimitError) {
       toast.error(widthLimitError || heightLimitError, { toastId: `pdp-error:${widthLimitError || heightLimitError}` });
       return;
@@ -938,6 +945,7 @@ function ProductDetailContent() {
     estimateShipForm.addressLine2,
     addressDefaultsLoaded,
     fixedPriceShippingOnly,
+    product,
   ]);
 
   useEffect(() => {
