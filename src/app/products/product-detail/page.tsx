@@ -29,7 +29,6 @@ import {
 } from "../../../utils/api";
 import DesignFlowModal from "../../components/design/DesignFlowModal";
 import {
-  isSidesModifier,
   isTwoSidedOption,
   printSizeKey,
   sideDesignKey,
@@ -1175,24 +1174,14 @@ function ProductDetailContent() {
    * customer's choices (per modifier, any ticked option), else the one with nothing ticked (the default).
    * Products without linked templates keep the template picker.
    */
-  // Sides never pick a template (2 sides gives two canvases by itself); sides options a template may still have
-  // ticked are ignored.
-  const sidesOptionIds = new Set<number>(
-    activeModifierGroups
-      .filter((group) => isSidesModifier(group))
-      .flatMap((group) => (Array.isArray(group.options) ? group.options : []))
-      .filter((o) => o.id != null)
-      .map((o) => Number(o.id))
-  );
-  const templateOptionIds = (t: ProductDesignTemplate) =>
-    (t.modifier_option_ids ?? []).filter((id) => !sidesOptionIds.has(Number(id)));
+  // Sides modifiers can pick a template too (e.g. "Print Thru Reverse"); two sides still gives two canvases.
+  const templateOptionIds = (t: ProductDesignTemplate) => t.modifier_option_ids ?? [];
   const autoTemplateMode = designTemplates.some((t) => templateOptionIds(t).length > 0);
   const autoTemplate = (() => {
     if (!autoTemplateMode) return null;
     const groupKeyByOptionId = new Map<number, string>();
     const selectedOptionIdByGroup = new Map<string, number>();
     for (const group of activeModifierGroups) {
-      if (isSidesModifier(group)) continue;
       const options = Array.isArray(group.options) ? group.options : [];
       for (const o of options) if (o.id != null) groupKeyByOptionId.set(Number(o.id), group.key);
       const selectedValue = String(selectedModifiers[group.key] || "").trim();
