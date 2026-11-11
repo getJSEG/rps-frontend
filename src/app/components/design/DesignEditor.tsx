@@ -172,7 +172,9 @@ export default function App(props) {
       id: generateId(), type: 'image', name: isUpload ? 'Background Image' : 'Locked Template',
       src: src, origImgWidth: width, origImgHeight: height,
       x: 0, y: 0, width: width, height: height, rotation: 0,
-      locked: !isUpload, hidden: false, opacity: 1, isTemplate: !isUpload, flipX: false, flipY: false 
+      locked: !isUpload, hidden: false, opacity: 1, isTemplate: !isUpload,
+      // Side 2 of a two-sided job is the back of the piece, so its template is shown mirrored.
+      flipX: !isUpload && props.mirrorTemplate === true, flipY: false
     };
 
     if (!src.startsWith('data:')) {
