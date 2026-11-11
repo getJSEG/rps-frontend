@@ -92,7 +92,20 @@ function designKeyFor(jobId: string, side: Side, twoSided: boolean) {
   return twoSided ? sideDesignKey(jobId, side) : jobId;
 }
 
-function DesignPreview({ design, templateId, templates, className }: { design: JobDesign; templateId?: number | null; templates: ProductDesignTemplate[]; className?: string }) {
+function DesignPreview({
+  design,
+  templateId,
+  templates,
+  className,
+  mirrored,
+}: {
+  design: JobDesign;
+  templateId?: number | null;
+  templates: ProductDesignTemplate[];
+  className?: string;
+  /** Side 2 of a two-sided job: the template is shown mirrored, as in the editor. */
+  mirrored?: boolean;
+}) {
   if (isPdfDesign(design)) {
     return (
       <a
@@ -120,7 +133,7 @@ function DesignPreview({ design, templateId, templates, className }: { design: J
         <img
           src={templateImageUrl(template)}
           alt="Template Guide"
-          className="absolute max-h-full max-w-full object-contain z-10 pointer-events-none"
+          className={`absolute max-h-full max-w-full object-contain z-10 pointer-events-none ${mirrored ? "-scale-x-100" : ""}`}
         />
       )}
     </div>
@@ -224,12 +237,17 @@ export default function DesignFlowModal({
     setError(null);
   }, [index, step, side]);
 
-  // Keep the editor on the template a previous design was made with.
+  // Side 2 is the back of the same piece: it always uses side 1's template (shown mirrored), with no picker.
+  const followsSide1Template = twoSided && side === 2;
+  const side1TemplateId = twoSided && job ? designs[sideDesignKey(job.id, 1)]?.templateId ?? null : null;
+
+  // Keep the editor on the template a previous design was made with; side 2 takes side 1's.
+  const keptTemplateId = followsSide1Template ? side1TemplateId : design?.templateId ?? null;
   useEffect(() => {
-    if (design?.templateId != null && templates.some((t) => t.id === design.templateId)) {
-      setTemplateId(design.templateId);
+    if (keptTemplateId != null && templates.some((t) => t.id === keptTemplateId)) {
+      setTemplateId(keptTemplateId);
     }
-  }, [design?.templateId, templates]);
+  }, [keptTemplateId, side, templates]);
 
   const goToJob = (nextIndex: number) => {
     if (nextIndex >= jobs.length) {
@@ -264,6 +282,11 @@ export default function DesignFlowModal({
       // The side's SVG is kept to build the combined file; a changed side makes the old combined file stale.
       onDesignChange(sideDesignKey(job.id, side), { ...saved, sizeKey, svgFile: fields.file });
       onDesignChange(job.id, null);
+      // Side 1 moved to another template: side 2 was made on the old shape, so it must be reviewed again.
+      const side2 = designs[sideDesignKey(job.id, 2)];
+      if (side === 1 && side2?.approved && (side2.templateId ?? null) !== payload.templateId) {
+        onDesignChange(sideDesignKey(job.id, 2), { ...side2, approved: false });
+      }
     } else {
       onDesignChange(job.id, { ...saved, sizeKey });
     }
@@ -465,6 +488,7 @@ export default function DesignFlowModal({
           cropRatio={cropRatio}
           jobLabel={twoSided ? `${jobLabel(job, index)} · Side ${side}` : jobLabel(job, index)}
           sideLabel={twoSided ? `Side ${side} of 2` : undefined}
+          mirrorTemplate={twoSided && side === 2}
           initialDesignState={uploadedImage ? uploadedImage.designState : reusableState}
           onBack={() => {
             const freshUpload = uploadedImage?.fresh === true;
@@ -588,7 +612,7 @@ export default function DesignFlowModal({
                 <p className="mt-1 text-sm text-gray-500">Upload a print-ready file, or design one right here.</p>
               </div>
 
-              {templates.length > 1 ? (
+              {templates.length > 1 && !followsSide1Template ? (
                 <div className="mt-6">
                   <p className="mb-2 text-sm font-medium text-gray-700">Choose a template</p>
                   <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
@@ -705,7 +729,12 @@ export default function DesignFlowModal({
                           <span className="text-[11px] font-semibold uppercase tracking-wide text-gray-500">Side {s}</span>
                           <div className="relative min-h-0 w-full flex-1">
                             {sideDesign ? (
-                              <DesignPreview design={sideDesign} templateId={sideDesign.templateId} templates={templates} />
+                              <DesignPreview
+                                design={sideDesign}
+                                templateId={sideDesign.templateId}
+                                templates={templates}
+                                mirrored={s === 2}
+                              />
                             ) : (
                               <span className="flex h-full items-center justify-center text-xs text-gray-400">Not designed yet</span>
                             )}
