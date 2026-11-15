@@ -3,8 +3,8 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { 
   Palette, MousePointer, Hand, Pencil, Type, Square, Circle as CircleIcon, 
-  Star, Triangle, Plus, ArrowRight, Compass, Shield, Sun, ImagePlus, Lock, 
-  Maximize, ZoomOut, ZoomIn, Layers, X, Menu,
+  Star, Triangle, Plus, ArrowRight, Phone, Shield, Sun, ImagePlus, Lock, 
+  Maximize, ZoomOut, ZoomIn, Layers, X, Menu, MapPin,
   Image as ImageIcon, EyeOff, Eye, Unlock, Trash2, AlignLeft, AlignCenter, 
   AlignRight, AlignJustify, ArrowDown, RotateCw, AlertTriangle, QrCode, Grid3X3,
   List, ListOrdered, Copy, Crop, FlipHorizontal, FlipVertical, LayoutGrid, ChevronDown, Undo2, Redo2, Sliders
@@ -17,28 +17,44 @@ const SOURCE_PLACEHOLDER = '__source__';
 const UPLOADED_ARTWORK_PLACEHOLDER = '__uploaded_artwork__';
 const MAX_DESIGN_STATE_BYTES = 12 * 1024 * 1024;
 
-const GOOGLE_FONTS = [
-  'Inter', 'Roboto', 'Open Sans', 'Montserrat', 'Playfair Display', 
-  'Dancing Script', 'Bebas Neue', 'Cinzel', 'Courier Prime', 'Caveat',
+// ==========================================
+// CENTRALIZED FONT CONFIGURATION
+// To add a new Google Font, simply add an entry here!
+// ==========================================
+const FONT_CONFIG = [
+  // Existing Fonts
+  { name: 'Inter', google: 'Inter:wght@400;600;700', url: 'https://cdn.jsdelivr.net/npm/@fontsource/inter/files/inter-latin-400-normal.woff' },
+  { name: 'Roboto', google: 'Roboto:wght@400;500;700', url: 'https://cdn.jsdelivr.net/npm/@fontsource/roboto/files/roboto-latin-400-normal.woff' },
+  { name: 'Open Sans', google: 'Open+Sans:wght@400;600;700', url: 'https://cdn.jsdelivr.net/npm/@fontsource/open-sans/files/open-sans-latin-400-normal.woff' },
+  { name: 'Montserrat', google: 'Montserrat:wght@400;600;700', url: 'https://cdn.jsdelivr.net/npm/@fontsource/montserrat/files/montserrat-latin-400-normal.woff' },
+  { name: 'Playfair Display', google: 'Playfair+Display:wght@400;600;700', url: 'https://cdn.jsdelivr.net/npm/@fontsource/playfair-display/files/playfair-display-latin-400-normal.woff' },
+  { name: 'Dancing Script', google: 'Dancing+Script:wght@400;700', url: 'https://cdn.jsdelivr.net/npm/@fontsource/dancing-script/files/dancing-script-latin-400-normal.woff' },
+  { name: 'Bebas Neue', google: 'Bebas+Neue', url: 'https://cdn.jsdelivr.net/npm/@fontsource/bebas-neue/files/bebas-neue-latin-400-normal.woff' },
+  { name: 'Cinzel', google: 'Cinzel:wght@400;700', url: 'https://cdn.jsdelivr.net/npm/@fontsource/cinzel/files/cinzel-latin-400-normal.woff' },
+  { name: 'Courier Prime', google: 'Courier+Prime:wght@400;700', url: 'https://cdn.jsdelivr.net/npm/@fontsource/courier-prime/files/courier-prime-latin-400-normal.woff' },
+  { name: 'Caveat', google: 'Caveat:wght@400;700', url: 'https://cdn.jsdelivr.net/npm/@fontsource/caveat/files/caveat-latin-400-normal.woff' },
+
+  // Newly Added Google Fonts
+  { name: 'BBH Bogle', google: 'BBH+Bogle', url: 'https://cdn.jsdelivr.net/npm/@fontsource/bbh-bogle/files/bbh-bogle-latin-400-normal.woff' },
+  { name: 'Black Ops One', google: 'Black+Ops+One', url: 'https://cdn.jsdelivr.net/npm/@fontsource/black-ops-one/files/black-ops-one-latin-400-normal.woff' },
+  { name: 'Bungee Shade', google: 'Bungee+Shade', url: 'https://cdn.jsdelivr.net/npm/@fontsource/bungee-shade/files/bungee-shade-latin-400-normal.woff' },
+  { name: 'Henny Penny', google: 'Henny+Penny', url: 'https://cdn.jsdelivr.net/npm/@fontsource/henny-penny/files/henny-penny-latin-400-normal.woff' },
+  { name: 'Imperial Script', google: 'Imperial+Script', url: 'https://cdn.jsdelivr.net/npm/@fontsource/imperial-script/files/imperial-script-latin-400-normal.woff' },
+  { name: 'Kablammo', google: 'Kablammo', url: 'https://cdn.jsdelivr.net/npm/@fontsource/kablammo/files/kablammo-latin-400-normal.woff' },
+  { name: 'Lavishly Yours', google: 'Lavishly+Yours', url: 'https://cdn.jsdelivr.net/npm/@fontsource/lavishly-yours/files/lavishly-yours-latin-400-normal.woff' },
+  { name: 'Lilita One', google: 'Lilita+One', url: 'https://cdn.jsdelivr.net/npm/@fontsource/lilita-one/files/lilita-one-latin-400-normal.woff' },
+  { name: 'Titan One', google: 'Titan+One', url: 'https://cdn.jsdelivr.net/npm/@fontsource/titan-one/files/titan-one-latin-400-normal.woff' },
+  { name: 'Updock', google: 'Updock', url: 'https://cdn.jsdelivr.net/npm/@fontsource/updock/files/updock-latin-400-normal.woff' },
+  { name: 'WindSong', google: 'WindSong:wght@400;500', url: 'https://cdn.jsdelivr.net/npm/@fontsource/windsong/files/windsong-latin-400-normal.woff' },
 ];
 
-const FONT_URLS = {
-  'Inter': 'https://cdn.jsdelivr.net/npm/@fontsource/inter/files/inter-latin-400-normal.woff',
-  'Roboto': 'https://cdn.jsdelivr.net/npm/@fontsource/roboto/files/roboto-latin-400-normal.woff',
-  'Open Sans': 'https://cdn.jsdelivr.net/npm/@fontsource/open-sans/files/open-sans-latin-400-normal.woff',
-  'Montserrat': 'https://cdn.jsdelivr.net/npm/@fontsource/montserrat/files/montserrat-latin-400-normal.woff',
-  'Playfair Display': 'https://cdn.jsdelivr.net/npm/@fontsource/playfair-display/files/playfair-display-latin-400-normal.woff',
-  'Dancing Script': 'https://cdn.jsdelivr.net/npm/@fontsource/dancing-script/files/dancing-script-latin-400-normal.woff',
-  'Bebas Neue': 'https://cdn.jsdelivr.net/npm/@fontsource/bebas-neue/files/bebas-neue-latin-400-normal.woff',
-  'Cinzel': 'https://cdn.jsdelivr.net/npm/@fontsource/cinzel/files/cinzel-latin-400-normal.woff',
-  'Courier Prime': 'https://cdn.jsdelivr.net/npm/@fontsource/courier-prime/files/courier-prime-latin-400-normal.woff',
-  'Caveat': 'https://cdn.jsdelivr.net/npm/@fontsource/caveat/files/caveat-latin-400-normal.woff'
-};
+const GOOGLE_FONTS = FONT_CONFIG.map(f => f.name);
+const FONT_URLS = Object.fromEntries(FONT_CONFIG.map(f => [f.name, f.url]));
+const GOOGLE_FONTS_LINK_HREF = `https://fonts.googleapis.com/css2?${FONT_CONFIG.map(f => `family=${f.google}`).join('&')}&display=swap`;
 
 const generateId = () => Math.random().toString(36).substr(2, 9);
 
 export default function App(props) {
-  // Pixels per inch of this canvas: templates pass their real size (pxPerInch); blank canvases use PPI.
   const ppi = props.pxPerInch > 0 ? props.pxPerInch : PPI;
   const toInches = (px) => (px / ppi).toFixed(2);
   const [isInitializing, setIsInitializing] = useState(true);
@@ -101,45 +117,39 @@ export default function App(props) {
     loadScript('https://cdnjs.cloudflare.com/ajax/libs/opentype.js/1.3.4/opentype.min.js');
 
     const linkId = 'google-fonts-link';
-    if (!document.getElementById(linkId)) {
-      const link = document.createElement('link');
+    let link = document.getElementById(linkId);
+    if (!link) {
+      link = document.createElement('link');
       link.id = linkId;
       link.rel = 'stylesheet';
-      link.href = 'https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Caveat:wght@400;700&family=Cinzel:wght@400;700&family=Courier+Prime:wght@400;700&family=Dancing+Script:wght@400;700&family=Inter:wght@400;600;700&family=Montserrat:wght@400;600;700&family=Open+Sans:wght@400;600;700&family=Playfair+Display:wght@400;600;700&family=Roboto:wght@400;500;700&display=swap';
       document.head.appendChild(link);
     }
+    link.href = GOOGLE_FONTS_LINK_HREF;
 
-      exImgTemplate(props.source, props.sourceSize.width, props.sourceSize.height);
+    exImgTemplate(props.source, props.sourceSize.width, props.sourceSize.height);
 
-      const saved = props.initialDesignState;
-      if (saved && Array.isArray(saved.elements)) {
-        const hasUploadBase = saved.elements.some(el => el.src === SOURCE_PLACEHOLDER);
-        
-        const restored = saved.elements.map(el => {
-          let updatedSrc = el.src;
-          if (updatedSrc === SOURCE_PLACEHOLDER) {
-            updatedSrc = props.source;
-          } else if (updatedSrc === UPLOADED_ARTWORK_PLACEHOLDER && props.initialImageLayer?.url) {
-            updatedSrc = props.initialImageLayer.url;
-          }
-          return { ...el, src: updatedSrc };
-        });
+    const saved = props.initialDesignState;
+    if (saved && Array.isArray(saved.elements)) {
+      const hasUploadBase = saved.elements.some(el => el.src === SOURCE_PLACEHOLDER);
+      
+      const restored = saved.elements.map(el => {
+        let updatedSrc = el.src;
+        if (updatedSrc === SOURCE_PLACEHOLDER) {
+          updatedSrc = props.source;
+        } else if (updatedSrc === UPLOADED_ARTWORK_PLACEHOLDER && props.initialImageLayer?.url) {
+          updatedSrc = props.initialImageLayer.url;
+        }
+        return { ...el, src: updatedSrc };
+      });
 
-        const restoredIds = new Set(restored.map(el => el.id));
-        setElements(prev => [...restored, ...prev.filter(el => !restoredIds.has(el.id) && !(hasUploadBase && !el.isTemplate && el.src === props.source))]);
-        if (saved.backgroundColor) setBackgroundColor(saved.backgroundColor);
-      }
+      const restoredIds = new Set(restored.map(el => el.id));
+      setElements(prev => [...restored, ...prev.filter(el => !restoredIds.has(el.id) && !(hasUploadBase && !el.isTemplate && el.src === props.source))]);
+      if (saved.backgroundColor) setBackgroundColor(saved.backgroundColor);
+    }
 
-      const initTimer = setTimeout(() => setIsInitializing(false), 600);
-      return () => clearTimeout(initTimer);
+    const initTimer = setTimeout(() => setIsInitializing(false), 600);
+    return () => clearTimeout(initTimer);
   }, []); 
-
-  const handleArtboardSubmit = (e) => {
-    e.preventDefault();
-    setCanvasSize({ width: artboardInput.w * ppi, height: artboardInput.h * ppi });
-    setIsEditingArtboard(false);
-    handleFitToScreen();
-  };
 
   const exImgTemplate = (src, width, height) => {
     const isUpload = src.startsWith('blob:');
@@ -172,9 +182,7 @@ export default function App(props) {
       id: generateId(), type: 'image', name: isUpload ? 'Background Image' : 'Locked Template',
       src: src, origImgWidth: width, origImgHeight: height,
       x: 0, y: 0, width: width, height: height, rotation: 0,
-      locked: !isUpload, hidden: false, opacity: 1, isTemplate: !isUpload,
-      // Side 2 of a two-sided job is the back of the piece, so its template is shown mirrored.
-      flipX: !isUpload && props.mirrorTemplate === true, flipY: false
+      locked: !isUpload, hidden: false, opacity: 1, isTemplate: !isUpload, flipX: false, flipY: false 
     };
 
     if (!src.startsWith('data:')) {
@@ -287,7 +295,7 @@ export default function App(props) {
     try {
       let defsContent = `
         <style>
-          @import url('https://fonts.googleapis.com/css2?family=Bebas+Neue&amp;family=Caveat:wght@400;700&amp;family=Cinzel:wght@400;700&amp;family=Courier+Prime:wght@400;700&amp;family=Dancing+Script:wght@400;700&amp;family=Inter:wght@400;600;700&amp;family=Montserrat:wght@400;600;700&amp;family=Open+Sans:wght@400;600;700&amp;family=Playfair+Display:wght@400;600;700&amp;family=Roboto:wght@400;500;700&amp;display=swap');
+          @import url('${GOOGLE_FONTS_LINK_HREF}');
         </style>
       `;
       let bodyContent = '';
@@ -312,7 +320,8 @@ export default function App(props) {
             case 'triangle': elementSvg = `<g transform="scale(${el.width/24}, ${el.height/24})"><polygon points="12 2 22 21 2 21" fill="${fill}" /></g>`; break;
             case 'cross': elementSvg = `<g transform="scale(${el.width/24}, ${el.height/24})"><path d="M19 10h-5V5h-4v5H5v4h5v5h4v-5h5v-4z" fill="${fill}" /></g>`; break;
             case 'arrow': elementSvg = `<g transform="scale(${el.width/24}, ${el.height/24})"><path d="M5 13h11.586l-5.293 5.293 1.414 1.414L20.414 12l-7.707-7.707-1.414 1.414L16.586 11H5v2z" fill="${fill}" /></g>`; break;
-            case 'rhombus': elementSvg = `<g transform="scale(${el.width/24}, ${el.height/24})"><polygon points="12 2 22 12 12 22 2 12" fill="${fill}" /></g>`; break;
+            case 'phone': elementSvg = `<g transform="scale(${el.width/24}, ${el.height/24})"><polygon points="12 2 22 12 12 22 2 12" fill="${fill}" /></g>`; break;
+            case 'pin': elementSvg = `<g transform="scale(${el.width/24}, ${el.height/24})"><polygon points="12 2 22 12 12 22 2 12" fill="${fill}" /></g>`; break;
             case 'octagon': elementSvg = `<g transform="scale(${el.width/24}, ${el.height/24})"><polygon points="7.86 2 h8.28 l5.86 5.86 v8.28 l-5.86 5.86 H7.86 L2 16.14 V7.86 Z" fill="${fill}" /></g>`; break;
             case 'sun': elementSvg = `<g transform="scale(${el.width/24}, ${el.height/24})"><circle cx="12" cy="12" r="5" fill="${fill}"/><path d="M12 1v2m0 18v2M4.22 4.22l1.42 1.42m12.72 12.72l1.42 1.42M1 12h2m18 0h2M4.22 19.78l1.42-1.42m12.72-12.72l1.42-1.42" stroke="${fill}" stroke-width="2" stroke-linecap="round"/></g>`; break;
             default: elementSvg = `<rect width="${el.width}" height="${el.height}" fill="${fill}" />`;
@@ -359,14 +368,14 @@ export default function App(props) {
         } else if (el.type === 'text') {
           const fontUrl = FONT_URLS[el.fontFamily] || FONT_URLS['Inter']; 
           try {
-            const font = await new Promise((resolve, reject) => {
+            const font = await new Promise((resolve) => {
               if (!window.opentype) {
                 console.warn("Opentype.js is missing for font rendering.");
                 resolve(null);
               } else {
                 window.opentype.load(fontUrl, (err, f) => {
                   if (err) {
-                    console.error("Font outlining failed to load TTF URL:", err);
+                    console.error("Font outlining failed to load TTF/WOFF URL:", err);
                     resolve(null);
                   } else {
                     resolve(f);
@@ -376,8 +385,6 @@ export default function App(props) {
             });
 
             if (font) {
-              let textPaths = '';
-              
               let lines = [];
               const hardLines = el.text.split('\n');
               
@@ -407,8 +414,16 @@ export default function App(props) {
 
               const lineHeightPx = el.fontSize * (el.lineHeight || 1.2);
               const ascender = font.ascender / font.unitsPerEm * el.fontSize;
-              let currentY = ascender;
+              
+              let shadowPaths = '';
+              let strokePaths = '';
+              let fillPaths = '';
 
+              const hasShadow = el.shadowColor && (el.shadowBlur > 0 || el.shadowX !== 0 || el.shadowY !== 0);
+              const hasStroke = el.strokeWidth > 0 && el.strokeColor;
+              const canvasScaleFactor = Math.max(canvasSize.width, canvasSize.height) / 800;
+
+              let currentY = ascender;
               for (let i = 0; i < lines.length; i++) {
                 const line = lines[i];
                 if (line.trim() === '') {
@@ -423,20 +438,35 @@ export default function App(props) {
                 } else if (el.textAlign === 'right') {
                   currentX = el.width - textWidth;
                 }
-                
-                const path = font.getPath(line, currentX, currentY, el.fontSize);
-                path.fill = el.fill || '#000000';
-                
-                if (el.strokeWidth > 0 && el.strokeColor) {
-                  const canvasScaleFactor = Math.max(canvasSize.width, canvasSize.height) / 800;
-                  const strokeWidthPx = el.strokeWidth * canvasScaleFactor;
-                  path.stroke = el.strokeColor;
-                  path.strokeWidth = strokeWidthPx;
+
+                // 1. Shadow Path (Bottom Layer)
+                if (hasShadow) {
+                  const sOffsetX = (el.shadowX || 0) * canvasScaleFactor;
+                  const sOffsetY = (el.shadowY || 0) * canvasScaleFactor;
+                  const sPath = font.getPath(line, currentX + sOffsetX, currentY + sOffsetY, el.fontSize);
+                  sPath.fill = el.shadowColor;
+                  shadowPaths += sPath.toSVG();
                 }
-                textPaths += path.toSVG();
+
+                // 2. Stroke Path (Middle Layer)
+                if (hasStroke) {
+                  const strokeWidthPx = el.strokeWidth * canvasScaleFactor;
+                  const stPath = font.getPath(line, currentX, currentY, el.fontSize);
+                  stPath.fill = 'none';
+                  stPath.stroke = el.strokeColor;
+                  stPath.strokeWidth = strokeWidthPx;
+                  strokePaths += stPath.toSVG();
+                }
+
+                // 3. Fill Path (Top Layer)
+                const fPath = font.getPath(line, currentX, currentY, el.fontSize);
+                fPath.fill = el.fill || '#000000';
+                fillPaths += fPath.toSVG();
+
                 currentY += lineHeightPx;
               }
-              elementSvg = textPaths;
+
+              elementSvg = `<g>${shadowPaths}${strokePaths}${fillPaths}</g>`;
             } else {
                let lines = [];
                const tempCanvas = document.createElement('canvas');
@@ -785,15 +815,31 @@ export default function App(props) {
     setSelectedIds(targetIds);
     if (!menuState.props) toggleMenu('props');
     
+    const selEls = elements.filter(el => targetIds.includes(el.id));
+    const minX = Math.min(...selEls.map(el => el.x));
+    const minY = Math.min(...selEls.map(el => el.y));
+    const maxX = Math.max(...selEls.map(el => el.x + el.width));
+    const maxY = Math.max(...selEls.map(el => el.y + el.height));
+    const origBox = { x: minX, y: minY, w: Math.max(1, maxX - minX), h: Math.max(1, maxY - minY) };
+
     const origPositions = {};
     elements.forEach(el => {
       if (targetIds.includes(el.id)) {
-        origPositions[el.id] = { x: el.x, y: el.y, w: el.width, h: el.height, rot: el.rotation || 0, fontSize: el.fontSize || 32 };
+        origPositions[el.id] = { 
+          x: el.x, y: el.y, w: el.width, h: el.height, rot: el.rotation || 0, 
+          fontSize: el.fontSize || 32,
+          letterSpacing: el.letterSpacing || 0,
+          lineHeight: el.lineHeight || 1.2,
+          relX: (el.x - origBox.x) / origBox.w,
+          relY: (el.y - origBox.y) / origBox.h,
+          relW: el.width / origBox.w,
+          relH: el.height / origBox.h
+        };
       }
     });
 
     dragStartElementsRef.current = JSON.parse(JSON.stringify(elements));
-    setDragAction({ type, direction, startX: e.clientX, startY: e.clientY, origPositions, pointerId: e.pointerId, target: e.target });
+    setDragAction({ type, direction, startX: e.clientX, startY: e.clientY, origBox, origPositions, pointerId: e.pointerId, target: e.target });
   };
 
   const handleContainerPointerDown = (e) => {
@@ -801,7 +847,11 @@ export default function App(props) {
     setIsMobileHeaderMenuOpen(false);
     if (activePointers.current.size > 1) return;
 
-    if (activeTool === 'pan' || (e.button === 1) || e.altKey || (e.pointerType === 'touch' && activeTool === 'select')) { 
+    if (e.target === containerRef.current || e.target === canvasRef.current || e.target.id === 'design-artboard') {
+      setSelectedIds([]);
+    }
+
+    if (activeTool === 'pan' || (e.button === 1) || e.altKey || (e.pointerType === 'touch' && activeTool === 'select' && e.target !== containerRef.current && e.target !== canvasRef.current)) { 
       e.preventDefault();
       setDragAction({ type: 'pan', startX: e.clientX, startY: e.clientY, origPanX: panOffset.x, origPanY: panOffset.y });
       return;
@@ -815,12 +865,12 @@ export default function App(props) {
       dragStartElementsRef.current = JSON.parse(JSON.stringify(elements));
       setDragAction({ type: 'drawing', points: [{x, y}] });
       return;
-    } else if (activeTool === 'select' && !e.shiftKey) {
+    } else if (activeTool === 'select' && !e.shiftKey && (e.target === containerRef.current || e.target === canvasRef.current || e.target.id === 'design-artboard')) {
+      setSelectedIds([]);
       const rect = canvasRef.current.getBoundingClientRect();
       const x = (e.clientX - rect.left) / zoomLevel;
       const y = (e.clientY - rect.top) / zoomLevel;
       setSelectionBox({ startX: x, startY: y, endX: x, endY: y });
-      setSelectedIds([]);
     }
     setShowShapeMenu(false);
   };
@@ -873,55 +923,119 @@ export default function App(props) {
         
         if (dragAction.type === 'move') {
           return { ...el, x: orig.x + dx, y: orig.y + dy };
-        } else if (dragAction.type === 'resize' && selectedIds.length === 1) {
-          const angleRad = (orig.rot || 0) * (Math.PI / 180);
-          const localDx = dx * Math.cos(-angleRad) - dy * Math.sin(-angleRad);
-          const localDy = dx * Math.sin(-angleRad) + dy * Math.cos(-angleRad);
+        } else if (dragAction.type === 'resize') {
+          const isCorner = ['nw', 'ne', 'sw', 'se'].includes(dragAction.direction);
 
-          let newW = orig.w; 
-          let newH = orig.h;
-          let dw = 0; let dh = 0;
+          if (selectedIds.length > 1) {
+            let newBoxW = dragAction.origBox.w;
+            let newBoxH = dragAction.origBox.h;
+            let dw = 0; let dh = 0;
+            let newBoxX = dragAction.origBox.x;
+            let newBoxY = dragAction.origBox.y;
 
-          if (dragAction.direction.includes('e')) { dw = localDx; newW += dw; }
-          if (dragAction.direction.includes('w')) { dw = -localDx; newW += dw; }
-          if (dragAction.direction.includes('s')) { dh = localDy; newH += dh; }
-          if (dragAction.direction.includes('n')) { dh = -localDy; newH += dh; }
+            if (dragAction.direction.includes('e')) { dw = dx; newBoxW += dw; }
+            if (dragAction.direction.includes('w')) { dw = -dx; newBoxW += dw; newBoxX -= dw; }
+            if (dragAction.direction.includes('s')) { dh = dy; newBoxH += dh; }
+            if (dragAction.direction.includes('n')) { dh = -dy; newBoxH += dh; newBoxY -= dy; }
 
-          if (['nw', 'ne', 'sw', 'se'].includes(dragAction.direction) && ['shape', 'image', 'pattern', 'qr'].includes(el.type)) {
-            const scale = Math.abs(dw) > Math.abs(dh) ? newW / orig.w : newH / orig.h;
-            newW = orig.w * scale;
-            newH = orig.h * scale;
-            dw = newW - orig.w;
-            dh = newH - orig.h;
-          }
+            const MIN_SIZE = 20;
+            if (newBoxW < MIN_SIZE) newBoxW = MIN_SIZE;
+            if (newBoxH < MIN_SIZE) newBoxH = MIN_SIZE;
 
-          const MIN_SIZE = 20;
-          if (newW < MIN_SIZE) { dw += (MIN_SIZE - newW); newW = MIN_SIZE; }
-          if (newH < MIN_SIZE) { dh += (MIN_SIZE - newH); newH = MIN_SIZE; }
-
-          let localCxShift = 0; let localCyShift = 0;
-          if (dragAction.direction.includes('e')) localCxShift = dw / 2;
-          if (dragAction.direction.includes('w')) localCxShift = -dw / 2;
-          if (dragAction.direction.includes('s')) localCyShift = dh / 2;
-          if (dragAction.direction.includes('n')) localCyShift = -dh / 2;
-
-          const globalCxShift = localCxShift * Math.cos(angleRad) - localCyShift * Math.sin(angleRad);
-          const globalCyShift = localCxShift * Math.sin(angleRad) + localCyShift * Math.cos(angleRad);
-
-          const origCx = orig.x + orig.w / 2;
-          const origCy = orig.y + orig.h / 2;
-          const newX = (origCx + globalCxShift) - newW / 2;
-          const newY = (origCy + globalCyShift) - newH / 2;
-
-          if (el.type === 'text') {
-            const isCorner = ['nw', 'ne', 'sw', 'se'].includes(dragAction.direction);
             if (isCorner) {
-              const ratio = newH / orig.h;
+              const scale = Math.abs(dw) > Math.abs(dh) 
+                ? newBoxW / dragAction.origBox.w 
+                : newBoxH / dragAction.origBox.h;
+              newBoxW = dragAction.origBox.w * scale;
+              newBoxH = dragAction.origBox.h * scale;
+
+              newBoxX = dragAction.origBox.x;
+              newBoxY = dragAction.origBox.y;
+              if (dragAction.direction.includes('w')) {
+                newBoxX = dragAction.origBox.x + (dragAction.origBox.w - newBoxW);
+              }
+              if (dragAction.direction.includes('n')) {
+                newBoxY = dragAction.origBox.y + (dragAction.origBox.h - newBoxH);
+              }
+            }
+
+            const scaleX = newBoxW / dragAction.origBox.w;
+            const scaleY = newBoxH / dragAction.origBox.h;
+
+            const newX = newBoxX + orig.relX * newBoxW;
+            const newY = newBoxY + orig.relY * newBoxH;
+            const newW = orig.w * scaleX;
+            const newH = orig.h * scaleY;
+
+            if (el.type === 'text') {
+              const ratio = (scaleX + scaleY) / 2;
               const newFontSize = Math.min(1296, Math.max(4, Math.round(orig.fontSize * ratio)));
               return { ...el, fontSize: newFontSize, width: newW, height: newH, x: newX, y: newY };
             }
+            return { ...el, width: newW, height: newH, x: newX, y: newY };
+          } else {
+            const angleRad = (orig.rot || 0) * (Math.PI / 180);
+            const localDx = dx * Math.cos(-angleRad) - dy * Math.sin(-angleRad);
+            const localDy = dx * Math.sin(-angleRad) + dy * Math.cos(-angleRad);
+
+            let newW = orig.w; 
+            let newH = orig.h;
+            let dw = 0; let dh = 0;
+
+            if (dragAction.direction.includes('e')) { dw = localDx; newW += dw; }
+            if (dragAction.direction.includes('w')) { dw = -localDx; newW += dw; }
+            if (dragAction.direction.includes('s')) { dh = localDy; newH += dh; }
+            if (dragAction.direction.includes('n')) { dh = -localDy; newH += dh; }
+
+            if (isCorner) {
+              const scale = Math.abs(dw) > Math.abs(dh) ? newW / orig.w : newH / orig.h;
+              newW = orig.w * scale;
+              newH = orig.h * scale;
+              dw = newW - orig.w;
+              dh = newH - orig.h;
+            }
+
+            const MIN_SIZE = 20;
+            if (newW < MIN_SIZE) { dw += (MIN_SIZE - newW); newW = MIN_SIZE; }
+            if (newH < MIN_SIZE) { dh += (MIN_SIZE - newH); newH = MIN_SIZE; }
+
+            let localCxShift = 0; let localCyShift = 0;
+            if (dragAction.direction.includes('e')) localCxShift = dw / 2;
+            if (dragAction.direction.includes('w')) localCxShift = -dw / 2;
+            if (dragAction.direction.includes('s')) localCyShift = dh / 2;
+            if (dragAction.direction.includes('n')) localCyShift = -dh / 2;
+
+            const globalCxShift = localCxShift * Math.cos(angleRad) - localCyShift * Math.sin(angleRad);
+            const globalCyShift = localCxShift * Math.sin(angleRad) + localCyShift * Math.cos(angleRad);
+
+            const origCx = orig.x + orig.w / 2;
+            const origCy = orig.y + orig.h / 2;
+            const newX = (origCx + globalCxShift) - newW / 2;
+            const newY = (origCy + globalCyShift) - newH / 2;
+
+            if (el.type === 'text') {
+              if (isCorner) {
+                const ratio = newH / orig.h;
+                const newFontSize = Math.min(1296, Math.max(4, Math.round(orig.fontSize * ratio)));
+                return { ...el, fontSize: newFontSize, width: newW, height: newH, x: newX, y: newY };
+              } else {
+                let updatedProps = { width: newW, height: newH, x: newX, y: newY };
+                if (dragAction.direction === 'e' || dragAction.direction === 'w') {
+                  const origLetterSpacing = orig.letterSpacing !== undefined ? orig.letterSpacing : 0;
+                  const newLetterSpacing = Math.max(-15, Math.min(100, Math.round(origLetterSpacing + (dw * 0.15))));
+                  updatedProps.letterSpacing = newLetterSpacing;
+                }
+                if (dragAction.direction === 'n' || dragAction.direction === 's') {
+                  const origLineHeight = orig.lineHeight !== undefined ? orig.lineHeight : 1.2;
+                  const heightRatio = newH / (orig.h || 1);
+                  const newLineHeight = Math.max(0.5, Math.min(4, Number((origLineHeight * heightRatio).toFixed(2))));
+                  updatedProps.lineHeight = newLineHeight;
+                }
+                return { ...el, ...updatedProps };
+              }
+            }
+            return { ...el, width: newW, height: newH, x: newX, y: newY };
           }
-          return { ...el, width: newW, height: newH, x: newX, y: newY };
         } else if (dragAction.type === 'rotate' && selectedIds.length === 1) {
           if (canvasRef.current) {
             const rect = canvasRef.current.getBoundingClientRect();
@@ -1009,7 +1123,8 @@ export default function App(props) {
       case 'triangle': return <svg viewBox="0 0 24 24" fill={fill} className="w-full h-full preserve-3d"><polygon points="12 2 22 21 2 21" /></svg>;
       case 'cross': return <svg viewBox="0 0 24 24" fill={fill} className="w-full h-full preserve-3d"><path d="M19 10h-5V5h-4v5H5v4h5v5h4v-5h5v-4z" /></svg>;
       case 'arrow': return <svg viewBox="0 0 24 24" fill={fill} className="w-full h-full preserve-3d"><path d="M5 13h11.586l-5.293 5.293 1.414 1.414L20.414 12l-7.707-7.707-1.414 1.414L16.586 11H5v2z" /></svg>;
-      case 'rhombus': return <svg viewBox="0 0 24 24" fill={fill} className="w-full h-full preserve-3d"><polygon points="12 2 22 12 12 22 2 12" /></svg>;
+      case 'phone': return <svg viewBox="0 0 24 24"  fill={fill}><path d="M13.832 16.568a1 1 0 0 0 1.213-.303l.355-.465A2 2 0 0 1 17 15h3a2 2 0 0 1 2 2v3a2 2 0 0 1-2 2A18 18 0 0 1 2 4a2 2 0 0 1 2-2h3a2 2 0 0 1 2 2v3a2 2 0 0 1-.8 1.6l-.468.351a1 1 0 0 0-.292 1.233 14 14 0 0 0 6.392 6.384"/></svg>;
+      case 'pin': return <svg  viewBox="0 0 24 24" fill="none" stroke={fill} stroke-width="2" stroke-linecap="round" stroke-linejoin="round" className="w-full h-full preserve-3d"><path d="M20 10c0 4.993-5.539 10.193-7.399 11.799a1 1 0 0 1-1.202 0C9.539 20.193 4 14.993 4 10a8 8 0 0 1 16 0"/><circle cx="12" cy="10" r="3"/></svg>;
       case 'octagon': return <svg viewBox="0 0 24 24" fill={fill} className="w-full h-full preserve-3d"><polygon points="7.86 2 h8.28 l5.86 5.86 v8.28 l-5.86 5.86 H7.86 L2 16.14 V7.86 Z" /></svg>;
       case 'sun': return <svg viewBox="0 0 24 24" fill={fill} className="w-full h-full preserve-3d"><circle cx="12" cy="12" r="5" /><path d="M12 1v2m0 18v2M4.22 4.22l1.42 1.42m12.72 12.72l1.42 1.42M1 12h2m18 0h2M4.22 19.78l1.42-1.42m12.72-12.72l1.42-1.42" stroke={fill} strokeWidth="2" strokeLinecap="round" /></svg>;
       default: return <div className="w-full h-full" style={{ backgroundColor: fill }} />;
@@ -1018,12 +1133,11 @@ export default function App(props) {
 
   const selectedElement = selectedIds.length === 1 ? elements.find((el) => el.id === selectedIds[0]) : null;
 
-  // Shared properties content for sidebar & bottom sheet (with text-[16px] md:text-[11px] to prevent mobile auto-zoom)
   const renderPropertiesContent = () => {
     if (!selectedElement || selectedIds.length !== 1) {
       return (
         <div className="text-center py-8 text-slate-400 text-xs font-medium">
-          Select an element on the canvas to edit its properties.
+          {selectedIds.length > 1 ? `${selectedIds.length} items selected` : 'Select an element on the canvas to edit its properties.'}
         </div>
       );
     }
@@ -1095,16 +1209,19 @@ export default function App(props) {
               <span className="text-[11px] text-slate-500 font-medium block mb-1">Text Content</span>
               <textarea value={selectedElement.text} onChange={(e) => updateElements(selectedIds, { text: e.target.value })} className="w-full text-[16px] md:text-[11px] p-2 border border-slate-300 rounded focus:ring-2 focus:ring-blue-500 outline-none resize-none" rows={3} />
             </div>
+
+            <div className="flex items-center gap-2">
+                <span className="text-[11px] text-slate-500 font-medium block mb-1">Size(pt)</span>
+                <input type="range" min="4" max="1264" value={selectedElement.fontSize || 32} onChange={(e) => updateElements(selectedIds, { fontSize: parseInt(e.target.value) || 4 })}  className="w-full" />
+                <input type="number" min="4" max="1264" value={selectedElement.fontSize || 32} onChange={(e) => updateElements(selectedIds, { fontSize: parseInt(e.target.value) || 4 })} className="w-16 text-[16px] md:text-[11px] p-1.5 border border-slate-300 rounded bg-white text-center" />
+            </div>
+
             <div className="flex gap-2">
               <div className="flex-1">
                 <span className="text-[11px] text-slate-500 font-medium block mb-1">Font</span>
                 <select value={selectedElement.fontFamily || 'Inter'} onChange={(e) => updateElements(selectedIds, { fontFamily: e.target.value })} className="w-full text-[16px] md:text-[11px] p-1.5 border border-slate-300 rounded bg-white">
                   {GOOGLE_FONTS.map(font => <option key={font} value={font} style={{ fontFamily: font }}>{font}</option>)}
                 </select>
-              </div>
-              <div className="w-16">
-                <span className="text-[11px] text-slate-500 font-medium block mb-1">Size(pt)</span>
-                <input type="number" min="4" max="500" value={selectedElement.fontSize || 32} onChange={(e) => updateElements(selectedIds, { fontSize: parseInt(e.target.value) || 4 })} className="w-full text-[16px] md:text-[11px] p-1.5 border border-slate-300 rounded bg-white text-center" />
               </div>
             </div>
 
@@ -1241,7 +1358,6 @@ export default function App(props) {
         </div>
       )}
 
-      {/* Clean overlay without harsh blur */}
       {(isMobileToolsOpen || isMobileLayersOpen || isMobilePropertiesOpen) && (
         <div className="md:hidden fixed inset-0 bg-black/25 z-40 transition-opacity" onClick={() => {setIsMobileToolsOpen(false); setIsMobileLayersOpen(false); setIsMobilePropertiesOpen(false);}} />
       )}
@@ -1265,7 +1381,8 @@ export default function App(props) {
         </div>
       )}
 
-      <aside className={`fixed md:relative inset-y-0 left-0 w-[85vw] max-w-[300px] md:w-72 bg-white border-r border-slate-200 flex flex-col shadow-2xl md:shadow-sm z-50 transform transition-transform duration-300 ease-in-out ${isMobileToolsOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'}`}>
+      <aside className={`fixed md:relative inset-y-0 left-0 w-[85vw] max-w-[300px] md:w-72 bg-white border-r border-slate-200 flex flex-col shadow-2xl md:shadow-sm z-50 transform transition-transform duration-300 ease-in-out ${isMobileToolsOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'}`} 
+        style={{ paddingTop: 'max(14px, env(safe-area-inset-top, 14px))', paddingBottom: '12px' }}>
         <div className="p-4 border-b border-slate-200 flex items-center justify-between bg-slate-50">
             <img src="/rps-logo.png" alt="Logo" width={160} height={40} className="rounded-lg object-contain" style={{ width: "auto", height: "40px" }} />
           <button className="md:hidden p-1.5 text-slate-400 bg-white rounded-md border shadow-sm" onClick={() => setIsMobileToolsOpen(false)}><X size={18}/></button>
@@ -1339,7 +1456,8 @@ export default function App(props) {
                     <button onClick={() => addShape('triangle')} className="flex flex-col items-center justify-center gap-1 p-2 bg-white hover:bg-blue-50 hover:border-blue-300 border border-slate-200 rounded-lg text-[10px] font-medium transition-colors"><Triangle size={16} className="text-indigo-600" /> Tri</button>
                     <button onClick={() => addShape('cross')} className="flex flex-col items-center justify-center gap-1 p-2 bg-white hover:bg-blue-50 hover:border-blue-300 border border-slate-200 rounded-lg text-[10px] font-medium transition-colors"><Plus size={16} className="text-red-500" /> Cross</button>
                     <button onClick={() => addShape('arrow')} className="flex flex-col items-center justify-center gap-1 p-2 bg-white hover:bg-blue-50 hover:border-blue-300 border border-slate-200 rounded-lg text-[10px] font-medium transition-colors"><ArrowRight size={16} className="text-emerald-600" /> Arrow</button>
-                    <button onClick={() => addShape('rhombus')} className="flex flex-col items-center justify-center gap-1 p-2 bg-white hover:bg-blue-50 hover:border-blue-300 border border-slate-200 rounded-lg text-[10px] font-medium transition-colors"><Compass size={16} className="text-purple-600" /> Rhomb</button>
+                    <button onClick={() => addShape('phone')} className="flex flex-col items-center justify-center gap-1 p-2 bg-white hover:bg-blue-50 hover:border-blue-300 border border-slate-200 rounded-lg text-[10px] font-medium transition-colors"><Phone size={16} className="text-purple-600" /> Phone</button>
+                    <button onClick={() => addShape('pin')} className="flex flex-col items-center justify-center gap-1 p-2 bg-white hover:bg-blue-50 hover:border-blue-300 border border-slate-200 rounded-lg text-[10px] font-medium transition-colors"><MapPin size={16} className="text-purple-600" /> Location</button>
                     <button onClick={() => addShape('octagon')} className="flex flex-col items-center justify-center gap-1 p-2 bg-white hover:bg-blue-50 hover:border-blue-300 border border-slate-200 rounded-lg text-[10px] font-medium transition-colors"><Shield size={16} className="text-cyan-600" /> Octagon</button>
                     <button onClick={() => addShape('sun')} className="flex flex-col items-center justify-center gap-1 p-2 bg-white hover:bg-blue-50 hover:border-blue-300 border border-slate-200 rounded-lg text-[10px] font-medium transition-colors"><Sun size={16} className="text-orange-500" /> Sun</button>
                   </div>
@@ -1377,7 +1495,6 @@ export default function App(props) {
             </div>
           )}
 
-          {/* Desktop Properties Panel in Sidebar */}
           <div className="hidden md:block">
             {selectedElement && selectedIds.length === 1 && activeTool !== 'draw' && (
               <div className="bg-white">
@@ -1431,13 +1548,11 @@ export default function App(props) {
         onPointerMove={handlePointerMove} 
         onPointerUp={handlePointerUp}
       >
-        {/* Top Header Menu Bar with iPhone Notch Safe Area Padding */}
         <header 
           className="bg-white border-b border-slate-200 flex items-center justify-between px-3 md:px-6 shadow-sm z-10 shrink-0 md:h-14"
           style={{ paddingTop: 'max(14px, env(safe-area-inset-top, 14px))', paddingBottom: '12px' }}
         >
           <div className="flex items-center gap-2 md:gap-4 text-[11px] font-semibold text-slate-500">
-            {/* Desktop View Controls */}
             <div className="hidden md:flex items-center bg-slate-100 p-0.5 rounded border border-slate-200">
               <button onClick={() => setShowTemplate(!showTemplate)} className={`px-2 py-1 hover:bg-white rounded flex items-center gap-1 ${showTemplate ? 'text-blue-600 font-medium' : 'text-slate-400'}`} title="Toggle Guides Visibility">
                 {showTemplate ? <Eye size={12} /> : <EyeOff size={12} />} <span>Guides</span>
@@ -1448,7 +1563,6 @@ export default function App(props) {
               </button>
             </div>
 
-            {/* Mobile Hamburger Menu */}
             <div className="md:hidden relative">
               <button 
                 onClick={() => setIsMobileHeaderMenuOpen(!isMobileHeaderMenuOpen)} 
@@ -1473,7 +1587,6 @@ export default function App(props) {
               )}
             </div>
 
-            {/* Undo / Redo Actions directly visible on top bar for Mobile and Desktop */}
             <div className="flex items-center bg-slate-100 p-0.5 rounded border border-slate-200">
               <button onClick={handleUndo} disabled={historyIndex === 0} className={`px-2 py-1 rounded flex items-center gap-1 ${historyIndex === 0 ? 'text-slate-300 cursor-not-allowed' : 'text-slate-600 hover:bg-white hover:text-blue-600'}`} title="Undo (Ctrl+Z)">
                 <Undo2 size={16} />
@@ -1484,7 +1597,6 @@ export default function App(props) {
               </button>
             </div>
             
-            {/* Desktop Zoom controls */}
             <div className="hidden sm:flex items-center bg-slate-100 p-0.5 rounded border border-slate-200">
               <button onClick={handleFitToScreen} className="px-2 py-1 hover:bg-white rounded text-slate-500" title="Fit to Screen"><Maximize size={12} /></button>
               <button onClick={() => setZoomLevel(Math.max(0.05, zoomLevel / 1.25))} className="px-2 py-1 hover:bg-white rounded" title="Zoom Out"><ZoomOut size={12} /></button>
@@ -1508,7 +1620,6 @@ export default function App(props) {
             </div>
           )}
 
-          {/* In-Canvas Floating Mobile Zoom Controls */}
           <div className="md:hidden fixed bottom-24 right-4 z-30 bg-white/90 backdrop-blur border border-slate-200 rounded-full shadow-lg flex items-center p-1 gap-1">
             <button onClick={() => setZoomLevel(Math.max(0.05, zoomLevel / 1.25))} className="p-1.5 text-slate-600 hover:bg-slate-100 rounded-full" title="Zoom Out">
               <ZoomOut size={16} />
@@ -1628,20 +1739,42 @@ export default function App(props) {
                     const computedShadowX = (el.shadowX || 0) * canvasScaleFactor * zoomLevel;
                     const computedShadowY = (el.shadowY || 0) * canvasScaleFactor * zoomLevel;
 
-                    const textStyle = {
-                      color: el.fill, fontSize: `${el.fontSize * zoomLevel}px`, fontFamily: el.fontFamily, 
-                      lineHeight: el.lineHeight || 1.2, letterSpacing: `${(el.letterSpacing || 0) * zoomLevel}px`,
-                      textAlign: el.textAlign || 'left', writingMode: el.vertical ? 'vertical-rl' : 'horizontal-tb', 
-                      textOrientation: el.vertical ? 'upright' : 'mixed', whiteSpace: 'pre-wrap', overflow: 'hidden'
+                    const hasShadow = el.shadowColor && (el.shadowBlur > 0 || el.shadowX !== 0 || el.shadowY !== 0);
+                    const hasStroke = computedStrokeWidth > 0 && el.strokeColor;
+
+                    const commonTextStyle = {
+                      fontSize: `${el.fontSize * zoomLevel}px`,
+                      fontFamily: el.fontFamily,
+                      lineHeight: el.lineHeight || 1.2,
+                      letterSpacing: `${(el.letterSpacing || 0) * zoomLevel}px`,
+                      textAlign: el.textAlign || 'left',
+                      writingMode: el.vertical ? 'vertical-rl' : 'horizontal-tb',
+                      textOrientation: el.vertical ? 'upright' : 'mixed',
+                      whiteSpace: 'pre-wrap',
+                      overflow: 'hidden',
+                      width: '100%',
+                      height: '100%',
+                      position: 'absolute',
+                      top: 0,
+                      left: 0
                     };
-                    
-                    if (computedStrokeWidth > 0 && el.strokeColor) {
-                      textStyle.WebkitTextStroke = `${computedStrokeWidth}px ${el.strokeColor}`;
-                      if (!el.strokePosition || el.strokePosition === 'outside') textStyle.paintOrder = 'stroke fill';
-                    }
-                    if (el.shadowColor && (el.shadowBlur !== undefined || el.shadowX !== undefined || el.shadowY !== undefined) && el.shadowColor !== '') {
-                      textStyle.textShadow = `${computedShadowX}px ${computedShadowY}px ${computedShadowBlur}px ${el.shadowColor}`;
-                    }
+
+                    const renderTextContent = (textValue) => {
+                      if (el.listType === 'number') {
+                        return (
+                          <ol style={{ margin: 0, paddingLeft: '1.2em', listStyleType: 'decimal' }}>
+                            {textValue.split('\n').map((line, i) => <li key={i}>{line}</li>)}
+                          </ol>
+                        );
+                      } else if (el.listType === 'bullet') {
+                        return (
+                          <ul style={{ margin: 0, paddingLeft: '1.2em', listStyleType: 'disc' }}>
+                            {textValue.split('\n').map((line, i) => <li key={i}>{line}</li>)}
+                          </ul>
+                        );
+                      }
+                      return textValue;
+                    };
 
                     const isEditing = editingTextId === el.id;
 
@@ -1676,24 +1809,47 @@ export default function App(props) {
                                 e.stopPropagation();
                               }}
                               style={{
-                                ...textStyle,
+                                ...commonTextStyle,
                                 ...contentWrapperStyle,
+                                color: el.fill,
                                 background: 'transparent', border: 'none', outline: 'none', resize: 'none',
-                                width: '100%', height: '100%', padding: 0, margin: 0,
-                                WebkitTextStroke: 'none', textShadow: 'none', overflow: 'hidden'
+                                padding: 0, margin: 0
                               }}
                             />
                           ) : (
-                            <div style={{...textStyle, ...contentWrapperStyle}}>
-                              {el.listType === 'number' ? (
-                                <ol style={{ margin: 0, paddingLeft: '1.2em', listStyleType: 'decimal' }}>
-                                  {el.text.split('\n').map((line, i) => <li key={i}>{line}</li>)}
-                                </ol>
-                              ) : el.listType === 'bullet' ? (
-                                <ul style={{ margin: 0, paddingLeft: '1.2em', listStyleType: 'disc' }}>
-                                  {el.text.split('\n').map((line, i) => <li key={i}>{line}</li>)}
-                                </ul>
-                              ) : ( el.text )}
+                            <div style={{ ...contentWrapperStyle, position: 'relative', width: '100%', height: '100%' }}>
+                              {/* Layer 1: Drop Shadow (Strictly Bottom) */}
+                              {hasShadow && (
+                                <div style={{
+                                  ...commonTextStyle,
+                                  color: el.shadowColor,
+                                  textShadow: `${computedShadowX}px ${computedShadowY}px ${computedShadowBlur}px ${el.shadowColor}`,
+                                  zIndex: 1
+                                }}>
+                                  {renderTextContent(el.text)}
+                                </div>
+                              )}
+
+                              {/* Layer 2: Stroke / Border (Middle) */}
+                              {hasStroke && (
+                                <div style={{
+                                  ...commonTextStyle,
+                                  color: 'transparent',
+                                  WebkitTextStroke: `${computedStrokeWidth}px ${el.strokeColor}`,
+                                  zIndex: 2
+                                }}>
+                                  {renderTextContent(el.text)}
+                                </div>
+                              )}
+
+                              {/* Layer 3: Fill Color (Strictly Top) */}
+                              <div style={{
+                                ...commonTextStyle,
+                                color: el.fill,
+                                zIndex: 3
+                              }}>
+                                {renderTextContent(el.text)}
+                              </div>
                             </div>
                           )}
                         </div>
@@ -1710,7 +1866,7 @@ export default function App(props) {
                             onPointerDown={(e) => { e.stopPropagation(); setActiveTooltip(activeTooltip === el.id ? null : el.id); }}
                           >
                             <AlertTriangle size={20} className="text-red-500 bg-white rounded-full p-0.5 shadow-md border border-red-200" />
-                            <div className={`absolute top-full left-1/2 -translate-x-1/2 mt-2 w-48 p-2 bg-slate-800 text-white text-[10px] rounded shadow-lg transition-opacity pointer-events-none text-center ${activeTooltip === el.id ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'}`}>
+                            <div className={`z-99 absolute top-full left-1/2 -translate-x-1/2 mt-2 w-48 p-2 bg-slate-800 text-white text-[10px] rounded shadow-lg transition-opacity pointer-events-none text-center ${activeTooltip === el.id ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'}`}>
                               The text is outside of the design canvas and will be cut during printing.
                               <div className="absolute bottom-full left-1/2 -translate-x-1/2 border-4 border-transparent border-b-slate-800"></div>
                             </div>
@@ -1794,55 +1950,62 @@ export default function App(props) {
               {!isExporting && (
                 <div style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', pointerEvents: 'none', overflow: 'visible', zIndex: 9999 }}>
                   
-                  {elements.map((el) => {
-                    if (el.hidden || el.isTemplate || el.locked) return null;
-                    const isSelected = selectedIds.includes(el.id) && activeTool !== 'draw';
-                    if (!isSelected) return null;
+                  {(() => {
+                    const selectedEls = elements.filter(el => selectedIds.includes(el.id) && !el.hidden && !el.isTemplate && !el.locked);
+                    if (selectedEls.length === 0 || activeTool === 'draw') return null;
+
+                    const minX = Math.min(...selectedEls.map(el => el.x));
+                    const minY = Math.min(...selectedEls.map(el => el.y));
+                    const maxX = Math.max(...selectedEls.map(el => el.x + el.width));
+                    const maxY = Math.max(...selectedEls.map(el => el.y + el.height));
+                    
+                    const boxX = minX * zoomLevel;
+                    const boxY = minY * zoomLevel;
+                    const boxW = (maxX - minX) * zoomLevel;
+                    const boxH = (maxY - minY) * zoomLevel;
 
                     const isMobileUI = typeof window !== 'undefined' && window.innerWidth < 768;
                     const grabThickness = isMobileUI ? 28 : 12;
                     const grabOffset = -grabThickness / 2;
                     const handleSize = isMobileUI ? 22 : 10;
+                    const representativeId = selectedIds[0];
 
                     return (
-                      <div key={`overlay-${el.id}`} style={{
-                        position: 'absolute', left: el.x * zoomLevel, top: el.y * zoomLevel,
-                        width: el.width * zoomLevel, height: el.height * zoomLevel,
-                        transform: `rotate(${el.rotation || 0}deg)`, transformOrigin: 'center center',
-                        outline: '2px solid #3b82f6', pointerEvents: 'none'
+                      <div style={{
+                        position: 'absolute', left: boxX, top: boxY,
+                        width: boxW, height: boxH,
+                        outline: '2px solid #3b82f6', pointerEvents: 'none', zIndex: 1000
                       }}>
+                        <div onPointerDown={(e) => handlePointerDown(e, representativeId, 'move')} style={{ position: 'absolute', top: grabOffset, left: grabOffset, right: grabOffset, height: grabThickness, cursor: 'move', pointerEvents: 'auto' }} title="Drag group outline to move" />
+                        <div onPointerDown={(e) => handlePointerDown(e, representativeId, 'move')} style={{ position: 'absolute', bottom: grabOffset, left: grabOffset, right: grabOffset, height: grabThickness, cursor: 'move', pointerEvents: 'auto' }} title="Drag group outline to move" />
+                        <div onPointerDown={(e) => handlePointerDown(e, representativeId, 'move')} style={{ position: 'absolute', top: grabOffset, bottom: grabOffset, left: grabOffset, width: grabThickness, cursor: 'move', pointerEvents: 'auto' }} title="Drag group outline to move" />
+                        <div onPointerDown={(e) => handlePointerDown(e, representativeId, 'move')} style={{ position: 'absolute', top: grabOffset, bottom: grabOffset, right: grabOffset, width: grabThickness, cursor: 'move', pointerEvents: 'auto' }} title="Drag group outline to move" />
+
+                        {['nw', 'n', 'ne', 'e', 'se', 's', 'sw', 'w'].map(pos => {
+                          const baseAngles = { 'n': 0, 'ne': 45, 'e': 90, 'se': 135, 's': 180, 'sw': 225, 'w': 270, 'nw': 315 };
+                          const cursorAngles = ['n', 'ne', 'e', 'se', 's', 'sw', 'w', 'nw'];
+                          const cursorIndex = Math.round(baseAngles[pos] / 45) % 8;
+                          const dynamicCursor = `${cursorAngles[cursorIndex]}-resize`;
+
+                          const style = {
+                            position: 'absolute', width: handleSize, height: handleSize, backgroundColor: '#fff',
+                            border: '2px solid #3b82f6', borderRadius: pos.length === 1 ? '0%' : '50%', 
+                            cursor: dynamicCursor, zIndex: 20, pointerEvents: 'auto'
+                          };
+                          if (pos.includes('n')) style.top = -handleSize / 2;
+                          if (pos.includes('s')) style.bottom = -handleSize / 2;
+                          if (!pos.includes('n') && !pos.includes('s')) { style.top = '50%'; style.marginTop = -handleSize / 2; }
+                          if (pos.includes('w')) style.left = -handleSize / 2;
+                          if (pos.includes('e')) style.right = -handleSize / 2;
+                          if (!pos.includes('w') && !pos.includes('e')) { style.left = '50%'; style.marginLeft = -handleSize / 2; }
+                          return <div key={pos} onPointerDown={(e) => handlePointerDown(e, representativeId, 'resize', pos)} style={style} />;
+                        })}
+                        
                         {selectedIds.length === 1 && (
                           <>
-                            <div onPointerDown={(e) => handlePointerDown(e, el.id, 'move')} style={{ position: 'absolute', top: grabOffset, left: grabOffset, right: grabOffset, height: grabThickness, cursor: 'move', pointerEvents: 'auto' }} title="Drag outline to move" />
-                            <div onPointerDown={(e) => handlePointerDown(e, el.id, 'move')} style={{ position: 'absolute', bottom: grabOffset, left: grabOffset, right: grabOffset, height: grabThickness, cursor: 'move', pointerEvents: 'auto' }} title="Drag outline to move" />
-                            <div onPointerDown={(e) => handlePointerDown(e, el.id, 'move')} style={{ position: 'absolute', top: grabOffset, bottom: grabOffset, left: grabOffset, width: grabThickness, cursor: 'move', pointerEvents: 'auto' }} title="Drag outline to move" />
-                            <div onPointerDown={(e) => handlePointerDown(e, el.id, 'move')} style={{ position: 'absolute', top: grabOffset, bottom: grabOffset, right: grabOffset, width: grabThickness, cursor: 'move', pointerEvents: 'auto' }} title="Drag outline to move" />
-
-                            {['nw', 'n', 'ne', 'e', 'se', 's', 'sw', 'w'].map(pos => {
-                              const baseAngles = { 'n': 0, 'ne': 45, 'e': 90, 'se': 135, 's': 180, 'sw': 225, 'w': 270, 'nw': 315 };
-                              const cursorAngles = ['n', 'ne', 'e', 'se', 's', 'sw', 'w', 'nw'];
-                              const rotAngle = ((baseAngles[pos] + (el.rotation || 0)) % 360 + 360) % 360;
-                              const cursorIndex = Math.round(rotAngle / 45) % 8;
-                              const dynamicCursor = `${cursorAngles[cursorIndex]}-resize`;
-
-                              const style = {
-                                position: 'absolute', width: handleSize, height: handleSize, backgroundColor: '#fff',
-                                border: '2px solid #3b82f6', borderRadius: pos.length === 1 ? '0%' : '50%', 
-                                cursor: dynamicCursor, zIndex: 20, pointerEvents: 'auto'
-                              };
-                              if (pos.includes('n')) style.top = -handleSize / 2;
-                              if (pos.includes('s')) style.bottom = -handleSize / 2;
-                              if (!pos.includes('n') && !pos.includes('s')) { style.top = '50%'; style.marginTop = -handleSize / 2; }
-                              if (pos.includes('w')) style.left = -handleSize / 2;
-                              if (pos.includes('e')) style.right = -handleSize / 2;
-                              if (!pos.includes('w') && !pos.includes('e')) { style.left = '50%'; style.marginLeft = -handleSize / 2; }
-                              return <div key={pos} onPointerDown={(e) => handlePointerDown(e, el.id, 'resize', pos)} style={style} />;
-                            })}
-                            
                             <div style={{ position: 'absolute', top: isMobileUI ? -40 : -23, left: '50%', marginLeft: -0.5, width: 1, height: isMobileUI ? 40 : 23, backgroundColor: '#3b82f6', pointerEvents: 'none', zIndex: 19 }} />
-                            
                             <div
-                              onPointerDown={(e) => handlePointerDown(e, el.id, 'rotate')}
+                              onPointerDown={(e) => handlePointerDown(e, representativeId, 'rotate')}
                               style={{ 
                                 position: 'absolute', top: isMobileUI ? -64 : -35, left: '50%', marginLeft: isMobileUI ? -16 : -12, 
                                 width: isMobileUI ? 32 : 24, height: isMobileUI ? 32 : 24, backgroundColor: '#ffffff', border: '2px solid #3b82f6', 
@@ -1857,7 +2020,7 @@ export default function App(props) {
                         )}
                       </div>
                     );
-                  })}
+                  })()}
 
                   {selectionBox && (
                     <div style={{
@@ -1875,7 +2038,9 @@ export default function App(props) {
         </div>
       </main>
 
-      <aside className={`fixed md:relative inset-y-0 right-0 w-[85vw] max-w-[300px] md:w-64 bg-white border-l border-slate-200 flex flex-col shadow-2xl md:shadow-sm z-50 transform transition-transform duration-300 ease-in-out ${isMobileLayersOpen ? 'translate-x-0' : 'translate-x-full md:translate-x-0'}`}>
+      <aside className={`fixed md:relative inset-y-0 right-0 w-[85vw] max-w-[300px] md:w-64 bg-white border-l border-slate-200 flex flex-col shadow-2xl md:shadow-sm z-50 transform transition-transform duration-300 ease-in-out ${isMobileLayersOpen ? 'translate-x-0' : 'translate-x-full md:translate-x-0'}`}
+              style={{ paddingTop: 'max(14px, env(safe-area-inset-top, 14px))', paddingBottom: '12px' }}
+      >
         <div className="p-4 border-b border-slate-200 flex items-center justify-between bg-slate-50 shrink-0">
           <div className="flex items-center gap-2">
             <Layers className="text-slate-500" size={16} />
@@ -1884,40 +2049,48 @@ export default function App(props) {
           <button className="md:hidden p-1.5 text-slate-400 bg-white rounded-md border shadow-sm" onClick={() => setIsMobileLayersOpen(false)}><X size={18}/></button>
         </div>
         <div className="flex-1 overflow-y-auto p-3 space-y-2">
-          {[...elements].reverse().filter(el => !el.isTemplate).map((el) => (
-            <div 
-              key={el.id} draggable={true} onDragStart={(e) => handleLayerDragStart(e, el.id)} onDragOver={(e) => handleLayerDragOver(e, el.id)} onDragEnd={handleLayerDragEnd} 
-              onClick={(e) => { 
-                if (!el.locked && activeTool !== 'draw') {
-                  if (e.shiftKey) setSelectedIds(prev => prev.includes(el.id) ? prev.filter(id => id !== el.id) : [...prev, el.id]);
-                  else setSelectedIds([el.id]); 
-                }
-                if(window.innerWidth < 768) setIsMobileLayersOpen(false); 
-              }}
-              className={`flex flex-col gap-2 p-2 rounded-lg border transition-all cursor-grab active:cursor-grabbing ${selectedIds.includes(el.id) ? 'bg-blue-50 border-blue-300 shadow-sm' : 'bg-white border-slate-200 hover:border-slate-300 hover:bg-slate-50'} ${el.locked ? 'opacity-70 bg-slate-50 border-dashed' : ''}`}
-            >
-              <div className="flex items-center gap-2 overflow-hidden px-1">
-                {el.type === 'image' ? <ImageIcon size={14} className="text-slate-400 shrink-0" /> : el.type === 'text' ? <Type size={14} className="text-slate-400 shrink-0" /> : el.type === 'qr' ? <QrCode size={14} className="text-slate-400 shrink-0" /> : el.type === 'drawing' ? <Pencil size={14} className="text-slate-400 shrink-0" /> : el.type === 'pattern' ? <LayoutGrid size={14} className="text-slate-400 shrink-0" /> : <Square size={14} className="text-slate-400 shrink-0" />}
-                <span className="text-[11px] font-medium truncate cursor-default select-none text-slate-700">{el.name}</span>
-              </div>
-              <div className="flex items-center justify-between bg-slate-100/50 p-1 rounded border border-slate-200/50">
-                <button onClick={(e) => { e.stopPropagation(); toggleLayerProperty(el.id, 'hidden'); }} className={`p-1.5 rounded transition-colors ${el.hidden ? 'text-slate-400 hover:text-slate-600' : 'text-blue-600 hover:bg-blue-100'}`}>
-                  {el.hidden ? <EyeOff size={13} /> : <Eye size={13} />}
-                </button>
-                <div className="flex items-center gap-1">
-                  <button onClick={(e) => { e.stopPropagation(); toggleLayerProperty(el.id, 'locked'); if (!el.locked && selectedIds.includes(el.id)) setSelectedIds(selectedIds.filter(id => id !== el.id)); }} className={`p-1.5 rounded transition-colors ${el.locked ? 'text-orange-500 hover:bg-orange-50' : 'text-slate-400 hover:bg-white'}`}>
-                    {el.locked ? <Lock size={13} /> : <Unlock size={13} />}
+          {[...elements].reverse().filter(el => !el.isTemplate).map((el) => {
+            const isChecked = selectedIds.includes(el.id);
+            return (
+              <div 
+                key={el.id} draggable={true} onDragStart={(e) => handleLayerDragStart(e, el.id)} onDragOver={(e) => handleLayerDragOver(e, el.id)} onDragEnd={handleLayerDragEnd} 
+                onClick={(e) => { 
+                  if (!el.locked && activeTool !== 'draw') {
+                    setSelectedIds(prev => 
+                      prev.includes(el.id) 
+                        ? prev.filter(id => id !== el.id) 
+                        : [...prev, el.id]
+                    ); 
+                  }
+                }}
+                className={`flex flex-col gap-2 p-2 rounded-lg border transition-all cursor-grab active:cursor-grabbing ${isChecked ? 'bg-blue-50 border-blue-300 shadow-sm' : 'bg-white border-slate-200 hover:border-slate-300 hover:bg-slate-50'} ${el.locked ? 'opacity-70 bg-slate-50 border-dashed' : ''}`}
+              >
+                <div className="flex items-center gap-2 overflow-hidden px-1 justify-between">
+                  <div className="flex items-center gap-2 overflow-hidden">
+                    {el.type === 'image' ? <ImageIcon size={14} className="text-slate-400 shrink-0" /> : el.type === 'text' ? <Type size={14} className="text-slate-400 shrink-0" /> : el.type === 'qr' ? <QrCode size={14} className="text-slate-400 shrink-0" /> : el.type === 'drawing' ? <Pencil size={14} className="text-slate-400 shrink-0" /> : el.type === 'pattern' ? <LayoutGrid size={14} className="text-slate-400 shrink-0" /> : <Square size={14} className="text-slate-400 shrink-0" />}
+                    <span className="text-[11px] font-medium truncate cursor-default select-none text-slate-700">{el.name}</span>
+                  </div>
+                  {isChecked && <span className="w-2 h-2 rounded-full bg-blue-600 shrink-0"></span>}
+                </div>
+                <div className="flex items-center justify-between bg-slate-100/50 p-1 rounded border border-slate-200/50">
+                  <button onClick={(e) => { e.stopPropagation(); toggleLayerProperty(el.id, 'hidden'); }} className={`p-1.5 rounded transition-colors ${el.hidden ? 'text-slate-400 hover:text-slate-600' : 'text-blue-600 hover:bg-blue-100'}`}>
+                    {el.hidden ? <EyeOff size={13} /> : <Eye size={13} />}
                   </button>
-                  <button onClick={(e) => { e.stopPropagation(); duplicateElement(el.id); }} className="p-1.5 rounded transition-colors text-slate-400 hover:text-emerald-600 hover:bg-white" title="Duplicate Layer">
-                    <Copy size={13} />
-                  </button>
-                  <button onClick={(e) => { e.stopPropagation(); setElements(elements.filter(current => current.id !== el.id)); setSelectedIds(selectedIds.filter(id => id !== el.id)); }} className="p-1.5 rounded transition-colors text-slate-400 hover:text-red-600 hover:bg-white">
-                    <Trash2 size={13} />
-                  </button>
+                  <div className="flex items-center gap-1">
+                    <button onClick={(e) => { e.stopPropagation(); toggleLayerProperty(el.id, 'locked'); if (!el.locked && selectedIds.includes(el.id)) setSelectedIds(selectedIds.filter(id => id !== el.id)); }} className={`p-1.5 rounded transition-colors ${el.locked ? 'text-orange-500 hover:bg-orange-50' : 'text-slate-400 hover:bg-white'}`}>
+                      {el.locked ? <Lock size={13} /> : <Unlock size={13} />}
+                    </button>
+                    <button onClick={(e) => { e.stopPropagation(); duplicateElement(el.id); }} className="p-1.5 rounded transition-colors text-slate-400 hover:text-emerald-600 hover:bg-white" title="Duplicate Layer">
+                      <Copy size={13} />
+                    </button>
+                    <button onClick={(e) => { e.stopPropagation(); setElements(elements.filter(current => current.id !== el.id)); setSelectedIds(selectedIds.filter(id => id !== el.id)); }} className="p-1.5 rounded transition-colors text-slate-400 hover:text-red-600 hover:bg-white">
+                      <Trash2 size={13} />
+                    </button>
+                  </div>
                 </div>
               </div>
-            </div>
-          ))}
+            );
+          })}
           {elements.filter(el => !el.isTemplate).length === 0 && (
             <div className="text-center p-6 border-2 border-dashed border-slate-200 rounded-lg mt-4">
               <Layers className="mx-auto text-slate-300 mb-2" size={20} />
@@ -1927,7 +2100,6 @@ export default function App(props) {
         </div>
       </aside>
 
-      {/* Mobile Properties Bottom Drawer (Height Reduced & Scrollable) */}
       {isMobilePropertiesOpen && (
         <div className="md:hidden fixed bottom-24 left-3 right-3 max-h-[50vh] h-auto bg-white rounded-2xl shadow-2xl border border-slate-200 z-50 flex flex-col overflow-hidden animate-fadeIn pb-safe">
           <div className="p-3 border-b border-slate-200 flex items-center justify-between bg-slate-50 shrink-0">
@@ -1947,7 +2119,6 @@ export default function App(props) {
         </div>
       )}
 
-      {/* Floating Mobile Bottom Navigation Bar */}
       <div className="md:hidden fixed bottom-4 left-4 right-4 bg-white border border-slate-200 rounded-2xl shadow-xl flex items-center justify-around z-40 h-16 px-2 pb-safe">
         <button onClick={() => {setIsMobileToolsOpen(!isMobileToolsOpen); setIsMobileLayersOpen(false); setIsMobilePropertiesOpen(false);}} className={`flex flex-col items-center justify-center p-2 w-24 rounded-xl transition-colors ${isMobileToolsOpen ? 'text-blue-600 bg-blue-50 font-semibold' : 'text-slate-500 hover:bg-slate-50'}`}>
           <Palette size={20} />
