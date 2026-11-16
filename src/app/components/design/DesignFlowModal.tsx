@@ -47,6 +47,8 @@ type Props = {
   printSize: PrintSize | null;
   /** Each job gets a side 1 and a side 2 canvas; both are combined into one design file. */
   twoSided: boolean;
+  /** Single-sided reverse (e.g. "SSPT Reverse"): the template is shown mirrored. */
+  reversed?: boolean;
   /** Keyed by job id; two-sided jobs also keep each side under `sideDesignKey`. */
   designs: Record<string, JobDesign>;
   onDesignChange: (designKey: string, design: JobDesign | null) => void;
@@ -172,6 +174,7 @@ export default function DesignFlowModal({
   templates,
   printSize,
   twoSided,
+  reversed = false,
   designs,
   onDesignChange,
   onClose,
@@ -488,7 +491,7 @@ export default function DesignFlowModal({
           cropRatio={cropRatio}
           jobLabel={twoSided ? `${jobLabel(job, index)} · Side ${side}` : jobLabel(job, index)}
           sideLabel={twoSided ? `Side ${side} of 2` : undefined}
-          mirrorTemplate={twoSided && side === 2}
+          mirrorTemplate={twoSided ? side === 2 : reversed}
           initialDesignState={uploadedImage ? uploadedImage.designState : reusableState}
           onBack={() => {
             const freshUpload = uploadedImage?.fresh === true;
@@ -744,7 +747,7 @@ export default function DesignFlowModal({
                     })}
                   </div>
                 ) : (
-                  <DesignPreview design={design} templateId={templateId} templates={templates} />
+                  <DesignPreview design={design} templateId={templateId} templates={templates} mirrored={reversed} />
                 )}
               </div>
 

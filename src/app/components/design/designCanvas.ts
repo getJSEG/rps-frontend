@@ -30,6 +30,11 @@ export function isTwoSidedOption(groupName: string, optionName: string): boolean
   return /\bsides?\b/i.test(groupName) && /\b(2|two)[\s-]*sid(e|es|ed)\b/i.test(optionName);
 }
 
+/** A selected option named "... Reverse" (e.g. "SSPT Reverse") shows the template mirrored on a single side. */
+export function isReverseOption(optionName: string): boolean {
+  return /\b(reverse|reversed|mirror|mirrored)\b/i.test(optionName);
+}
+
 /** One SVG with side 1 on the left and side 2 on the right; ids are prefixed per side so they cannot clash. */
 export async function combineSideSvgs(side1: Blob, side2: Blob): Promise<Blob> {
   const sides = await Promise.all(

@@ -29,6 +29,7 @@ import {
 } from "../../../utils/api";
 import DesignFlowModal from "../../components/design/DesignFlowModal";
 import {
+  isReverseOption,
   isTwoSidedOption,
   printSizeKey,
   sideDesignKey,
@@ -1161,24 +1162,44 @@ function ProductDetailContent() {
     );
   });
 
-  // Designs made for one side don't fit two sides (and the reverse); start over when the choice changes.
-  const previousTwoSidedRef = useRef(twoSided);
+  /** Sides modifiers (they hold a two-sided or reverse option) set how the template is shown, not which one. */
+  const optionText = (o: { label?: string | null; value?: string | null }) => `${o.label || ""} ${o.value || ""}`;
+  const isSidesGroup = (group: (typeof activeModifierGroups)[number]) =>
+    (Array.isArray(group.options) ? group.options : []).some(
+      (o) => isTwoSidedOption(`${group.name || ""} ${group.key || ""}`, optionText(o)) || isReverseOption(optionText(o))
+    );
+  /** Single-sided reverse (e.g. "SSPT Reverse"): the same template, shown mirrored. */
+  const reversed =
+    !twoSided &&
+    activeModifierGroups.some((group) => {
+      const selectedValue = String(selectedModifiers[group.key] || "").trim();
+      if (!selectedValue || !isSidesGroup(group)) return false;
+      const option = (Array.isArray(group.options) ? group.options : []).find(
+        (o) => modifierOptionValue(o) === selectedValue
+      );
+      return option != null && isReverseOption(optionText(option));
+    });
+
+  // Designs made for one side don't fit two sides or a mirrored template; start over when the choice changes.
+  const sidesMode = twoSided ? "double" : reversed ? "reverse" : "single";
+  const previousSidesModeRef = useRef(sidesMode);
   useEffect(() => {
-    if (previousTwoSidedRef.current === twoSided) return;
-    previousTwoSidedRef.current = twoSided;
+    if (previousSidesModeRef.current === sidesMode) return;
+    previousSidesModeRef.current = sidesMode;
     setJobDesigns({});
-  }, [twoSided]);
+  }, [sidesMode]);
 
   /**
    * Templates linked to modifier options open automatically: the template whose ticked options match the
-   * customer's choices (per modifier, any ticked option), else the one with nothing ticked (the default).
-   * Products without linked templates keep the template picker.
+   * customer's choices (per modifier, any ticked option), else the master template (the first one uploaded).
+   * Customers never pick a template themselves.
    */
-  // Sides modifiers can pick a template too (e.g. "Print Thru Reverse"); two sides still gives two canvases.
+  // Sides options don't pick the template: they only show it normal, mirrored (reverse) or on two sides.
   const templateOptionIds = (t: ProductDesignTemplate) => t.modifier_option_ids ?? [];
   const autoTemplateMode = designTemplates.some((t) => templateOptionIds(t).length > 0);
   const autoTemplate = (() => {
-    if (!autoTemplateMode) return null;
+    if (designTemplates.length === 0) return null;
+    const sidesGroupKeys = new Set(activeModifierGroups.filter(isSidesGroup).map((group) => group.key));
     const groupKeyByOptionId = new Map<number, string>();
     const selectedOptionIdByGroup = new Map<string, number>();
     for (const group of activeModifierGroups) {
@@ -1194,15 +1215,16 @@ function ProductDetailContent() {
       for (const id of templateOptionIds(template)) {
         // Options no longer on this product can never be picked, so their template cannot match.
         const key = groupKeyByOptionId.get(Number(id)) ?? "\u0000missing";
+        if (sidesGroupKeys.has(key)) continue;
         tickedByGroup.set(key, (tickedByGroup.get(key) ?? new Set()).add(Number(id)));
       }
       if (tickedByGroup.size === 0) continue;
       const matches = [...tickedByGroup].every(([key, ids]) => ids.has(selectedOptionIdByGroup.get(key) ?? -1));
       if (matches && (!best || tickedByGroup.size > best.groups)) best = { template, groups: tickedByGroup.size };
     }
-    return best?.template ?? designTemplates.find((t) => templateOptionIds(t).length === 0) ?? null;
+    const master = designTemplates.reduce((first, t) => (Number(t.id) < Number(first.id) ? t : first));
+    return best?.template ?? master;
   })();
-  // Without a match or default, fall back to the template picker.
   const flowTemplates = autoTemplate ? [autoTemplate] : designTemplates;
 
   // A design made on one template doesn't fit another; start over when the chosen template changes.
@@ -3052,6 +3074,7 @@ function ProductDetailContent() {
           templates={flowTemplates}
           printSize={designTemplates.length > 0 ? null : designPrintSize}
           twoSided={twoSided}
+          reversed={reversed}
           designs={jobDesigns}
           onDesignChange={setJobDesignFor}
           onClose={() => setDesignFlowStart(null)}
